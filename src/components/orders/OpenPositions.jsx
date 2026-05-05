@@ -1,6 +1,10 @@
 "use client";
 
+import { useStream } from "@/context/StreamContext";
+
 export default function OpenPositions({ positions, loading, error, onRetry }) {
+  const { streamStates } = useStream();
+
   const fmt = (val) => {
     if (val == null) return "—";
     const num = typeof val === "string" ? parseFloat(val) : val;
@@ -43,6 +47,15 @@ export default function OpenPositions({ positions, loading, error, onRetry }) {
     return "";
   };
 
+  // Check if a position's symbol has a live stream
+  const getLivePrice = (symbol) => {
+    const stream = streamStates[symbol];
+    if (stream?.lastTick?.price) {
+      return { price: stream.lastTick.price, isLive: true };
+    }
+    return null;
+  };
+
   if (loading) {
     return (
       <div className="card bg-base-200 shadow">
@@ -68,7 +81,19 @@ export default function OpenPositions({ positions, loading, error, onRetry }) {
   return (
     <div className="card bg-base-200 shadow">
       <div className="card-body p-4">
-        <h2 className="card-title text-lg mb-3">Open Positions</h2>
+        <div className="flex items-center justify-between mb-3">
+          <h2 className="card-title text-lg">Open Positions</h2>
+          {/* Show live indicator if any position has a live stream */}
+          {positions?.some((pos) => getLivePrice(pos.symbol)?.isLive) && (
+            <span className="badge badge-sm badge-success badge-outline gap-1">
+              <span className="relative flex h-2 w-2">
+                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-success opacity-75" />
+                <span className="relative inline-flex rounded-full h-2 w-2 bg-success" />
+              </span>
+              LIVE
+            </span>
+          )}
+        </div>
 
         {error ? (
           <div className="text-center py-6">
@@ -127,25 +152,59 @@ export default function OpenPositions({ positions, loading, error, onRetry }) {
                 </tr>
               </thead>
               <tbody>
-                {positions.map((pos, idx) => (
-                  <tr key={pos.asset_id || pos.symbol || idx}>
-                    <td className="font-medium">{pos.symbol}</td>
-                    <td>{pos.qty}</td>
-                    <td>{fmt(pos.avg_entry_price)}</td>
-                    <td>{fmt(pos.current_price)}</td>
-                    <td>{fmt(pos.market_value)}</td>
-                    <td>
-                      <div className={pnlClass(pos.unrealized_pl)}>
-                        <span>{fmtPnl(pos.unrealized_pl)}</span>
-                        {pos.unrealized_plpc != null && (
-                          <span className="text-xs ml-1 opacity-70">
-                            ({fmtPct(parseFloat(pos.unrealized_plpc) * 100)})
-                          </span>
-                        )}
-                      </div>
-                    </td>
-                  </tr>
-                ))}
+                {positions.map((pos, idx) => {
+                  const liveData = getLivePrice(pos.symbol);
+                  const currentPrice = liveData?.price ?? pos.current_price;
+                  const isLive = liveData?.isLive;
+
+                  // Recalculate P&L if we have live price
+                  let unrealizedPl = pos.unrealized_pl;
+                  let unrealizedPlpc = pos.unrealized_plpc;
+                  if (isLive && pos.avg_entry_price && pos.qty) {
+                    const avgEntry = parseFloat(pos.avg_entry_price);
+                    const qty = parseFloat(pos.qty);
+                    unrealizedPl = (currentPrice - avgEntry) * qty;
+                    unrealizedPlpc = (currentPrice - avgEntry) / avgEntry;
+                  }
+
+                  return (
+                    <tr key={pos.asset_id || pos.symbol || idx}>
+                      <td className="font-medium">
+                        <div className="flex items-center gap-1">
+                          {pos.symbol}
+                          {isLive && (
+                            <span className="relative flex h-1.5 w-1.5">
+                              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-success opacity-75" />
+                              <span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-success" />
+                            </span>
+                          )}
+                        </div>
+                      </td>
+                      <td>{pos.qty}</td>
+                      <td>{fmt(pos.avg_entry_price)}</td>
+                      <td className={isLive ? "font-bold" : ""}>
+                        {fmt(currentPrice)}
+                      </td>
+                      <td>{fmt(pos.market_value)}</td>
+                      <td>
+                        <div className={pnlClass(unrealizedPl)}>
+                          <span>{fmtPnl(unrealizedPl)}</span>
+                          {unrealizedPlpc != null && (
+                            <span className="text-xs ml-1 opacity-70">
+                              (
+                              {fmtPct(
+                                typeof unrealizedPlpc === "number"
+                                  ? unrealizedPlpc * 100
+                                  : parseFloat(unrealizedPlpc) * 100,
+                              )}
+                              )
+                            </span>
+                          )}
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           </div>

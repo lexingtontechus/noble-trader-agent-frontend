@@ -7,6 +7,7 @@ import ObservationFeatures from "@/components/analysis/ObservationFeatures";
 import RiskCard from "@/components/analysis/RiskCard";
 import RecommendationsCard from "@/components/analysis/RecommendationsCard";
 import CommentaryCard from "@/components/analysis/CommentaryCard";
+import SimulationPanel from "@/components/simulation/SimulationPanel";
 
 /**
  * CommentaryCardWrapper — fetches AI commentary for a symbol's regime/risk data
@@ -98,6 +99,7 @@ export default function PortfolioAnalysisCard({
     risk: false,
     recommendations: false,
     commentary: false,
+    simulation: false,
   });
 
   const toggleSection = (key) => {
@@ -324,6 +326,25 @@ export default function PortfolioAnalysisCard({
               regime={regime}
               sizing={sizing}
               risk={risk}
+            />
+          </div>
+        </div>
+
+        {/* Accordion: Monte Carlo Simulation */}
+        <div className="collapse collapse-arrow bg-base-300 rounded-lg">
+          <input
+            type="checkbox"
+            checked={openSections.simulation}
+            onChange={() => toggleSection("simulation")}
+          />
+          <div className="collapse-title text-sm font-semibold">
+            🎲 Monte Carlo Simulation
+          </div>
+          <div className="collapse-content">
+            <SimulationPanel
+              symbol={symbol}
+              prices={prices}
+              currentPrice={lastPrice}
             />
           </div>
         </div>

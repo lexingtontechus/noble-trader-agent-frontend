@@ -1,8 +1,8 @@
-# Noble Trader — Frontend Step-by-Step Plan Outline
+# Noble Trader — Frontend Phase Plan
 
-> **Stack**: Next.js 16 (App Router) · JavaScript (JSX only) · DaisyUI v5 · Clerk Auth v7  
-> **Backend**: FastAPI @ `https://noble-trader-fastapi-backend.onrender.com`  
-> **Trading**: Alpaca Paper Trading API  
+> **Stack**: Next.js 16 (App Router) · JavaScript (JSX only) · DaisyUI v5 · Clerk Auth v7
+> **Backend**: FastAPI @ `https://noble-trader-fastapi-backend.onrender.com`
+> **Trading**: Alpaca Paper Trading API
 > **Constraint**: ONLY DaisyUI for all CSS & components — no shadcn/ui, no custom Tailwind classes for UI elements
 
 ---
@@ -10,20 +10,21 @@
 ## Architecture Overview
 
 ```
-┌─────────────────────────────────────────────────────────────┐
-│                     Next.js 16 (App Router)                  │
-│  ┌──────────┐  ┌──────────┐  ┌───────────┐  ┌───────────┐  │
-│  │  Home /   │  │Dashboard │  │  Orders /  │  │  Search   │  │
-│  │  SignIn   │  │  (3 Ticker│  │  Portfolio │  │  (Ticker  │  │
-│  │  (Clerk)  │  │  cards)  │  │  History)  │  │  Analysis)│  │
-│  └─────┬─────┘  └────┬─────┘  └─────┬─────┘  └─────┬─────┘  │
-│        │             │              │               │         │
-│  ┌─────▼─────────────▼──────────────▼───────────────▼─────┐  │
-│  │              BFF API Routes (/api/*)                     │  │
-│  │  /api/analyse  /api/prices  /api/alpaca/*  /api/health  │  │
-│  └───────┬──────────────┬──────────────┬───────────────────┘  │
-│          │              │              │                       │
-└──────────┼──────────────┼──────────────┼───────────────────────┘
+┌──────────────────────────────────────────────────────────────────┐
+│                     Next.js 16 (App Router)                       │
+│  ┌──────────┐  ┌──────────┐  ┌───────────┐  ┌───────────┐      │
+│  │  Home /   │  │Dashboard │  │  Orders /  │  │  Search   │      │
+│  │  SignIn   │  │  (3 Ticker│  │  Portfolio │  │  (Ticker  │      │
+│  │  (Clerk)  │  │  cards)  │  │  History)  │  │  Analysis)│      │
+│  └─────┬─────┘  └────┬─────┘  └─────┬─────┘  └─────┬─────┘      │
+│        │             │              │               │             │
+│  ┌─────▼─────────────▼──────────────▼───────────────▼─────┐      │
+│  │              BFF API Routes (/api/*)                     │      │
+│  │  /api/analyse  /api/prices  /api/alpaca/*  /api/health  │      │
+│  │  /api/stream/*  /api/simulate  /api/portfolio            │      │
+│  └───────┬──────────────┬──────────────┬───────────────────┘      │
+│          │              │              │                           │
+└──────────┼──────────────┼──────────────┼───────────────────────────┘
            │              │              │
     ┌──────▼──────┐ ┌─────▼──────┐ ┌────▼────────────┐
     │  FastAPI    │ │   Yahoo    │ │  Alpaca Markets  │
@@ -32,676 +33,375 @@
     └─────────────┘ └────────────┘ └──────────────────┘
 ```
 
-### Data Flow
-
-1. **Price Data**: Yahoo Finance → `/api/prices` → Frontend
-2. **Analysis**: Yahoo Finance prices → `/api/analyse` → FastAPI `/analyse/full` → Frontend
-3. **Orders**: Clerk privateMetadata (Alpaca keys) → `/api/alpaca/*` → Alpaca API → Frontend
-4. **Auth**: Clerk `<Show />` gates all protected content
-
 ---
 
-## Phase 1: Project Foundation & Tooling
+## Phase 1: Foundation & BFF API Layer ✅
 
-### Step 1.1 — Convert to JSX Mode
-- [ ] Rename all `.tsx`/`.ts` files in `src/` to `.jsx`/`.js`
-- [ ] Update `tsconfig.json` → set `allowJs: true`, `jsx: "preserve"`, `noImplicitAny: false`
-- [ ] Remove strict TypeScript enforcement from `next.config.ts`
-- [ ] Delete `src/components/ui/` (all 48 shadcn/ui components — replaced by DaisyUI)
-- [ ] Update `jsconfig.json` or `tsconfig.json` path aliases for `.js` imports
+> Combines original Phases 1–3: project setup, layout shell, and all backend-for-frontend API routes.
 
-### Step 1.2 — Install & Configure DaisyUI v5
-- [ ] Install: `bun add daisyui@latest`
-- [ ] Remove shadcn/ui dependencies from `package.json` (all `@radix-ui/*`, `class-variance-authority`, `cmdk`, etc.)
-- [ ] Configure DaisyUI as Tailwind CSS v4 plugin in `src/app/globals.css`:
-  ```css
-  @import "tailwindcss";
-  @plugin "daisyui" {
-    themes: dark --default, light, cupcake, business, synthwave, nord;
-  }
-  ```
-- [ ] Remove all shadcn CSS variables (`--background`, `--foreground`, `--card`, etc.) from `globals.css`
-- [ ] Remove `tailwind.config.ts` (Tailwind v4 uses CSS-based config)
-- [ ] Create custom "noble" DaisyUI theme with gold/amber primary, slate secondary
+### Step 1.1 — Project Foundation
+- [x] Convert to JSX mode (all `.tsx`/`.ts` → `.jsx`/`.js` in `src/`)
+- [x] DaisyUI v5 as Tailwind CSS v4 plugin with custom "noble" dark theme
+- [x] Clerk Auth v7 with sign-in/sign-up pages + middleware
+- [x] Remove all shadcn/ui remnants
+- [x] Custom "noble" DaisyUI theme (gold/amber primary, purple secondary, teal accent)
 
-### Step 1.3 — Install & Configure Clerk Auth v7
-- [ ] Install: `bun add @clerk/nextjs`
-- [ ] Copy Clerk keys from `upload/.env` to root `.env.local`:
-  ```
-  NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY=pk_test_...
-  CLERK_SECRET_KEY=sk_test_...
-  NEXT_PUBLIC_CLERK_SIGN_IN_URL=/sign-in
-  NEXT_PUBLIC_CLERK_SIGN_UP_URL=/sign-up
-  NEXT_PUBLIC_CLERK_AFTER_SIGN_IN_URL=/
-  NEXT_PUBLIC_CLERK_AFTER_SIGN_UP_URL=/
-  ```
-- [ ] Create `src/middleware.js` — Clerk middleware with route protection
-- [ ] Wrap app in `<ClerkProvider>` in `src/app/layout.js`
-- [ ] Create `src/app/sign-in/[[...sign-in]]/page.js` — Clerk sign-in page
-- [ ] Create `src/app/sign-up/[[...sign-up]]/page.js` — Clerk sign-up page
+### Step 1.2 — Layout Shell
+- [x] `src/app/layout.js` — ClerkProvider + data-theme="noble" + Geist font
+- [x] `src/app/page.js` — SPA view router with Clerk `<Show />` auth gate
+- [x] `src/components/Navbar.jsx` — Tabs (Dashboard | Orders | Simulate | Portfolio | Search | Docs), health badge, stream indicator, theme switcher, UserButton
+- [x] `src/components/Footer.jsx` — Sticky footer with version, feature badges, disclaimer
+- [x] Keyboard shortcuts (Ctrl+1–5 for view switching, Ctrl+K search)
+- [x] Animated view transitions (fadeInUp)
 
-### Step 1.4 — Project Cleanup
-- [ ] Remove unused dependencies: `next-auth`, `@radix-ui/*`, `class-variance-authority`, `cmdk`, `tailwindcss-animate`, `tw-animate-css`, `sonner`, `vaul`, `input-otp`
-- [ ] Remove `src/hooks/use-toast.ts`, `src/hooks/use-mobile.ts` (replaced by DaisyUI)
-- [ ] Remove `src/lib/utils.ts` (cn() not needed — DaisyUI uses class names directly)
-- [ ] Clean `src/app/api/route.js` — replace hello-world with health check
-- [ ] Add `ALPACA_PAPER_BASE_URL` to `.env.local`
+### Step 1.3 — FastAPI Client Utility
+- [x] `src/lib/fastapi-client.js` — Centralized fetch wrapper with:
+  - `analyseFull()`, `detectRegime()`, `sizeKelly()`, `analyseRisk()` — batch analysis
+  - `seedSession()`, `pushTick()`, `getSessions()`, `getSSEUrl()`, `getAlertsSSEUrl()` — streaming
+  - `simulateRegime()`, `getPortfolio()` — simulation & portfolio (v2.1)
+  - `detectCorrelation()`, `optimisePortfolio()` — correlation & optimization (v3.0)
+  - `checkHealth()` — backend health probe
+  - Retry with exponential backoff (Render cold-start handling)
+  - 60s timeout for all FastAPI calls
 
-### Deliverables
-- Clean Next.js 16 project running in JSX mode
-- DaisyUI v5 with custom "noble" dark theme
-- Clerk auth with sign-in/sign-up routes
-- Zero shadcn/ui remnants
+### Step 1.4 — BFF API Routes (Batch)
+- [x] `src/app/api/prices/route.js` — Yahoo Finance historical prices (GET, params: symbol, period)
+- [x] `src/app/api/analyse/route.js` — BFF: fetch prices → forward to FastAPI `/analyse/full` (POST)
+- [x] `src/app/api/health/route.js` — FastAPI health proxy with latency measurement
+- [x] `src/app/api/commentary/route.js` — LLM-powered market commentary via z-ai-web-dev-sdk
 
----
+### Step 1.5 — BFF API Routes (Alpaca Trading)
+- [x] `src/app/api/alpaca/account/route.js` — GET account info (Clerk privateMetadata → Alpaca)
+- [x] `src/app/api/alpaca/orders/route.js` — GET order history with period filter
+- [x] `src/app/api/alpaca/orders/create/route.js` — POST place order (default qty: 100)
+- [x] `src/app/api/alpaca/positions/route.js` — GET open positions
+- [x] `src/lib/alpaca-client.js` — Alpaca API proxy helpers
 
-## Phase 2: Layout & Navigation Shell
+### Step 1.6 — BFF API Routes (Clerk Private Metadata)
+- [x] `src/app/api/clerk/alpaca-keys/route.js` — GET/POST Alpaca keys (server-side only)
+- [x] `src/app/api/clerk/alpaca-keys-status/route.js` — GET key status (boolean, never exposes keys)
+- [x] `src/lib/clerk-metadata.js` — Clerk privateMetadata helpers
 
-### Step 2.1 — Root Layout with ClerkProvider & DaisyUI
-- [ ] `src/app/layout.js` — Wire `<ClerkProvider>`, set `data-theme="noble"` on `<html>`, load Inter font
-- [ ] `src/app/globals.css` — DaisyUI plugin + custom theme colors + minimal global styles
+### Step 1.7 — Shared Infrastructure
+- [x] `src/lib/cache.js` — In-memory cache with TTL (5-min for analysis results)
+- [x] `src/components/shared/LoadingSkeleton.jsx` — DaisyUI skeleton loading states
+- [x] `src/components/shared/ErrorState.jsx` — DaisyUI alert-error with retry
+- [x] `src/components/shared/EmptyState.jsx` — DaisyUI placeholder
+- [x] `src/components/shared/ThemeSwitcher.jsx` — 6-theme dropdown (Noble, Light, Dark, Cupcake, Business, Synthwave)
 
-### Step 2.2 — Navbar Component
-- [ ] `src/components/Navbar.jsx` — DaisyUI navbar with:
-  - Logo + "Noble Trader" title
-  - Navigation tabs: Dashboard | Orders | Search (DaisyUI `tab` component)
-  - Theme switcher dropdown (DaisyUI `dropdown` + `theme` selector)
-  - Clerk `<Show when="signed-in">` → UserButton + avatar
-  - Clerk `<Show when="signed-out">` → SignInButton
-  - Backend health indicator pill (DaisyUI `badge`)
-
-### Step 2.3 — Footer Component
-- [ ] `src/components/Footer.jsx` — DaisyUI footer, sticky to bottom:
-  - Disclaimer text
-  - Feature tags (DaisyUI `badge`)
-  - Alpaca paper-trading notice
-  - Version info
-
-### Step 2.4 — Sidebar / Drawer (Mobile)
-- [ ] `src/components/MobileDrawer.jsx` — DaisyUI `drawer` component:
-  - Hamburger toggle (visible on mobile only)
-  - Navigation links
-  - Quick ticker shortcuts
-
-### Step 2.5 — Page Router (Single-Page App Pattern)
-- [ ] `src/app/page.js` — Main entry, uses client-side state to switch views:
-  - `activeView` state: `"dashboard"` | `"orders"` | `"search"`
-  - Clerk `<Show when="signed-out">` → `<SignIn />` component
-  - Clerk `<Show when="signed-in">` → Dashboard / Orders / Search based on `activeView`
-  - Animated view transitions with DaisyUI `animate-` classes
-
-### Deliverables
-- Complete layout shell with navbar, footer, mobile drawer
-- Clerk auth gating via `<Show />` on home page
-- View navigation working (tab-based SPA)
-
----
-
-## Phase 3: BFF API Layer (Backend-for-Frontend)
-
-### Step 3.1 — FastAPI Client Utility
-- [ ] `src/lib/fastapi-client.js` — Centralized fetch wrapper:
-  ```js
-  const FASTAPI_BASE = "https://noble-trader-fastapi-backend.onrender.com";
-  
-  export async function analyseFull(prices, symbol) { ... }
-  export async function detectRegime(prices, symbol) { ... }
-  export async function sizeKelly(prices, symbol, options) { ... }
-  export async function analyseRisk(prices, symbol, options) { ... }
-  ```
-- [ ] Handle Render cold-start timeouts (retry with backoff)
-- [ ] Error handling with custom error classes
-
-### Step 3.2 — Price Data API Route
-- [ ] `src/app/api/prices/route.js` — Server-side Yahoo Finance fetch:
-  - GET params: `symbol`, `period` (6m/1y/2y)
-  - Uses `yahoo-finance2` to fetch historical closes
-  - Returns `{ prices: number[], symbol, period }`
-  - Minimum 81 prices enforced (pad if needed)
-
-### Step 3.3 — Analysis BFF Route
-- [ ] `src/app/api/analyse/route.js` — Orchestrates price fetch + FastAPI call:
-  - POST body: `{ symbol, period, kelly_fraction, target_vol, base_risk_limit }`
-  - 1) Fetch prices from Yahoo Finance
-  - 2) Forward to FastAPI `/analyse/full`
-  - 3) Return combined `{ prices, analysis: FullAnalysisResponse }`
-  - Caching: in-memory cache with 5-min TTL per symbol+period
-
-### Step 3.4 — Health Check Route
-- [ ] `src/app/api/health/route.js` — Proxies FastAPI `/health`:
-  - Returns `{ status, latency_ms, backend: "online"|"offline" }`
-
-### Step 3.5 — Alpaca API Routes (Order Execution)
-- [ ] `src/app/api/alpaca/account/route.js` — GET account info:
-  - Reads Alpaca API key + secret from Clerk privateMetadata
-  - Proxies to `https://paper-api.alpaca.markets/v2/account`
-  - Returns account details (buying power, cash, equity, etc.)
-
-- [ ] `src/app/api/alpaca/orders/route.js` — GET order history:
-  - Reads Alpaca credentials from Clerk privateMetadata
-  - Proxies to `https://paper-api.alpaca.markets/v2/orders`
-  - Query params: `status`, `after` (date filter for 1m/3m/6m/1y)
-  - Returns order list
-
-- [ ] `src/app/api/alpaca/orders/create/route.js` — POST place order:
-  - Reads Alpaca credentials from Clerk privateMetadata
-  - Validates request body: `{ symbol, qty, side: "buy"|"sell", type: "market", time_in_force: "day" }`
-  - Proxies to `https://paper-api.alpaca.markets/v2/orders`
-  - Returns order confirmation
-  - Default qty: 100
-
-- [ ] `src/app/api/alpaca/positions/route.js` — GET open positions:
-  - Reads Alpaca credentials from Clerk privateMetadata
-  - Proxies to `https://paper-api.alpaca.markets/v2/positions`
-  - Returns current positions
-
-### Step 3.6 — Clerk Private Metadata Routes
-- [ ] `src/app/api/clerk/alpaca-keys/route.js` — GET/POST:
-  - **GET**: Reads `alpaca_api_key` and `alpaca_secret_key` from Clerk `privateMetadata`
-  - **POST**: Writes `alpaca_api_key` and `alpaca_secret_key` to Clerk `privateMetadata`
-  - Uses `clerkClient.users.updateUserMetadata()` on server side only
-  - Frontend NEVER has direct access to these keys
-
-- [ ] `src/app/api/clerk/alpaca-keys-status/route.js` — GET:
-  - Returns `{ configured: boolean }` — whether Alpaca keys are set
-  - Does NOT expose the actual keys
-
-### Deliverables
-- Complete BFF API layer with 8 routes
-- FastAPI integration with cold-start handling
+### Phase 1 Deliverables
+- Clean Next.js 16 project in JSX mode with DaisyUI v5 + Clerk auth
+- Complete BFF API layer (8+ routes)
+- FastAPI integration with cold-start retry/backoff
 - Alpaca proxy routes secured via Clerk privateMetadata
 - In-memory caching for analysis results
 
 ---
 
-## Phase 4: Dashboard Page (3 Default Tickers)
+## Phase 2: Dashboard, Search & Analysis ✅
 
-### Step 4.1 — Dashboard Container
-- [ ] `src/components/dashboard/Dashboard.jsx` — Main dashboard component:
-  - Fetches analysis for 3 default tickers: Gold (GC=F), Bitcoin (BTC-USD), USD/EUR (EURUSD=X)
-  - Period selector: 6M / 1Y / 2Y (DaisyUI `btn-group`)
+> Core UI pages: 3-ticker dashboard, symbol search, and all analysis display components.
+
+### Step 2.1 — Dashboard Container
+- [x] `src/components/dashboard/Dashboard.jsx` — Main dashboard:
+  - 3 default tickers: Gold (GC=F), Bitcoin (BTC-USD), EUR/USD (EURUSD=X)
+  - Period selector: 6M / 1Y / 2Y (DaisyUI btn-group)
   - Auto-refresh toggle with 2-minute interval
   - Last-updated timestamp
-  - Comparison table button
+  - Comparison table toggle
 
-### Step 4.2 — Ticker Card Component
-- [ ] `src/components/dashboard/TickerCard.jsx` — DaisyUI `card` per ticker:
-  - Header: Symbol name + current price + ▲/▼ return indicator (DaisyUI `badge`)
-  - Price chart (DaisyUI-styled Recharts area chart)
-  - Collapsible sections (DaisyUI `collapse`):
-    - Regime State
-    - HMM Observation Features
-    - Risk Metrics & Recommendations
+### Step 2.2 — Ticker Card Component
+- [x] `src/components/dashboard/TickerCard.jsx` — DaisyUI card per ticker:
+  - Header: Symbol name + current price + ▲/▼ return indicator (badge)
+  - Price chart (Recharts AreaChart)
+  - Collapsible sections: Regime, HMM Features, Risk, Recommendations, Simulation (v2.1)
+  - "Go Live" streaming button (v2.0)
 
-### Step 4.3 — Regime State Section
-- [ ] `src/components/analysis/RegimeCard.jsx` — DaisyUI `card` inside collapse:
-  - Regime label (DaisyUI `badge` with color coding):
-    - `low_vol_bull` → `badge-success`
-    - `medium_vol_bull` → `badge-info`
-    - `high_vol_bear` → `badge-error`
-  - Volatility state + probability bars (DaisyUI `progress`)
-  - Trend state + probability bars (DaisyUI `progress`)
-  - Confidence score (DaisyUI `radial-progress`)
-  - Risk multiplier (DaisyUI `stat`)
-  - Bars fitted count
+### Step 2.3 — Analysis Components
+- [x] `src/components/analysis/RegimeCard.jsx` — HMM regime label, vol/trend probability bars, confidence, risk multiplier, bars fitted
+- [x] `src/components/analysis/ObservationFeatures.jsx` — 24-feature vector display with progress bars (returns, volatility, derived, HMM, Markov, quality, position)
+- [x] `src/components/analysis/RiskCard.jsx` — VaR 95/99, CVaR 95/99, max drawdown, Sortino/Calmar, stop/TP levels
+- [x] `src/components/analysis/RecommendationsCard.jsx` — Position size, regime-based action alerts, stop/TP, analysis notes
+- [x] `src/components/analysis/PriceChart.jsx` — Recharts AreaChart with gradient fill and tooltip
+- [x] `src/components/analysis/CommentaryCard.jsx` — AI-generated market insights (LLM via z-ai-web-dev-sdk)
 
-### Step 4.4 — HMM Observation Features Section
-- [ ] `src/components/analysis/ObservationFeatures.jsx` — DaisyUI `card` inside collapse:
-  - 24-feature vector display organized by category:
-    - Returns (0-2): log returns 1/3/10 bar
-    - Volatility (3-5): normalized ATR, rolling vol, EMA distance
-    - Derived (6-9): HHLL score, vol percentile, ATR ratio, vol slope
-    - HMM Raw (10-13): state posteriors
-    - Markov (14-19): vol/trend probability buckets
-    - Quality (20-21): regime quality, state confidence
-    - Position (22-23): Masaniello pressure, drawdown factor
-  - DaisyUI `progress` bars for each feature value
-  - Feature index labels for RL/ML downstream reference
+### Step 2.4 — Dashboard Enhancements
+- [x] `src/components/dashboard/ComparisonTable.jsx` — Side-by-side comparison of 3 tickers across 11+ metrics, color-coded cells
+- [x] `src/components/dashboard/RegimeSummaryBanner.jsx` — Color-coded quick-glance regime pills at dashboard top
 
-### Step 4.5 — Risk & Recommendations Section
-- [ ] `src/components/analysis/RiskCard.jsx` — DaisyUI `card` inside collapse:
-  - Key metrics in DaisyUI `stat` components:
-    - VaR 95% / 99%
-    - CVaR 95% / 99%
-    - Max Drawdown
-    - Annual Vol / Return
-    - Sortino / Calmar ratios
-  - Stop-loss & Take-profit levels (DaisyUI `alert` with color)
-  - Risk budget used (DaisyUI `progress`)
-  - Notes list (DaisyUI `list`)
+### Step 2.5 — Search Page
+- [x] `src/components/search/SearchPage.jsx` — Symbol search with Enter key, period filter, 16 popular tickers, recent searches (localStorage, max 8)
+- [x] `src/components/search/SearchResults.jsx` — Full analysis layout: price chart + regime + HMM features + risk + recommendations + buy/sell button
 
-- [ ] `src/components/analysis/RecommendationsCard.jsx` — DaisyUI `card`:
-  - Position size recommendation (`recommended_f` as percentage)
-  - Regime-based action: AGGRESSIVE / MODERATE / DEFENSIVE (DaisyUI `alert`)
-  - Suggested stop/TP levels
-  - Analysis notes from FastAPI
+### Step 2.6 — Orders / Portfolio Page
+- [x] `src/components/orders/OrdersPage.jsx` — Period filter (1M/3M/6M/1Y), order history, open positions, account summary
+- [x] `src/components/orders/AlpacaKeySetup.jsx` — DaisyUI modal for Alpaca API key configuration (stored in Clerk privateMetadata)
+- [x] `src/components/orders/AccountSummary.jsx` — Equity, cash, buying power, status badges
+- [x] `src/components/orders/OrderHistory.jsx` — Filterable order table with status badges
+- [x] `src/components/orders/OpenPositions.jsx` — Position table with P&L coloring
+- [x] `src/components/orders/OrderModal.jsx` — Buy/sell modal with side toggle, qty input, order type, confirmation step
+- [x] `src/components/orders/PortfolioAnalysis.jsx` — Regime analysis for held positions
+- [x] `src/components/orders/PortfolioAnalysisCard.jsx` — Portfolio analysis card with simulation integration
 
-### Step 4.6 — Price Chart Component
-- [ ] `src/components/analysis/PriceChart.jsx` — Recharts `AreaChart`:
-  - Gradient fill matching regime color
-  - Tooltip with price + date
-  - Responsive container
-  - Regime color overlay bands (optional enhancement)
-
-### Step 4.7 — Comparison Table
-- [ ] `src/components/dashboard/ComparisonTable.jsx` — DaisyUI `table`:
-  - Side-by-side comparison of 3 tickers across 11+ metrics:
-    - Regime, Risk Multiplier, VaR 95%, CVaR 95%, Max DD,
-    - Annual Return/Vol, Sharpe, Sortino, Calmar, Recommended Position
-  - Color-coded cells (best = success, worst = error)
-
-### Step 4.8 — Regime Summary Banner
-- [ ] `src/components/dashboard/RegimeSummaryBanner.jsx` — Top-of-page banner:
-  - 3 DaisyUI `badge` pills showing each ticker's regime at a glance
-  - Color-coded: green=bull, red=bear, yellow=neutral
-  - Quick visual scan before scrolling into details
-
-### Deliverables
+### Phase 2 Deliverables
 - Complete dashboard with 3 default tickers
-- Full regime, HMM features, risk, and recommendations display
-- Period selector, auto-refresh, comparison table
+- Full analysis component library (regime, HMM, risk, recommendations, commentary)
+- Search page with symbol lookup + recent searches
+- Orders page with Alpaca key setup, order execution, portfolio analysis
 - All components using ONLY DaisyUI classes
 
 ---
 
-## Phase 5: Orders / Portfolio Page
+## Phase 3: Streaming & Real-Time ✅
 
-### Step 5.1 — Orders Container
-- [ ] `src/components/orders/OrdersPage.jsx` — Main orders page:
-  - Period filter: 1M / 3M / 6M / 1Y (DaisyUI `btn-group`)
-  - Order history table (DaisyUI `table`)
-  - Open positions section
-  - Account summary card
+> SSE streaming integration: real-time regime detection, tick pushing, alert system.
 
-### Step 5.2 — Alpaca Key Setup Modal
-- [ ] `src/components/orders/AlpacaKeySetup.jsx` — DaisyUI `modal`:
-  - Shown when Alpaca keys are NOT configured (checked via `/api/clerk/alpaca-keys-status`)
-  - Two input fields: API Key, Secret Key (DaisyUI `input`)
-  - Save button → POST `/api/clerk/alpaca-keys`
-  - Security notice: keys stored in Clerk privateMetadata (server-only)
-  - Link to Alpaca paper trading signup
+### Step 3.1 — Stream Context & Hook
+- [x] `src/context/StreamContext.jsx` — Global streaming state provider:
+  - Multi-symbol subscription management (subscribe/unsubscribe/toggle)
+  - Alert history with deduplication (max 50, most recent first)
+  - Per-symbol stream state tracking (seeded, connected, streaming, lastTick, error, sseMode)
+  - Active stream count + anyConnected derived state
+  - `StreamHookWrapper` renders `useStreamPrice` per subscribed symbol
+- [x] `src/hooks/useStreamPrice.js` — Per-symbol SSE streaming hook:
+  - Flow: Seed (POST /api/stream/seed) → Connect SSE (EventSource to FastAPI) → Push ticks (periodic)
+  - Direct SSE with automatic fallback to tick polling on CORS/connectivity failure
+  - Exponential reconnect backoff (2s → 30s max)
+  - 30-second tick interval with Yahoo Finance price fetching
+  - Regime change alert detection in SSE messages
 
-### Step 5.3 — Account Summary Card
-- [ ] `src/components/orders/AccountSummary.jsx` — DaisyUI `card` + `stats`:
-  - Equity, Cash, Buying Power, Long Market Value, Short Market Value
-  - Account status badge
-  - Pattern Day Trader flag
+### Step 3.2 — BFF Streaming Routes
+- [x] `src/app/api/stream/seed/route.js` — POST: seeds FastAPI session with Yahoo prices
+- [x] `src/app/api/stream/tick/route.js` — POST: push price tick → FastAPI /stream/tick
+- [x] `src/app/api/stream/latest-price/route.js` — GET: fetch latest Yahoo price for tick source
+- [x] `src/app/api/stream/sessions/route.js` — GET: list active FastAPI streaming sessions
 
-### Step 5.4 — Order History Table
-- [ ] `src/components/orders/OrderHistory.jsx` — DaisyUI `table`:
-  - Columns: Date, Symbol, Side (buy/sell badge), Type, Qty, Status, Filled Price
-  - Filtered by period selector
-  - Status badges: `filled` → success, `pending` → warning, `canceled` → error
-  - Empty state with link to search page
+### Step 3.3 — Streaming UI Components
+- [x] `src/components/streaming/StreamStatusPanel.jsx` — Dashboard panel showing active streams, status dots, regime labels, prices, SSE mode badges
+- [x] `src/components/streaming/LiveBadge.jsx` — Pulsing "LIVE" indicator badge (green when connected)
+- [x] `src/components/streaming/AlertHistory.jsx` — Scrolling regime-change alert list with severity badges (critical/warning/info), time formatting, clear button
 
-### Step 5.5 — Open Positions Table
-- [ ] `src/components/orders/OpenPositions.jsx` — DaisyUI `table`:
-  - Columns: Symbol, Qty, Avg Entry Price, Current Price, Market Value, Unrealized P&L
-  - P&L colored green/red (DaisyUI `text-success` / `text-error`)
+### Step 3.4 — Streaming Integration Points
+- [x] Navbar: Stream indicator (pulsing dot + stream count badge)
+- [x] TickerCard: "Go Live" button → subscribes via StreamContext
+- [x] Dashboard: StreamStatusPanel + AlertHistory shown alongside ticker cards
+- [x] Portfolio page: Real-time stream state for per-symbol breakdown
 
-### Step 5.6 — Buy/Sell Order Modal
-- [ ] `src/components/orders/OrderModal.jsx` — DaisyUI `modal`:
-  - Triggered from Search page or Orders page
-  - Fields:
-    - Symbol (read-only, pre-filled)
-    - Side: Buy / Sell (DaisyUI `toggle` or `btn-group`)
-    - Quantity: number input, default 100 (DaisyUI `input`)
-    - Order Type: Market (default), Limit (DaisyUI `select`)
-    - If Limit: Limit Price input (DaisyUI `input`)
-    - Time in Force: Day (default), GTC (DaisyUI `select`)
-  - Confirmation step with order summary
-  - Submit → POST `/api/alpaca/orders/create`
-  - Success/error toast (DaisyUI `toast`)
-  - Risk warning alert (DaisyUI `alert-warning`)
-
-### Step 5.7 — Portfolio Analysis Section
-- [ ] `src/components/orders/PortfolioAnalysis.jsx` — Regime analysis for held positions:
-  - For each open position, fetch regime + risk analysis
-  - Display mini RegimeCard + RiskCard per position
-  - Aggregate portfolio risk metrics
-  - Position sizing recommendations per holding
-
-### Deliverables
-- Complete orders/portfolio page
-- Alpaca key setup flow via Clerk privateMetadata
-- Order history with period filters
-- Buy/sell order execution modal
-- Portfolio analysis with regime/risk overlay
+### Phase 3 Deliverables
+- Complete SSE streaming pipeline (seed → connect → tick → receive)
+- Multi-symbol streaming with shared context
+- Automatic SSE→polling fallback on connectivity issues
+- Real-time regime change alert system with severity levels
+- Streaming status visible across Dashboard, Portfolio, and Navbar
 
 ---
 
-## Phase 6: Search Page (Ticker Analysis)
+## Phase 4: Simulation & Portfolio ✅
 
-### Step 6.1 — Search Container
-- [ ] `src/components/search/SearchPage.jsx` — Main search page:
-  - Search input with Enter key support (DaisyUI `input` + `btn`)
-  - Period filter: 6M / 1Y / 2Y (DaisyUI `btn-group`)
-  - Popular tickers grid (DaisyUI `btn` chips): AAPL, MSFT, GOOGL, AMZN, TSLA, NVDA, META, SPY, QQQ, DIA, IWM, GLD, SLV, BTC-USD, ETH-USD, EURUSD=X
-  - Recent searches (localStorage, max 8) (DaisyUI `badge` with × close)
+> Monte Carlo simulation and aggregated portfolio risk view. (v2.1)
 
-### Step 6.2 — Search Results Layout
-- [ ] `src/components/search/SearchResults.jsx` — Two-column layout:
-  - Left: Price chart + regime summary
-  - Right: Full analysis pipeline (regime + HMM features + risk + recommendations)
-  - Buy/Sell button → opens OrderModal
-  - Add to watchlist button
+### Step 4.1 — Monte Carlo Simulation
+- [x] `src/components/simulation/SimulationPanel.jsx` — Configurable simulation:
+  - Parameters: horizon (1–252 bars), n_paths (50–5000), seed (reproducibility)
+  - Metric cards: median return, 5th/95th percentile, worst path, VaR
+  - Regime transition matrix display (4×4)
+  - Risk multiplier bar chart (16 regimes)
+  - One-click "Run Simulation" with loading state
+- [x] `src/components/simulation/PriceFanChart.jsx` — Recharts AreaChart with p5/p25/median/p75/p95 percentile bands, gradient fills, custom tooltip
+- [x] `src/components/simulation/SimulatePage.jsx` — Standalone simulation page:
+  - 8 popular symbol quick-select buttons
+  - Active stream symbols for convenience
+  - Custom symbol input with "Load" button
+  - Price data fetching from Yahoo Finance (1y period)
+  - Validation: minimum 81 bars required
+  - Error handling with retry
 
-### Step 6.3 — Ticker Analysis Display
-- [ ] Reuse analysis components from Phase 4:
-  - RegimeCard
-  - ObservationFeatures
-  - RiskCard
-  - RecommendationsCard
-  - PriceChart
-  - Buy/Sell button with DaisyUI `btn-success` / `btn-error`
+### Step 4.2 — Portfolio Overview
+- [x] `src/components/portfolio/PortfolioOverview.jsx` — Aggregated portfolio view:
+  - Risk Flags Banner: high-risk count, concentration risk, regime divergence, active alerts
+  - Portfolio Stats: VaR 95, active symbols, high risk count, concentration flag
+  - Symbol Breakdown Table: regime, risk multiplier (visual bar), Kelly size, VaR 95, stream status
+  - Regime Alerts: Recent alerts from streaming with severity badges
+  - Auto-refresh toggle (30s interval) + manual refresh button
+  - Empty state when no active streams ("Start streaming symbols from Dashboard")
 
-### Deliverables
-- Complete search page with symbol lookup
-- Full analysis pipeline for any ticker
-- Quick-select popular tickers
-- Recent search history
-- Buy/sell integration from search results
+### Step 4.3 — BFF Simulation & Portfolio Routes
+- [x] `src/app/api/simulate/route.js` — POST: proxy to FastAPI `/simulate/{symbol}` with prices + simulation params
+- [x] `src/app/api/portfolio/route.js` — GET: proxy to FastAPI `/portfolio` with optional symbol filter + Kelly params
 
----
+### Step 4.4 — Simulation Integration Points
+- [x] TickerCard: New collapsible "Monte Carlo Simulation" section with embedded SimulationPanel
+- [x] SearchResults: Toggleable simulation section
+- [x] PortfolioAnalysisCard: Simulation accordion in Orders page
+- [x] Navbar: "Simulate" and "Portfolio" tabs added
+- [x] Keyboard shortcuts updated: Ctrl+3=Simulate, Ctrl+4=Portfolio
 
-## Phase 7: Shared Components & Hooks
+### Step 4.5 — FastAPI Backend Endpoints Used
+- `POST /simulate/{symbol}` — Monte Carlo regime transition simulation
+  - Input: prices, horizon, n_paths, seed, current_price
+  - Output: price fan (percentile paths), risk metrics, regime occupancy, transition matrix
+- `GET /portfolio` — Multi-symbol aggregated risk view
+  - Input: symbols (optional), kelly_fraction, target_vol
+  - Output: per-symbol breakdowns, risk flags, portfolio VaR, concentration flag
 
-### Step 7.1 — Custom Hooks
-- [ ] `src/hooks/useAnalysis.js` — Fetch & cache `/api/analyse` results
-- [ ] `src/hooks/useAlpacaAccount.js` — Fetch Alpaca account info
-- [ ] `src/hooks/useOrders.js` — Fetch order history with period filter
-- [ ] `src/hooks/usePositions.js` — Fetch open positions
-- [ ] `src/hooks/useAlpacaKeys.js` — Check/set Alpaca key status
-- [ ] `src/hooks/useHealthCheck.js` — Poll FastAPI backend health
-- [ ] `src/hooks/usePriceAlerts.js` — Browser notification price alerts with localStorage
-
-### Step 7.2 — Shared UI Components
-- [ ] `src/components/shared/LoadingSkeleton.jsx` — DaisyUI `skeleton` loading states
-- [ ] `src/components/shared/ErrorState.jsx` — DaisyUI `alert-error` with retry button
-- [ ] `src/components/shared/EmptyState.jsx` — DaisyUI placeholder with illustration
-- [ ] `src/components/shared/ThemeSwitcher.jsx` — DaisyUI theme dropdown
-- [ ] `src/components/shared/ExportCSV.jsx` — CSV export utility
-- [ ] `src/components/shared/ExportPDF.jsx` — Print-to-PDF utility
-
-### Step 7.3 — Error Boundary
-- [ ] `src/components/shared/ErrorBoundary.jsx` — React error boundary:
-  - Catches render errors
-  - Shows DaisyUI `alert-error` with reset button
-  - Logs errors for debugging
-
-### Deliverables
-- Reusable hooks for all API interactions
-- Shared UI components for loading, error, empty states
-- Error boundary wrapper
-- Export functionality
+### Phase 4 Deliverables
+- Monte Carlo simulation with configurable parameters and price fan chart
+- Portfolio overview with risk flags, stats, and per-symbol breakdown
+- Simulation accessible from 4 places: TickerCard, SearchResults, PortfolioAnalysisCard, SimulatePage
+- Portfolio auto-refreshes from active stream data
+- All BFF routes proxy to FastAPI backend
 
 ---
 
-## Phase 8: Polish & Enhancement
+## Phase 5: Correlation + Optimization ✅
 
-### Step 8.1 — Keyboard Shortcuts
-- [ ] `src/hooks/useKeyboardShortcuts.js`:
-  - `Ctrl/Cmd+K` → Focus search
-  - `Ctrl/Cmd+1` → Dashboard
-  - `Ctrl/Cmd+2` → Orders
-  - `Ctrl/Cmd+3` → Search
-  - `Ctrl/Cmd+R` → Refresh data
-  - `Escape` → Close modals
+> Portfolio-level intelligence — "my assets are all moving together, reduce exposure." (v3.0)
 
-### Step 8.2 — AI Market Commentary (LLM Integration)
-- [ ] `src/app/api/commentary/route.js` — LLM-powered market insights:
-  - Sends regime + risk data to LLM via z-ai-web-dev-sdk
-  - Returns actionable commentary per ticker
-- [ ] `src/components/analysis/CommentaryCard.jsx` — DaisyUI `chat-bubble` styled:
-  - AI-generated insights
-  - Regime-based action recommendations
+### Step 5.1 — FastAPI Client Functions
+- [x] `detectCorrelation(symbols, returnsMatrix, options)` → POST `/correlation/detect`
+  - Input: symbols array, returns_matrix (symbol → returns array), window, kelly_fraction, target_vol
+  - Output: correlation_regime, mean_abs_rho, correlation_matrix, blended_risk_multiplier
+- [x] `optimisePortfolio(symbols, returnsMatrix, options)` → POST `/optimise/full`
+  - Input: symbols array, returns_matrix, current_weights, kelly_fraction, target_vol, max_dd
+  - Output: optimal_weights, regime_adjusted_weights, exposure_scalar, drawdown_constraint
 
-### Step 8.3 — Price Alert System
-- [ ] Browser notification integration
-- [ ] Alert management UI (add/remove/check alerts)
-- [ ] Toast notifications when targets are hit
+### Step 5.2 — BFF Proxy Routes
+- [x] `src/app/api/correlation/detect/route.js` — POST: proxy to FastAPI `/correlation/detect`
+- [x] `src/app/api/optimise/full/route.js` — POST: proxy to FastAPI `/optimise/full`
 
-### Step 8.4 — Accessibility & Responsiveness
-- [ ] Mobile-first responsive design audit
-- [ ] ARIA labels on all interactive elements
-- [ ] Keyboard navigation through all DaisyUI components
-- [ ] Touch-friendly targets (44px minimum)
+### Step 5.3 — CorrelationCard Component
+- [x] `src/components/portfolio/CorrelationCard.jsx` — Correlation detection display:
+  - Correlation regime label (low_corr / mid_corr / high_corr / crisis) with color-coded badge
+  - Mean |ρ| with color coding (green < 0.4, yellow 0.4–0.7, red > 0.7)
+  - Correlation heatmap — n×n matrix with cell coloring by |ρ| magnitude
+  - Blended risk multiplier — portfolio-level risk scalar display
+  - "Detect" button with loading state
+  - Empty state when < 2 symbols subscribed
 
-### Step 8.5 — Performance Optimization
-- [ ] API response caching (in-memory, 5-min TTL)
-- [ ] Lazy loading for heavy components (Recharts)
-- [ ] Image optimization for any assets
-- [ ] Bundle analysis and tree shaking
+### Step 5.4 — OptimizerCard Component
+- [x] `src/components/portfolio/OptimizerCard.jsx` — Portfolio weight optimization display:
+  - Current vs. optimal weights — Recharts grouped BarChart comparing actual vs recommended
+  - Regime-adjusted weights — after per-asset risk multiplier (3rd bar series)
+  - Drawdown constraint — alert showing within/breach status with current DD vs max DD
+  - Exposure scalar — how much gross exposure allowed (100% low_corr, 50% crisis)
+  - Detailed weights table with delta column (green = increase, red = decrease)
+  - Key metrics row: Exposure Scalar, DD Constraint, Corr Regime, Symbols count
+  - "Optimize" button with loading state
 
-### Deliverables
-- Keyboard shortcuts system
-- AI market commentary
-- Price alerts with browser notifications
-- Full accessibility compliance
-- Performance optimizations
+### Step 5.5 — Portfolio Overview Integration
+- [x] `src/components/portfolio/PortfolioOverview.jsx` — Enhanced with correlation + optimization:
+  - Returns matrix computation from Yahoo Finance prices (fetched per symbol, 1y period)
+  - Current weights derivation (from Kelly sizing or equal-weight fallback)
+  - CorrelationCard embedded as collapsible section with regime badge in title
+  - OptimizerCard embedded as collapsible section with exposure/DD badges in title
+  - RiskFlagsBanner enhanced: new correlation risk flags (crisis/high_corr warnings)
+  - PortfolioStats enhanced: 6-column grid with new Corr Regime + Exposure stats
+  - "CORRELATION & OPTIMIZATION" divider section
+  - v3.0 version badge in header
+
+### Step 5.6 — Footer Updated
+- [x] Version bumped to v3.0
+- [x] New feature badges: Correlation, Optimizer, Corr Detection, Weight Optimizer
+
+### Phase 5 Deliverables
+- Correlation regime detection with heatmap visualization and blended risk multiplier
+- Portfolio weight optimizer with current vs optimal vs regime-adjusted comparison
+- Drawdown constraint monitoring with breach alerts
+- Exposure scalar display (100% → 50% based on correlation regime)
+- All components integrated into Portfolio View as collapsible sections
+- 2 new BFF proxy routes, 2 new FastAPI client functions, 2 new UI components
 
 ---
 
-## File Structure (Final)
+## Current File Structure
 
 ```
 src/
 ├── app/
 │   ├── layout.js                          # ClerkProvider + DaisyUI theme
 │   ├── page.js                            # Home: <Show /> auth gate + view router
-│   ├── globals.css                        # DaisyUI plugin + custom theme
-│   ├── sign-in/
-│   │   └── [[...sign-in]]/
-│   │       └── page.js                    # Clerk sign-in page
-│   ├── sign-up/
-│   │   └── [[...sign-up]]/
-│   │       └── page.js                    # Clerk sign-up page
-│   ├── middleware.js                       # Clerk route protection
+│   ├── globals.css                        # DaisyUI plugin + custom noble theme
+│   ├── sign-in/[[...sign-in]]/page.js     # Clerk sign-in page
+│   ├── sign-up/[[...sign-up]]/page.js     # Clerk sign-up page
 │   └── api/
 │       ├── health/route.js                # FastAPI health proxy
 │       ├── prices/route.js                # Yahoo Finance price fetcher
 │       ├── analyse/route.js               # BFF: prices → FastAPI analysis
 │       ├── commentary/route.js            # LLM market commentary
+│       ├── simulate/route.js              # BFF: Monte Carlo simulation
+│       ├── portfolio/route.js             # BFF: portfolio aggregation
+│       ├── correlation/
+│       │   └── detect/route.js            # BFF: correlation detection (v3.0)
+│       ├── optimise/
+│       │   └── full/route.js              # BFF: portfolio optimization (v3.0)
 │       ├── alpaca/
 │       │   ├── account/route.js           # Alpaca account info
 │       │   ├── orders/
 │       │   │   ├── route.js               # GET order history
 │       │   │   └── create/route.js        # POST place order
 │       │   └── positions/route.js         # GET open positions
-│       └── clerk/
-│           ├── alpaca-keys/route.js       # GET/POST Alpaca keys (privateMetadata)
-│           └── alpaca-keys-status/route.js # GET key status (boolean only)
+│       ├── clerk/
+│       │   ├── alpaca-keys/route.js       # GET/POST Alpaca keys
+│       │   └── alpaca-keys-status/route.js # GET key status
+│       └── stream/
+│           ├── seed/route.js              # POST: seed streaming session
+│           ├── tick/route.js              # POST: push price tick
+│           ├── latest-price/route.js      # GET: fetch latest Yahoo price
+│           └── sessions/route.js          # GET: list active sessions
 ├── components/
-│   ├── Navbar.jsx
-│   ├── Footer.jsx
-│   ├── MobileDrawer.jsx
+│   ├── Navbar.jsx                         # Navigation + health + streams + theme
+│   ├── Footer.jsx                         # Sticky footer with badges
 │   ├── dashboard/
-│   │   ├── Dashboard.jsx
-│   │   ├── TickerCard.jsx
-│   │   ├── ComparisonTable.jsx
-│   │   └── RegimeSummaryBanner.jsx
+│   │   ├── Dashboard.jsx                  # 3-ticker dashboard container
+│   │   ├── TickerCard.jsx                 # Per-ticker card with analysis
+│   │   ├── ComparisonTable.jsx            # Side-by-side metric comparison
+│   │   └── RegimeSummaryBanner.jsx        # Quick-glance regime pills
 │   ├── analysis/
-│   │   ├── RegimeCard.jsx
-│   │   ├── ObservationFeatures.jsx
-│   │   ├── RiskCard.jsx
-│   │   ├── RecommendationsCard.jsx
-│   │   ├── PriceChart.jsx
-│   │   └── CommentaryCard.jsx
+│   │   ├── RegimeCard.jsx                 # HMM regime display
+│   │   ├── ObservationFeatures.jsx        # 24-feature vector
+│   │   ├── RiskCard.jsx                   # VaR/CVaR/drawdown metrics
+│   │   ├── RecommendationsCard.jsx        # Position sizing + action alerts
+│   │   ├── PriceChart.jsx                 # Recharts area chart
+│   │   └── CommentaryCard.jsx             # AI market commentary
 │   ├── orders/
-│   │   ├── OrdersPage.jsx
-│   │   ├── AlpacaKeySetup.jsx
-│   │   ├── AccountSummary.jsx
-│   │   ├── OrderHistory.jsx
-│   │   ├── OpenPositions.jsx
-│   │   ├── OrderModal.jsx
-│   │   └── PortfolioAnalysis.jsx
+│   │   ├── OrdersPage.jsx                 # Orders & portfolio container
+│   │   ├── AlpacaKeySetup.jsx             # API key configuration modal
+│   │   ├── AccountSummary.jsx             # Account stats
+│   │   ├── OrderHistory.jsx               # Filterable order table
+│   │   ├── OpenPositions.jsx              # Position table with P&L
+│   │   ├── OrderModal.jsx                 # Buy/sell execution modal
+│   │   ├── PortfolioAnalysis.jsx          # Regime analysis for positions
+│   │   └── PortfolioAnalysisCard.jsx      # Analysis card + simulation
 │   ├── search/
-│   │   ├── SearchPage.jsx
-│   │   └── SearchResults.jsx
+│   │   ├── SearchPage.jsx                 # Symbol search + popular tickers
+│   │   └── SearchResults.jsx              # Full analysis layout
+│   ├── simulation/
+│   │   ├── SimulatePage.jsx               # Standalone simulation page
+│   │   ├── SimulationPanel.jsx            # Configurable MC simulation
+│   │   └── PriceFanChart.jsx              # Percentile band chart
+│   ├── portfolio/
+│   │   ├── PortfolioOverview.jsx          # Aggregated portfolio view + correlation + optimizer
+│   │   ├── CorrelationCard.jsx            # Correlation regime + heatmap (v3.0)
+│   │   └── OptimizerCard.jsx              # Weight optimizer + DD constraint (v3.0)
+│   ├── streaming/
+│   │   ├── StreamStatusPanel.jsx          # Active streams dashboard
+│   │   ├── LiveBadge.jsx                  # Pulsing LIVE indicator
+│   │   └── AlertHistory.jsx              # Regime change alert list
 │   └── shared/
-│       ├── LoadingSkeleton.jsx
-│       ├── ErrorState.jsx
-│       ├── EmptyState.jsx
-│       ├── ThemeSwitcher.jsx
-│       ├── ExportCSV.jsx
-│       ├── ExportPDF.jsx
-│       └── ErrorBoundary.jsx
+│       ├── LoadingSkeleton.jsx            # DaisyUI skeleton states
+│       ├── ErrorState.jsx                 # Error alert with retry
+│       ├── EmptyState.jsx                 # Empty state placeholder
+│       └── ThemeSwitcher.jsx              # 6-theme dropdown
+├── context/
+│   └── StreamContext.jsx                  # Global streaming state provider
 ├── hooks/
-│   ├── useAnalysis.js
-│   ├── useAlpacaAccount.js
-│   ├── useOrders.js
-│   ├── usePositions.js
-│   ├── useAlpacaKeys.js
-│   ├── useHealthCheck.js
-│   ├── usePriceAlerts.js
-│   └── useKeyboardShortcuts.js
+│   └── useStreamPrice.js                  # Per-symbol SSE streaming hook
 └── lib/
-    ├── fastapi-client.js                  # FastAPI fetch wrapper
+    ├── fastapi-client.js                  # FastAPI fetch wrapper (all endpoints)
     ├── alpaca-client.js                   # Alpaca API proxy helpers
     ├── clerk-metadata.js                  # Clerk privateMetadata helpers
     └── cache.js                           # In-memory cache with TTL
 ```
-
----
-
-## Clerk PrivateMetadata — Alpaca Key Flow
-
-```
-┌──────────┐     POST /api/clerk/alpaca-keys      ┌──────────────┐
-│  Browser  │ ──────────────────────────────────▶  │  Next.js BFF  │
-│  (React)  │     { api_key, secret_key }          │  (Server)     │
-└──────────┘                                       └──────┬───────┘
-                                                          │ clerkClient
-                                                          │ .updateUserMetadata()
-                                                          ▼
-                                                   ┌──────────────┐
-                                                   │  Clerk Server  │
-                                                   │  privateMetadata│
-                                                   │  {             │
-                                                   │   alpaca_api_key│
-                                                   │   alpaca_secret │
-                                                   │  }              │
-                                                   └──────────────┘
-
-┌──────────┐     GET /api/alpaca/orders           ┌──────────────┐     clerkClient.getUser()     ┌──────────────┐
-│  Browser  │ ──────────────────────────────────▶  │  Next.js BFF  │ ──────────────────────────▶ │  Clerk Server  │
-│  (React)  │                                       │  (Server)     │    reads privateMetadata    │                │
-└──────────┘                                       └──────┬───────┘                              └──────────────┘
-                                                          │ uses api_key + secret
-                                                          ▼
-                                                   ┌──────────────┐
-                                                   │  Alpaca API    │
-                                                   │  paper-api     │
-                                                   └──────────────┘
-```
-
-**Security guarantee**: Alpaca API keys are NEVER exposed to the browser. They are stored in Clerk `privateMetadata` (backend-only) and read server-side to proxy Alpaca API calls.
-
----
-
-## FastAPI Backend — Endpoint Mapping
-
-| Frontend Need | BFF Route | FastAPI Endpoint | Method |
-|---|---|---|---|
-| Dashboard analysis (3 tickers) | `POST /api/analyse` | `POST /analyse/full` | Batch |
-| Individual regime check | `POST /api/analyse` (with flags) | `POST /regime/detect` | Batch |
-| Kelly sizing only | `POST /api/analyse` (with flags) | `POST /size/kelly` | Batch |
-| Risk metrics only | `POST /api/analyse` (with flags) | `POST /risk/analyse` | Batch |
-| Backend health | `GET /api/health` | `GET /health` | — |
-| Price data | `GET /api/prices` | — (Yahoo Finance) | — |
-
----
-
-## Alpaca Markets — API Mapping
-
-| Frontend Need | BFF Route | Alpaca Endpoint | Method |
-|---|---|---|---|
-| Account info | `GET /api/alpaca/account` | `GET /v2/account` | Paper |
-| Order history | `GET /api/alpaca/orders` | `GET /v2/orders` | Paper |
-| Place order | `POST /api/alpaca/orders/create` | `POST /v2/orders` | Paper |
-| Open positions | `GET /api/alpaca/positions` | `GET /v2/positions` | Paper |
-
-### Place Order Default Payload
-```json
-{
-  "symbol": "AAPL",
-  "qty": "100",
-  "side": "buy",
-  "type": "market",
-  "time_in_force": "day"
-}
-```
-
----
-
-## DaisyUI Component Usage Map
-
-| UI Element | DaisyUI Component | Notes |
-|---|---|---|
-| Page layout | `drawer` + `navbar` | Mobile drawer, desktop navbar |
-| Auth gate | Clerk `<Show />` | Not DaisyUI — Clerk component |
-| Navigation tabs | `tab` | Dashboard / Orders / Search |
-| Theme switcher | `dropdown` + `swap` | Theme selector |
-| Ticker cards | `card` | With `card-body`, `card-title` |
-| Collapsible sections | `collapse` | Regime, HMM, Risk sections |
-| Probability bars | `progress` | Vol/trend probabilities |
-| Confidence circle | `radial-progress` | HMM confidence display |
-| Key metrics | `stats` + `stat` | VaR, CVaR, Sharpe, etc. |
-| Status badges | `badge` | Regime labels, order status |
-| Alerts | `alert` | Risk warnings, recommendations |
-| Buttons | `btn` | All actions (buy, sell, refresh) |
-| Buy/Sell toggle | `btn-group` | Side selection in order modal |
-| Search input | `input` + `btn` | Symbol search |
-| Period filters | `btn-group` | 6M/1Y/2Y, 1M/3M/6M/1Y |
-| Tables | `table` | Order history, positions, comparison |
-| Modal dialogs | `modal` | Order placement, Alpaca key setup |
-| Loading states | `skeleton` | Pulse animation placeholders |
-| Toast notifications | `toast` | Order confirmations, alerts |
-| Footer | `footer` | Sticky bottom footer |
-| Form inputs | `input`, `select` | Order form fields |
-| Ticker chips | `btn` (sm) | Popular ticker quick-select |
-| Feature tags | `badge` (outline) | Footer feature list |
-
----
-
-## Implementation Priority & Parallelization
-
-```
-Phase 1 (Foundation)  ───────────────────────────── Sequential (blocking)
-     │
-Phase 2 (Layout)      ───────────────────────────── Sequential (needs Phase 1)
-     │
-     ├─── Phase 3-a (BFF: FastAPI routes)     ───┐
-     ├─── Phase 3-b (BFF: Price routes)       ───┤  PARALLEL
-     ├─── Phase 3-c (BFF: Alpaca routes)      ───┤
-     └─── Phase 3-d (BFF: Clerk metadata)     ───┘
-     │
-     ├─── Phase 4 (Dashboard)                 ───┐
-     │                                         ───┤  PARALLEL
-     └─── Phase 6 (Search)                    ───┘
-     │
-Phase 5 (Orders)      ───────────────────────────── Needs Phase 3-c, 3-d
-     │
-Phase 7 (Shared)      ───────────────────────────── Ongoing with all phases
-     │
-Phase 8 (Polish)      ───────────────────────────── After all phases
-```
-
-### Sub-Agent Task Assignments
-
-| Task ID | Phase | Description | Agent Type | Parallel Group |
-|---------|-------|-------------|------------|----------------|
-| 1 | Phase 1 | Foundation: JSX conversion, DaisyUI, Clerk setup | full-stack-developer | — |
-| 2 | Phase 2 | Layout shell: Navbar, Footer, MobileDrawer, page router | full-stack-developer | — |
-| 3-a | Phase 3 | BFF: FastAPI client + health + analyse routes | full-stack-developer | Group A |
-| 3-b | Phase 3 | BFF: Price data route (Yahoo Finance) | full-stack-developer | Group A |
-| 3-c | Phase 3 | BFF: Alpaca account/orders/positions routes | full-stack-developer | Group A |
-| 3-d | Phase 3 | BFF: Clerk privateMetadata routes | full-stack-developer | Group A |
-| 4 | Phase 4 | Dashboard: 3-ticker cards + analysis components | full-stack-developer | Group B |
-| 5 | Phase 5 | Orders page: history, positions, buy/sell modal | full-stack-developer | — |
-| 6 | Phase 6 | Search page: ticker lookup + analysis display | full-stack-developer | Group B |
-| 7 | Phase 7 | Shared hooks + utility components | full-stack-developer | Ongoing |
-| 8 | Phase 8 | Polish: shortcuts, AI commentary, alerts, a11y | full-stack-developer | — |
 
 ---
 
@@ -730,20 +430,110 @@ DATABASE_URL=file:./db/custom.db
 
 ---
 
+## FastAPI Backend — Endpoint Mapping
+
+| Frontend Need | BFF Route | FastAPI Endpoint | Phase |
+|---|---|---|---|
+| Dashboard analysis (3 tickers) | `POST /api/analyse` | `POST /analyse/full` | 1 |
+| Individual regime check | `POST /api/analyse` | `POST /regime/detect` | 1 |
+| Kelly sizing only | `POST /api/analyse` | `POST /size/kelly` | 1 |
+| Risk metrics only | `POST /api/analyse` | `POST /risk/analyse` | 1 |
+| Backend health | `GET /api/health` | `GET /health` | 1 |
+| Price data | `GET /api/prices` | — (Yahoo Finance) | 1 |
+| AI commentary | `POST /api/commentary` | — (z-ai-web-dev-sdk) | 1 |
+| Stream: seed session | `POST /api/stream/seed` | `POST /stream/seed` | 3 |
+| Stream: push tick | `POST /api/stream/tick` | `POST /stream/tick` | 3 |
+| Stream: latest price | `GET /api/stream/latest-price` | — (Yahoo Finance) | 3 |
+| Stream: list sessions | `GET /api/stream/sessions` | `GET /stream/sessions` | 3 |
+| Stream: SSE subscribe | — (client-side EventSource) | `GET /sse/{symbol}` | 3 |
+| Stream: SSE alerts | — (client-side EventSource) | `GET /sse/alerts` | 3 |
+| Monte Carlo simulation | `POST /api/simulate` | `POST /simulate/{symbol}` | 4 |
+| Portfolio aggregation | `GET /api/portfolio` | `GET /portfolio` | 4 |
+| Correlation detection | `POST /api/correlation/detect` | `POST /correlation/detect` | 5 |
+| Portfolio optimization | `POST /api/optimise/full` | `POST /optimise/full` | 5 |
+
+---
+
+## Alpaca Markets — API Mapping
+
+| Frontend Need | BFF Route | Alpaca Endpoint | Method |
+|---|---|---|---|
+| Account info | `GET /api/alpaca/account` | `GET /v2/account` | Paper |
+| Order history | `GET /api/alpaca/orders` | `GET /v2/orders` | Paper |
+| Place order | `POST /api/alpaca/orders/create` | `POST /v2/orders` | Paper |
+| Open positions | `GET /api/alpaca/positions` | `GET /v2/positions` | Paper |
+
+---
+
+## Security: Clerk PrivateMetadata — Alpaca Key Flow
+
+```
+┌──────────┐     POST /api/clerk/alpaca-keys      ┌──────────────┐
+│  Browser  │ ──────────────────────────────────▶  │  Next.js BFF  │
+│  (React)  │     { api_key, secret_key }          │  (Server)     │
+└──────────┘                                       └──────┬───────┘
+                                                          │ clerkClient
+                                                          │ .updateUserMetadata()
+                                                          ▼
+                                                   ┌──────────────┐
+                                                   │  Clerk Server  │
+                                                   │  privateMetadata│
+                                                   │  {             │
+                                                   │   alpaca_api_key│
+                                                   │   alpaca_secret │
+                                                   │  }              │
+                                                   └──────────────┘
+```
+
+**Security guarantee**: Alpaca API keys are NEVER exposed to the browser. They are stored in Clerk `privateMetadata` (backend-only) and read server-side to proxy Alpaca API calls.
+
+---
+
+## DaisyUI Component Usage Map
+
+| UI Element | DaisyUI Component | Phase |
+|---|---|---|
+| Page layout | `navbar` + `footer` | 1 |
+| Auth gate | Clerk `<Show />` | 1 |
+| Navigation tabs | `tab` | 1 |
+| Theme switcher | `dropdown` | 1 |
+| Ticker cards | `card` + `card-body` | 2 |
+| Collapsible sections | `collapse` | 2 |
+| Probability bars | `progress` | 2 |
+| Confidence circle | `radial-progress` | 2 |
+| Key metrics | `stats` + `stat` | 2 |
+| Status badges | `badge` | 2 |
+| Alerts | `alert` | 2 |
+| Buttons | `btn` | 2 |
+| Period filters | `btn-group` | 2 |
+| Tables | `table` | 2 |
+| Modal dialogs | `modal` | 2 |
+| Loading states | `skeleton` | 2 |
+| Search input | `input` + `btn` | 2 |
+| Ticker chips | `btn` (sm) | 2 |
+| Streaming indicator | `badge` + animate-ping | 3 |
+| Simulation config | `input`, `select`, `range` | 4 |
+| Correlation heatmap | `table` + inline styles | 5 |
+| Weight comparison | Recharts `BarChart` | 5 |
+
+---
+
 ## Key Technical Decisions
 
 | Decision | Choice | Rationale |
 |---|---|---|
 | Language | JavaScript (JSX) | User requirement — no TypeScript |
 | CSS Framework | DaisyUI v5 ONLY | User requirement — no shadcn/ui |
-| Auth | Clerk v7 + `<Show />` | User requirement — declarative auth gating |
+| Auth | Clerk v7 + `<Show />` | Declarative auth gating |
 | Alpaca Key Storage | Clerk privateMetadata | Backend-only, never exposed to frontend |
 | Price Data | Yahoo Finance (server-side) | Free, no API key needed, reliable |
 | Analysis | FastAPI `/analyse/full` | Single endpoint for regime + sizing + risk |
-| State Management | React useState + useEffect | Simple — no Zustand needed for this scope |
+| State Management | React useState + useEffect + Context | Simple — no Zustand needed for this scope |
+| Streaming | SSE (EventSource) with tick fallback | Direct SSE preferred, auto-fallback on CORS |
 | Caching | In-memory with TTL | Lightweight, no Redis needed |
 | Charts | Recharts | Already installed, works with DaisyUI |
 | Order Execution | BFF proxy to Alpaca | Keys stay server-side via Clerk privateMetadata |
+| AI Commentary | z-ai-web-dev-sdk (LLM) | Backend-only, no client API key exposure |
 
 ---
 
@@ -753,7 +543,20 @@ DATABASE_URL=file:./db/custom.db
 |---|---|
 | Render cold starts (30-60s) | Loading skeletons + retry with exponential backoff |
 | Yahoo Finance rate limits | Server-side caching (5-min TTL) |
+| SSE CORS failures | Auto-fallback to tick polling mode |
 | Alpaca paper trading latency | Optimistic UI updates + error rollback |
 | Clerk privateMetadata 8KB limit | Store only 2 fields (api_key, secret_key) |
 | DaisyUI theme inconsistencies | Test all 6 themes during development |
 | CORS issues with FastAPI | BFF pattern avoids direct browser → FastAPI calls |
+
+---
+
+## Phase Completion Status
+
+| Phase | Description | Status | Version |
+|---|---|---|---|
+| **Phase 1** | Foundation & BFF API Layer | ✅ Complete | v1.0 |
+| **Phase 2** | Dashboard, Search & Analysis | ✅ Complete | v1.0 |
+| **Phase 3** | Streaming & Real-Time | ✅ Complete | v2.0 |
+| **Phase 4** | Simulation & Portfolio | ✅ Complete | v2.1 |
+| **Phase 5** | Correlation + Optimization | ✅ Complete | v3.0 |

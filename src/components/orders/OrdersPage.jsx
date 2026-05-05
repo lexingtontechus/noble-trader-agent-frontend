@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback } from "react";
 import AlpacaKeySetup from "@/components/orders/AlpacaKeySetup";
+import { useStream } from "@/context/StreamContext";
 import AccountSummary from "@/components/orders/AccountSummary";
 import OrderHistory from "@/components/orders/OrderHistory";
 import OpenPositions from "@/components/orders/OpenPositions";
@@ -30,6 +31,8 @@ export default function OrdersPage() {
   const [ordersError, setOrdersError] = useState("");
   const [positionsError, setPositionsError] = useState("");
   const [showKeyManager, setShowKeyManager] = useState(false);
+
+  const { subscribe, unsubscribe } = useStream();
 
   // Check if Alpaca keys are configured
   const checkKeys = useCallback(async () => {
@@ -133,6 +136,17 @@ export default function OrdersPage() {
       fetchPositions();
     }
   }, [keysConfigured, period, fetchAccount, fetchOrders, fetchPositions]);
+
+  // Auto-subscribe to position symbols for live P&L streaming
+  useEffect(() => {
+    if (positions.length > 0) {
+      const positionSymbols = positions.map((p) => p.symbol).filter(Boolean);
+      positionSymbols.forEach((sym) => subscribe(sym));
+      return () => {
+        positionSymbols.forEach((sym) => unsubscribe(sym));
+      };
+    }
+  }, [positions, subscribe, unsubscribe]);
 
   // Handle key configuration success
   const handleKeysConfigured = () => {
