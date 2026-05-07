@@ -6,9 +6,10 @@ import Navbar from "@/components/Navbar";
 import Footer from "@/components/Footer";
 import Dashboard from "@/components/dashboard/Dashboard";
 import OrdersPage from "@/components/orders/OrdersPage";
+import SearchPage from "@/components/search/SearchPage";
 import SimulatePage from "@/components/simulation/SimulatePage";
 import PortfolioOverview from "@/components/portfolio/PortfolioOverview";
-import SearchPage from "@/components/search/SearchPage";
+import AdminPage from "@/components/admin/AdminPage";
 import { StreamProvider } from "@/context/StreamContext";
 
 export default function Home() {
@@ -34,6 +35,9 @@ export default function Home() {
       } else if ((e.metaKey || e.ctrlKey) && e.key === "5") {
         e.preventDefault();
         setActiveView("search");
+      } else if ((e.metaKey || e.ctrlKey) && e.key === "6") {
+        e.preventDefault();
+        setActiveView("admin");
       }
     };
     window.addEventListener("keydown", handleKeyDown);
@@ -47,13 +51,14 @@ export default function Home() {
         <StreamProvider>
           <div className="min-h-screen flex flex-col">
             <Navbar activeView={activeView} setActiveView={setActiveView} />
-            <main className="flex-1 container mx-auto px-4 py-6">
+            <main className="flex-1 container mx-auto px-4 py-6 overflow-auto">
               <div key={activeView} className="animate-fade-in-up">
                 {activeView === "dashboard" && <Dashboard />}
                 {activeView === "orders" && <OrdersPage />}
+                {activeView === "search" && <SearchPage />}
                 {activeView === "simulate" && <SimulatePage />}
                 {activeView === "portfolio" && <PortfolioOverview />}
-                {activeView === "search" && <SearchPage />}
+                {activeView === "admin" && <AdminPage />}
               </div>
             </main>
             <Footer />

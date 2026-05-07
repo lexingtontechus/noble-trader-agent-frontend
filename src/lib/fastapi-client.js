@@ -2,11 +2,27 @@ const FASTAPI_BASE =
   process.env.NEXT_PUBLIC_FASTAPI_BASE_URL ||
   "https://noble-trader-fastapi-backend.onrender.com";
 
+// ── Auth token cache ────────────────────────────────────────────────────────
+let _cachedToken = null;
+let _tokenExpiry = 0;
+
 async function fetchWithRetry(url, options = {}, retries = 3) {
   for (let i = 0; i < retries; i++) {
     try {
+      const headers = { ...options.headers };
+
+      // Add auth header if token is provided
+      if (options.auth) {
+        if (options.auth.token_type === "api_key") {
+          headers["X-API-Key"] = options.auth.access_token;
+        } else {
+          headers["Authorization"] = `Bearer ${options.auth.access_token}`;
+        }
+      }
+
       const res = await fetch(url, {
         ...options,
+        headers,
         signal: AbortSignal.timeout(60000), // 60s timeout for Render cold starts
       });
       if (res.ok) return res;
@@ -40,6 +56,19 @@ export async function analyseFull(prices, symbol = "UNKNOWN", options = {}) {
 }
 
 export async function detectRegime(prices, symbol = "UNKNOWN") {
+  const res = await fetchWithRetry(`${FASTAPI_BASE}/regime/detect`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ prices, symbol }),
+  });
+  return res.json();
+}
+
+/**
+ * Lightweight regime detection — calls the unprotected /regime/detect endpoint.
+ * Alias for detectRegime, kept for semantic clarity in fallback paths.
+ */
+export async function detectRegimeOnly(prices, symbol = "UNKNOWN") {
   const res = await fetchWithRetry(`${FASTAPI_BASE}/regime/detect`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -99,57 +128,88 @@ export async function checkHealth() {
   }
 }
 
-// ── Streaming API ─────────────────────────────────────────────────────────────
+/**
+ * Get an auth token for the FastAPI backend.
+ * Tries directly against the FastAPI backend (no HTTP round-trip to self).
+ * Caches the token until it expires.
+ * Returns null if auth is not available.
+ */
+export async function getFastApiToken() {
+  // Return cached token if still valid
+  if (_cachedToken && Date.now() < _tokenExpiry) {
+    return _cachedToken;
+  }
 
-/** Seed a streaming session with historical prices */
-export async function seedSession(symbol, prices, options = {}) {
-  const body = {
-    symbol,
-    prices,
-    window: options.window ?? 500,
-    kelly_fraction: options.kelly_fraction ?? 0.5,
-    target_vol: options.target_vol ?? 0.15,
-    base_risk_limit: options.base_risk_limit ?? 0.02,
-    refit_every: options.refit_every ?? 50,
-  };
+  const FASTAPI_USER = process.env.FASTAPI_USER || "";
+  const FASTAPI_PASSWORD = process.env.FASTAPI_PASSWORD || "";
 
-  const res = await fetchWithRetry(`${FASTAPI_BASE}/stream/seed`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(body),
-  });
-  return res.json();
-}
+  if (!FASTAPI_USER || !FASTAPI_PASSWORD) {
+    return null;
+  }
 
-/** Push one price tick, receive regime snapshot */
-export async function pushTick(symbol, price, ts = null) {
-  const body = { symbol, price };
-  if (ts != null) body.ts = ts;
+  try {
+    // Strategy 1: Try OAuth2 password flow (POST /auth/token)
+    try {
+      const formData = new URLSearchParams();
+      formData.append("username", FASTAPI_USER);
+      formData.append("password", FASTAPI_PASSWORD);
 
-  const res = await fetchWithRetry(`${FASTAPI_BASE}/stream/tick`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(body),
-  });
-  return res.json();
-}
+      const tokenRes = await fetch(`${FASTAPI_BASE}/auth/token`, {
+        method: "POST",
+        headers: { "Content-Type": "application/x-www-form-urlencoded" },
+        body: formData.toString(),
+        signal: AbortSignal.timeout(10000),
+      });
 
-/** List all active streaming sessions */
-export async function getSessions() {
-  const res = await fetchWithRetry(`${FASTAPI_BASE}/stream/sessions`, {
-    method: "GET",
-  });
-  return res.json();
-}
+      if (tokenRes.ok) {
+        const tokenData = await tokenRes.json();
+        if (tokenData.access_token) {
+          _cachedToken = {
+            access_token: tokenData.access_token,
+            token_type: tokenData.token_type || "bearer",
+            expires_in: tokenData.expires_in || 3600,
+            sub: tokenData.sub,
+            role: tokenData.role,
+            method: "oauth2",
+          };
+          _tokenExpiry =
+            _cachedToken.expires_in > 0
+              ? Date.now() + (_cachedToken.expires_in - 300) * 1000
+              : Date.now() + 3600000;
+          return _cachedToken;
+        }
+      }
+    } catch {
+      // /auth/token not available — fall through
+    }
 
-/** Get the SSE URL for a symbol stream */
-export function getSSEUrl(symbol) {
-  return `${FASTAPI_BASE}/sse/${encodeURIComponent(symbol)}`;
-}
+    // Strategy 2: Test credentials as X-API-Key
+    try {
+      const testRes = await fetch(`${FASTAPI_BASE}/portfolio/symbols`, {
+        headers: { "X-API-Key": FASTAPI_PASSWORD },
+        signal: AbortSignal.timeout(10000),
+      });
 
-/** Get the SSE URL for the global alert stream */
-export function getAlertsSSEUrl() {
-  return `${FASTAPI_BASE}/sse/alerts`;
+      if (testRes.ok) {
+        _cachedToken = {
+          access_token: FASTAPI_PASSWORD,
+          token_type: "api_key",
+          expires_in: 0,
+          sub: FASTAPI_USER,
+          role: "trader",
+          method: "api_key",
+        };
+        _tokenExpiry = Date.now() + 3600000; // 1 hour cache
+        return _cachedToken;
+      }
+    } catch {
+      // API key test failed — fall through
+    }
+  } catch {
+    // Auth not available — return null
+  }
+
+  return null;
 }
 
 // ── v2.1 Simulation + Portfolio API ──────────────────────────────────────────
@@ -157,15 +217,6 @@ export function getAlertsSSEUrl() {
 /**
  * Run Monte Carlo regime transition simulation.
  * POST /simulate/{symbol}
- *
- * @param {string} symbol - Ticker symbol
- * @param {number[]} prices - Historical prices (min 81)
- * @param {Object} options - Optional params
- * @param {number} [options.horizon=20] - Forward bars to simulate (1-252)
- * @param {number} [options.n_paths=500] - Monte Carlo paths (50-5000)
- * @param {number} [options.seed=42] - Random seed for reproducibility
- * @param {number} [options.current_price] - Override starting price (defaults to prices[-1])
- * @returns {Promise<Object>} Simulation result with price fan, risk metrics, regime occupancy
  */
 export async function simulateRegime(symbol, prices, options = {}) {
   const body = {
@@ -176,12 +227,14 @@ export async function simulateRegime(symbol, prices, options = {}) {
   };
   if (options.current_price != null) body.current_price = options.current_price;
 
+  const auth = await getFastApiToken();
   const res = await fetchWithRetry(
     `${FASTAPI_BASE}/simulate/${encodeURIComponent(symbol)}`,
     {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(body),
+      auth: auth || undefined,
     },
   );
   return res.json();
@@ -190,12 +243,6 @@ export async function simulateRegime(symbol, prices, options = {}) {
 /**
  * Get aggregated portfolio regime + risk summary.
  * GET /portfolio
- *
- * @param {Object} options - Optional query params
- * @param {string} [options.symbols] - Comma-separated symbol list (omit for all active sessions)
- * @param {number} [options.kelly_fraction=0.5] - Kelly fraction
- * @param {number} [options.target_vol=0.15] - Target volatility
- * @returns {Promise<Object>} Portfolio view with per-symbol breakdowns + risk flags
  */
 export async function getPortfolio(options = {}) {
   const params = new URLSearchParams();
@@ -208,33 +255,63 @@ export async function getPortfolio(options = {}) {
   const qs = params.toString();
   const url = `${FASTAPI_BASE}/portfolio${qs ? `?${qs}` : ""}`;
 
+  const auth = await getFastApiToken();
   const res = await fetchWithRetry(url, {
     method: "GET",
+    auth: auth || undefined,
   });
   return res.json();
 }
 
-// ── v3.0 Correlation + Optimization API ──────────────────────────────────────
-
 /**
- * Detect correlation regime across a basket of symbols.
- * POST /correlation/detect
- *
- * @param {string[]} symbols - List of ticker symbols
- * @param {Object<string, number[]>} returnsMatrix - Symbol → returns array mapping
- * @param {Object} options - Optional params
- * @param {number} [options.window=60] - Rolling window for correlation estimation
- * @param {number} [options.kelly_fraction=0.5] - Kelly fraction for risk scaling
- * @param {number} [options.target_vol=0.15] - Target volatility
- * @returns {Promise<Object>} Correlation result with regime, matrix, blended risk multiplier
+ * Get list of symbols with active portfolio sessions.
+ * GET /portfolio/symbols
  */
-export async function detectCorrelation(symbols, returnsMatrix, options = {}) {
+export async function getPortfolioSymbols() {
+  const auth = await getFastApiToken();
+  const res = await fetchWithRetry(`${FASTAPI_BASE}/portfolio/symbols`, {
+    method: "GET",
+    auth: auth || undefined,
+  });
+  return res.json();
+}
+
+// --- Streaming (v2.0) ---
+export async function seedSession(symbol, prices) {
+  const res = await fetchWithRetry(`${FASTAPI_BASE}/stream/seed`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ symbol, prices }),
+  });
+  return res.json();
+}
+
+export async function pushTick(symbol, price) {
+  const res = await fetchWithRetry(`${FASTAPI_BASE}/stream/tick`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ symbol, price }),
+  });
+  return res.json();
+}
+
+export async function getSessions() {
+  const res = await fetchWithRetry(`${FASTAPI_BASE}/stream/sessions`);
+  return res.json();
+}
+
+export function getSSEUrl(symbol) {
+  return `${FASTAPI_BASE}/sse/${symbol}`;
+}
+
+export function getAlertsSSEUrl() {
+  return `${FASTAPI_BASE}/sse/alerts`;
+}
+
+export async function detectCorrelation(symbols, returns_data = {}) {
   const body = {
     symbols,
-    returns_matrix: returnsMatrix,
-    window: options.window ?? 60,
-    kelly_fraction: options.kelly_fraction ?? 0.5,
-    target_vol: options.target_vol ?? 0.15,
+    returns_data,
   };
 
   const res = await fetchWithRetry(`${FASTAPI_BASE}/correlation/detect`, {
@@ -245,28 +322,17 @@ export async function detectCorrelation(symbols, returnsMatrix, options = {}) {
   return res.json();
 }
 
-/**
- * Optimise portfolio weights given returns and risk constraints.
- * POST /optimise/full
- *
- * @param {string[]} symbols - List of ticker symbols
- * @param {Object<string, number[]>} returnsMatrix - Symbol → returns array mapping
- * @param {Object} options - Optional params
- * @param {Object<string, number>} [options.current_weights] - Current position weights { symbol: weight }
- * @param {number} [options.kelly_fraction=0.5] - Kelly fraction
- * @param {number} [options.target_vol=0.15] - Target volatility
- * @param {number} [options.max_dd=0.20] - Maximum acceptable drawdown
- * @returns {Promise<Object>} Optimization result with optimal weights, exposure scalar, constraints
- */
-export async function optimisePortfolio(symbols, returnsMatrix, options = {}) {
+export async function optimisePortfolio(
+  positions,
+  prices_data = {},
+  options = {},
+) {
   const body = {
-    symbols,
-    returns_matrix: returnsMatrix,
-    kelly_fraction: options.kelly_fraction ?? 0.5,
-    target_vol: options.target_vol ?? 0.15,
-    max_dd: options.max_dd ?? 0.2,
+    positions,
+    prices_data,
+    target_return: options.target_return ?? 0.1,
+    risk_free_rate: options.risk_free_rate ?? 0.04,
   };
-  if (options.current_weights) body.current_weights = options.current_weights;
 
   const res = await fetchWithRetry(`${FASTAPI_BASE}/optimise/full`, {
     method: "POST",

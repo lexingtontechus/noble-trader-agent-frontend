@@ -5,9 +5,6 @@ export async function GET() {
     const configured = await hasAlpacaKeys();
     return Response.json({ configured });
   } catch (error) {
-    return Response.json(
-      { configured: false, error: error.message },
-      { status: 500 },
-    );
+    return Response.json({ configured: false, error: error.message }, { status: 500 });
   }
 }

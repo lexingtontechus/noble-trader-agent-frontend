@@ -1,14 +1,14 @@
-"use client";
+'use client'
 
 export default function OrderHistory({ orders, loading, error, onRetry }) {
   const formatDate = (iso) => {
-    if (!iso) return "—";
+    if (!iso) return '—';
     try {
-      return new Date(iso).toLocaleDateString("en-US", {
-        month: "short",
-        day: "numeric",
-        hour: "2-digit",
-        minute: "2-digit",
+      return new Date(iso).toLocaleDateString('en-US', {
+        month: 'short',
+        day: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit',
       });
     } catch {
       return iso;
@@ -16,45 +16,39 @@ export default function OrderHistory({ orders, loading, error, onRetry }) {
   };
 
   const fmtPrice = (val) => {
-    if (val == null) return "—";
-    const num = typeof val === "string" ? parseFloat(val) : val;
-    if (isNaN(num)) return "—";
-    return new Intl.NumberFormat("en-US", {
-      style: "currency",
-      currency: "USD",
+    if (val == null) return '—';
+    const num = typeof val === 'string' ? parseFloat(val) : val;
+    if (isNaN(num)) return '—';
+    return new Intl.NumberFormat('en-US', {
+      style: 'currency',
+      currency: 'USD',
       minimumFractionDigits: 2,
     }).format(num);
   };
 
   const sideBadge = (side) => {
     if (!side) return null;
-    const cls = side.toLowerCase() === "buy" ? "badge-success" : "badge-error";
-    return (
-      <span className={`badge badge-sm ${cls}`}>{side.toUpperCase()}</span>
-    );
+    const cls = side.toLowerCase() === 'buy' ? 'badge-success' : 'badge-error';
+    return <span className={`badge badge-sm ${cls}`}>{side.toUpperCase()}</span>;
   };
 
   const statusBadge = (status) => {
     if (!status) return null;
     const map = {
-      filled: "badge-success",
-      partially_filled: "badge-warning",
-      pending_new: "badge-info",
-      new: "badge-info",
-      accepted: "badge-info",
-      done_for_day: "badge-ghost",
-      canceled: "badge-ghost",
-      cancelled: "badge-ghost",
-      expired: "badge-ghost",
-      rejected: "badge-error",
-      replaced: "badge-info",
+      filled: 'badge-success',
+      partially_filled: 'badge-warning',
+      pending_new: 'badge-info',
+      new: 'badge-info',
+      accepted: 'badge-info',
+      done_for_day: 'badge-ghost',
+      canceled: 'badge-ghost',
+      cancelled: 'badge-ghost',
+      expired: 'badge-ghost',
+      rejected: 'badge-error',
+      replaced: 'badge-info',
     };
-    const cls = map[status] || "badge-ghost";
-    return (
-      <span className={`badge badge-sm ${cls}`}>
-        {status.replace(/_/g, " ")}
-      </span>
-    );
+    const cls = map[status] || 'badge-ghost';
+    return <span className={`badge badge-sm ${cls}`}>{status.replace(/_/g, ' ')}</span>;
   };
 
   if (loading) {
@@ -88,18 +82,8 @@ export default function OrderHistory({ orders, loading, error, onRetry }) {
         {error ? (
           <div className="text-center py-6">
             <div className="alert alert-error mb-3">
-              <svg
-                xmlns="http://www.w3.org/2000/svg"
-                className="stroke-current shrink-0 h-5 w-5"
-                fill="none"
-                viewBox="0 0 24 24"
-              >
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth="2"
-                  d="M10 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2m7-2a9 9 0 11-18 0 9 9 0 0118 0z"
-                />
+              <svg xmlns="http://www.w3.org/2000/svg" className="stroke-current shrink-0 h-5 w-5" fill="none" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M10 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2m7-2a9 9 0 11-18 0 9 9 0 0118 0z" />
               </svg>
               <span className="text-sm">{error}</span>
             </div>
@@ -111,18 +95,7 @@ export default function OrderHistory({ orders, loading, error, onRetry }) {
           </div>
         ) : !orders || orders.length === 0 ? (
           <div className="text-center py-8 text-base-content/50">
-            <svg
-              xmlns="http://www.w3.org/2000/svg"
-              width="40"
-              height="40"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="1.5"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              className="mx-auto mb-2 opacity-40"
-            >
+            <svg xmlns="http://www.w3.org/2000/svg" width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" className="mx-auto mb-2 opacity-40">
               <path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z" />
               <polyline points="14 2 14 8 20 8" />
               <line x1="16" y1="13" x2="8" y2="13" />
@@ -147,13 +120,11 @@ export default function OrderHistory({ orders, loading, error, onRetry }) {
               <tbody>
                 {orders.map((order, idx) => (
                   <tr key={order.id || idx}>
-                    <td className="text-xs whitespace-nowrap">
-                      {formatDate(order.submitted_at || order.created_at)}
-                    </td>
+                    <td className="text-xs whitespace-nowrap">{formatDate(order.submitted_at || order.created_at)}</td>
                     <td className="font-medium">{order.symbol}</td>
                     <td>{sideBadge(order.side)}</td>
                     <td className="text-xs uppercase">{order.type}</td>
-                    <td>{order.qty || order.filled_qty || "—"}</td>
+                    <td>{order.qty || order.filled_qty || '—'}</td>
                     <td>{statusBadge(order.status)}</td>
                     <td>{fmtPrice(order.filled_avg_price)}</td>
                   </tr>

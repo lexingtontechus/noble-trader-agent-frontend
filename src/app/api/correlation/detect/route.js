@@ -1,44 +1,53 @@
 import { NextResponse } from "next/server";
-import { detectCorrelation } from "@/lib/fastapi-client";
+import { getFastAPIAuthHeaders } from "@/lib/fastapi-auth";
 
-/**
- * POST /api/correlation/detect
- * BFF proxy for FastAPI POST /correlation/detect
- *
- * Body: { symbols, returns_matrix, window?, kelly_fraction?, target_vol? }
- *
- * returns_matrix is an object: { "GC=F": [0.01, -0.02, ...], "BTC-USD": [...] }
- * The BFF forwards it as-is to FastAPI which expects `returns_matrix` key.
- */
+const FASTAPI_BASE =
+  process.env.NEXT_PUBLIC_FASTAPI_BASE_URL ||
+  "https://noble-trader-fastapi-backend.onrender.com";
+
 export async function POST(request) {
   try {
     const body = await request.json();
-    const { symbols, returns_matrix, ...options } = body;
+    const { symbols, returns_matrix, window, kelly_fraction, target_vol } =
+      body;
 
-    if (!symbols || !Array.isArray(symbols) || symbols.length < 2) {
+    if (!symbols || !returns_matrix || symbols.length < 2) {
       return NextResponse.json(
-        { error: "At least 2 symbols required for correlation detection" },
+        { error: "At least 2 symbols with returns data required" },
         { status: 400 },
       );
     }
 
-    if (!returns_matrix || typeof returns_matrix !== "object") {
-      return NextResponse.json(
-        {
-          error:
-            "returns_matrix is required (object of symbol → returns array)",
-        },
-        { status: 400 },
-      );
+    const payload = {
+      symbols,
+      returns_matrix,
+      kelly_fraction: kelly_fraction || 0.5,
+      target_vol: target_vol || 0.15,
+    };
+    if (window) payload.window = window;
+
+    const authHeaders = await getFastAPIAuthHeaders();
+
+    const res = await fetch(`${FASTAPI_BASE}/correlation/detect`, {
+      method: "POST",
+      headers: {
+        ...authHeaders,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(payload),
+      signal: AbortSignal.timeout(60000),
+    });
+
+    if (!res.ok) {
+      const err = await res
+        .json()
+        .catch(() => ({ detail: `FastAPI error: ${res.status}` }));
+      throw new Error(err.detail || err.error || `FastAPI ${res.status}`);
     }
 
-    const result = await detectCorrelation(symbols, returns_matrix, options);
-    return NextResponse.json(result);
+    const data = await res.json();
+    return NextResponse.json(data);
   } catch (err) {
-    console.error("[/api/correlation/detect] Error:", err.message);
-    return NextResponse.json(
-      { error: err.message || "Correlation detection failed" },
-      { status: 502 },
-    );
+    return NextResponse.json({ error: err.message }, { status: 500 });
   }
 }

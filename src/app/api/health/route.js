@@ -1,7 +1,5 @@
 export async function GET() {
-  const FASTAPI_BASE =
-    process.env.NEXT_PUBLIC_FASTAPI_BASE_URL ||
-    "https://noble-trader-fastapi-backend.onrender.com";
+  const FASTAPI_BASE = process.env.NEXT_PUBLIC_FASTAPI_BASE_URL || "https://noble-trader-fastapi-backend.onrender.com";
   const start = Date.now();
   try {
     const res = await fetch(`${FASTAPI_BASE}/health`, {
@@ -11,8 +9,7 @@ export async function GET() {
     const data = await res.json().catch(() => ({}));
 
     // Backend returns { status: "ok" } when healthy
-    const healthy =
-      res.ok && (data?.status === "ok" || data?.status === "online");
+    const healthy = res.ok && (data?.status === "ok" || data?.status === "online");
 
     return Response.json({
       status: healthy ? "ok" : "degraded",

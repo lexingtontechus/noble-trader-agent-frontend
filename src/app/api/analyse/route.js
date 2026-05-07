@@ -25,13 +25,7 @@ function getPeriodDates(period) {
 export async function POST(request) {
   try {
     const body = await request.json();
-    const {
-      symbol,
-      period = "6mo",
-      kelly_fraction,
-      target_vol,
-      base_risk_limit,
-    } = body;
+    const { symbol, period = "6mo", kelly_fraction, target_vol, base_risk_limit } = body;
 
     if (!symbol) {
       return Response.json({ error: "symbol required" }, { status: 400 });
@@ -47,16 +41,12 @@ export async function POST(request) {
 
     const quotes = (result.quotes || []).filter((q) => q.close != null);
     const prices = quotes.map((q) => q.close);
-    const dates = quotes.map(
-      (q) => new Date(q.date).toISOString().split("T")[0],
-    );
+    const dates = quotes.map((q) => new Date(q.date).toISOString().split("T")[0]);
 
     if (prices.length < 81) {
       return Response.json(
-        {
-          error: `Insufficient price data: ${prices.length} bars (minimum 81 required)`,
-        },
-        { status: 400 },
+        { error: `Insufficient price data: ${prices.length} bars (minimum 81 required)` },
+        { status: 400 }
       );
     }
 
@@ -67,21 +57,14 @@ export async function POST(request) {
       base_risk_limit,
     });
 
-    const data = {
-      symbol,
-      period,
-      prices,
-      dates,
-      count: prices.length,
-      analysis,
-    };
+    const data = { symbol, period, prices, dates, count: prices.length, analysis };
     setCache(cacheKey, data);
     return Response.json(data);
   } catch (error) {
     console.error("Analyse error:", error);
     return Response.json(
       { error: `Analysis failed: ${error.message}` },
-      { status: 500 },
+      { status: 500 }
     );
   }
 }

@@ -27,10 +27,7 @@ export async function GET(request) {
   const period = searchParams.get("period") || "6mo";
 
   if (!symbol) {
-    return Response.json(
-      { error: "symbol parameter required" },
-      { status: 400 },
-    );
+    return Response.json({ error: "symbol parameter required" }, { status: 400 });
   }
 
   const cacheKey = `prices:${symbol}:${period}`;
@@ -43,16 +40,12 @@ export async function GET(request) {
 
     const quotes = (result.quotes || []).filter((q) => q.close != null);
     const prices = quotes.map((q) => q.close);
-    const dates = quotes.map(
-      (q) => new Date(q.date).toISOString().split("T")[0],
-    );
+    const dates = quotes.map((q) => new Date(q.date).toISOString().split("T")[0]);
 
     if (prices.length < 81) {
       return Response.json(
-        {
-          error: `Insufficient data: ${prices.length} bars (minimum 81 required)`,
-        },
-        { status: 400 },
+        { error: `Insufficient data: ${prices.length} bars (minimum 81 required)` },
+        { status: 400 }
       );
     }
 
@@ -62,7 +55,7 @@ export async function GET(request) {
   } catch (error) {
     return Response.json(
       { error: `Failed to fetch prices for ${symbol}: ${error.message}` },
-      { status: 500 },
+      { status: 500 }
     );
   }
 }

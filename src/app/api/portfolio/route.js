@@ -1,31 +1,41 @@
 import { NextResponse } from "next/server";
-import { getPortfolio } from "@/lib/fastapi-client";
+import { getFastAPIAuthHeaders } from "@/lib/fastapi-auth";
 
-/**
- * GET /api/portfolio
- * BFF proxy for FastAPI GET /portfolio
- *
- * Query params: symbols?, kelly_fraction?, target_vol?
- */
+const FASTAPI_BASE =
+  process.env.NEXT_PUBLIC_FASTAPI_BASE_URL ||
+  "https://noble-trader-fastapi-backend.onrender.com";
+
 export async function GET(request) {
   try {
     const { searchParams } = new URL(request.url);
-    const options = {};
+    const symbols = searchParams.get("symbols") || "";
+    const kellyFraction = searchParams.get("kelly_fraction") || "0.5";
+    const targetVol = searchParams.get("target_vol") || "0.15";
 
-    if (searchParams.get("symbols"))
-      options.symbols = searchParams.get("symbols");
-    if (searchParams.get("kelly_fraction"))
-      options.kelly_fraction = parseFloat(searchParams.get("kelly_fraction"));
-    if (searchParams.get("target_vol"))
-      options.target_vol = parseFloat(searchParams.get("target_vol"));
+    const params = new URLSearchParams();
+    if (symbols) params.set("symbols", symbols);
+    params.set("kelly_fraction", kellyFraction);
+    params.set("target_vol", targetVol);
 
-    const result = await getPortfolio(options);
-    return NextResponse.json(result);
+    const authHeaders = await getFastAPIAuthHeaders();
+
+    const res = await fetch(`${FASTAPI_BASE}/portfolio?${params.toString()}`, {
+      headers: {
+        ...authHeaders,
+      },
+      signal: AbortSignal.timeout(60000),
+    });
+
+    if (!res.ok) {
+      const err = await res
+        .json()
+        .catch(() => ({ detail: `FastAPI error: ${res.status}` }));
+      throw new Error(err.detail || err.error || `FastAPI ${res.status}`);
+    }
+
+    const data = await res.json();
+    return NextResponse.json(data);
   } catch (err) {
-    console.error("[/api/portfolio] Error:", err.message);
-    return NextResponse.json(
-      { error: err.message || "Portfolio fetch failed" },
-      { status: 502 },
-    );
+    return NextResponse.json({ error: err.message }, { status: 500 });
   }
 }

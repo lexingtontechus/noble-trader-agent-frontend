@@ -5,10 +5,7 @@ export async function GET(request) {
   try {
     const keys = await getAlpacaKeys();
     if (!keys?.apiKey || !keys?.secretKey) {
-      return Response.json(
-        { error: "Alpaca API keys not configured" },
-        { status: 403 },
-      );
+      return Response.json({ error: "Alpaca API keys not configured" }, { status: 403 });
     }
 
     const { searchParams } = new URL(request.url);
@@ -31,7 +28,7 @@ export async function GET(request) {
   } catch (error) {
     return Response.json(
       { error: `Failed to fetch orders: ${error.message}` },
-      { status: 500 },
+      { status: 500 }
     );
   }
 }

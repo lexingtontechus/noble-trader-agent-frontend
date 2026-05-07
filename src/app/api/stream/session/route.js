@@ -1,20 +1,25 @@
-import { getSessions } from "@/lib/fastapi-client";
+import { NextResponse } from "next/server";
+import { getFastAPIAuthHeaders } from "@/lib/fastapi-auth";
 
-/**
- * GET /api/stream/sessions
- * Lists all active streaming sessions on the FastAPI backend.
- *
- * Returns: Array of session objects with symbol, status, tick count, etc.
- */
+const FASTAPI_BASE =
+  process.env.NEXT_PUBLIC_FASTAPI_BASE_URL ||
+  "https://noble-trader-fastapi-backend.onrender.com";
+
 export async function GET() {
   try {
-    const sessions = await getSessions();
-    return Response.json(sessions);
-  } catch (error) {
-    console.error("Stream sessions error:", error);
-    return Response.json(
-      { error: `Sessions fetch failed: ${error.message}` },
-      { status: 500 },
-    );
+    const authHeaders = await getFastAPIAuthHeaders();
+
+    const res = await fetch(`${FASTAPI_BASE}/stream/sessions`, {
+      headers: {
+        ...authHeaders,
+      },
+      signal: AbortSignal.timeout(15000),
+    });
+
+    if (!res.ok) throw new Error(`FastAPI sessions failed: ${res.status}`);
+    const data = await res.json();
+    return NextResponse.json(data);
+  } catch (err) {
+    return NextResponse.json({ error: err.message }, { status: 500 });
   }
 }

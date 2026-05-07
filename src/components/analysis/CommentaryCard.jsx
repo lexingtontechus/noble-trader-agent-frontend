@@ -1,12 +1,10 @@
-'use client'
+"use client";
 
-export default function CommentaryCard({ commentary = '', loading = false }) {
+export default function CommentaryCard({ commentary = "", loading = false }) {
   return (
     <div className="card bg-base-100 shadow-xl">
       <div className="card-body">
-        <h2 className="card-title">
-          🤖 AI Market Insight
-        </h2>
+        <h2 className="card-title">🤖 AI Market Insight</h2>
 
         {loading ? (
           <div className="chat chat-start mt-2">
@@ -33,7 +31,7 @@ export default function CommentaryCard({ commentary = '', loading = false }) {
             <div className="chat-header text-xs opacity-50 mb-1">
               Noble Trader AI
             </div>
-            <div className="chat-bubble chat-bubble-primary">
+            <div className="chat-bubble chat-bubble-primary text-wrap">
               {commentary}
             </div>
             <div className="chat-footer opacity-50 text-xs mt-1">
@@ -54,5 +52,5 @@ export default function CommentaryCard({ commentary = '', loading = false }) {
         )}
       </div>
     </div>
-  )
+  );
 }

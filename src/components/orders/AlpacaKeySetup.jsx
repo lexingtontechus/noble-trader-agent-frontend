@@ -1,50 +1,43 @@
-"use client";
+'use client'
 
-import { useState } from "react";
+import { useState } from 'react';
 
-export default function AlpacaKeySetup({
-  onConfigured,
-  onRemoved,
-  isManaging = false,
-}) {
-  const [apiKey, setApiKey] = useState("");
-  const [secretKey, setSecretKey] = useState("");
+export default function AlpacaKeySetup({ onConfigured, onRemoved, isManaging = false }) {
+  const [apiKey, setApiKey] = useState('');
+  const [secretKey, setSecretKey] = useState('');
   const [showApiKey, setShowApiKey] = useState(false);
   const [showSecretKey, setShowSecretKey] = useState(false);
   const [saving, setSaving] = useState(false);
   const [removing, setRemoving] = useState(false);
-  const [error, setError] = useState("");
-  const [success, setSuccess] = useState("");
+  const [error, setError] = useState('');
+  const [success, setSuccess] = useState('');
 
   const handleSave = async () => {
     if (!apiKey.trim() || !secretKey.trim()) {
-      setError("Both API Key and Secret Key are required");
+      setError('Both API Key and Secret Key are required');
       return;
     }
 
     setSaving(true);
-    setError("");
-    setSuccess("");
+    setError('');
+    setSuccess('');
 
     try {
-      const res = await fetch("/api/clerk/alpaca-keys", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          apiKey: apiKey.trim(),
-          secretKey: secretKey.trim(),
-        }),
+      const res = await fetch('/api/clerk/alpaca-keys', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ apiKey: apiKey.trim(), secretKey: secretKey.trim() }),
       });
 
       const data = await res.json();
 
       if (!res.ok) {
-        throw new Error(data.error || "Failed to save keys");
+        throw new Error(data.error || 'Failed to save keys');
       }
 
-      setSuccess("Keys saved successfully!");
-      setApiKey("");
-      setSecretKey("");
+      setSuccess('Keys saved successfully!');
+      setApiKey('');
+      setSecretKey('');
       onConfigured?.();
     } catch (err) {
       setError(err.message);
@@ -55,21 +48,21 @@ export default function AlpacaKeySetup({
 
   const handleRemove = async () => {
     setRemoving(true);
-    setError("");
-    setSuccess("");
+    setError('');
+    setSuccess('');
 
     try {
-      const res = await fetch("/api/clerk/alpaca-keys", {
-        method: "DELETE",
+      const res = await fetch('/api/clerk/alpaca-keys', {
+        method: 'DELETE',
       });
 
       const data = await res.json();
 
       if (!res.ok) {
-        throw new Error(data.error || "Failed to remove keys");
+        throw new Error(data.error || 'Failed to remove keys');
       }
 
-      setSuccess("Keys removed successfully!");
+      setSuccess('Keys removed successfully!');
       onRemoved?.();
     } catch (err) {
       setError(err.message);
@@ -80,59 +73,26 @@ export default function AlpacaKeySetup({
 
   // Shared eye icon components
   const EyeOpen = () => (
-    <svg
-      xmlns="http://www.w3.org/2000/svg"
-      width="16"
-      height="16"
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="2"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-    >
-      <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" />
-      <circle cx="12" cy="12" r="3" />
-    </svg>
+    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
   );
   const EyeClosed = () => (
-    <svg
-      xmlns="http://www.w3.org/2000/svg"
-      width="16"
-      height="16"
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="2"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-    >
-      <path d="M17.94 17.94A10.07 10.07 0 0112 20c-7 0-11-8-11-8a18.45 18.45 0 015.06-5.94M9.9 4.24A9.12 9.12 0 0112 4c7 0 11 8 11 8a18.5 18.5 0 01-2.16 3.19m-6.72-1.07a3 3 0 11-4.24-4.24" />
-      <line x1="1" y1="1" x2="23" y2="23" />
-    </svg>
+    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M17.94 17.94A10.07 10.07 0 0112 20c-7 0-11-8-11-8a18.45 18.45 0 015.06-5.94M9.9 4.24A9.12 9.12 0 0112 4c7 0 11 8 11 8a18.5 18.5 0 01-2.16 3.19m-6.72-1.07a3 3 0 11-4.24-4.24"/><line x1="1" y1="1" x2="23" y2="23"/></svg>
   );
 
   // Shared key input field
-  const KeyInput = ({
-    label,
-    placeholder,
-    value,
-    onChange,
-    show,
-    onToggle,
-  }) => (
+  const KeyInput = ({ label, placeholder, value, onChange, show, onToggle }) => (
     <div className="form-control w-full mb-3">
       <label className="label">
         <span className="label-text font-medium">{label}</span>
       </label>
       <div className="join w-full">
         <input
-          type={show ? "text" : "password"}
+          type={show ? 'text' : 'password'}
           placeholder={placeholder}
           className="input input-bordered join-item flex-1"
           value={value}
           onChange={onChange}
-          onKeyDown={(e) => e.key === "Enter" && handleSave()}
+          onKeyDown={(e) => e.key === 'Enter' && handleSave()}
         />
         <button
           type="button"
@@ -151,28 +111,13 @@ export default function AlpacaKeySetup({
     return (
       <div className="card bg-base-200 shadow">
         <div className="card-body p-4">
-          <h3 className="card-title text-lg text-primary">
-            Alpaca Key Manager
-          </h3>
+          <h3 className="card-title text-lg text-primary">Alpaca Key Manager</h3>
 
           <div className="alert alert-info mb-3">
-            <svg
-              xmlns="http://www.w3.org/2000/svg"
-              fill="none"
-              viewBox="0 0 24 24"
-              className="stroke-current shrink-0 w-5 h-5"
-            >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth="2"
-                d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"
-              />
+            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" className="stroke-current shrink-0 w-5 h-5">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
             </svg>
-            <span className="text-xs">
-              Keys are stored in Clerk private metadata (server-side only). They
-              never reach the browser.
-            </span>
+            <span className="text-xs">Keys are stored in Clerk private metadata (server-side only). They never reach the browser.</span>
           </div>
 
           {error && (
@@ -187,9 +132,7 @@ export default function AlpacaKeySetup({
             </div>
           )}
 
-          <div className="divider text-xs text-base-content/50 mt-0 mb-2">
-            Replace Keys
-          </div>
+          <div className="divider text-xs text-base-content/50 mt-0 mb-2">Replace Keys</div>
 
           <KeyInput
             label="New API Key"
@@ -211,7 +154,7 @@ export default function AlpacaKeySetup({
 
           <div className="flex gap-2 mt-2">
             <button
-              className={`btn btn-primary btn-sm ${saving ? "btn-disabled" : ""}`}
+              className={`btn btn-primary btn-sm ${saving ? 'btn-disabled' : ''}`}
               onClick={handleSave}
               disabled={saving || !apiKey.trim() || !secretKey.trim()}
             >
@@ -221,19 +164,17 @@ export default function AlpacaKeySetup({
                   Saving...
                 </>
               ) : (
-                "Update Keys"
+                'Update Keys'
               )}
             </button>
           </div>
 
-          <div className="divider text-xs text-base-content/50 mt-4 mb-2">
-            Remove Keys
-          </div>
+          <div className="divider text-xs text-base-content/50 mt-4 mb-2">Remove Keys</div>
           <p className="text-xs text-base-content/50 mb-2">
             Remove your Alpaca keys to disconnect your trading account.
           </p>
           <button
-            className={`btn btn-error btn-outline btn-sm ${removing ? "btn-disabled" : ""}`}
+            className={`btn btn-error btn-outline btn-sm ${removing ? 'btn-disabled' : ''}`}
             onClick={handleRemove}
             disabled={removing}
           >
@@ -243,7 +184,7 @@ export default function AlpacaKeySetup({
                 Removing...
               </>
             ) : (
-              "Remove Keys"
+              'Remove Keys'
             )}
           </button>
         </div>
@@ -255,33 +196,17 @@ export default function AlpacaKeySetup({
   return (
     <div className="card bg-base-200 shadow-lg max-w-lg mx-auto">
       <div className="card-body p-6">
-        <h3 className="card-title text-lg text-primary mb-1">
-          Configure Alpaca API Keys
-        </h3>
+        <h3 className="card-title text-lg text-primary mb-1">Configure Alpaca API Keys</h3>
         <p className="text-sm text-base-content/60 mb-4">
-          Connect your Alpaca paper trading account to view orders and
-          positions.
+          Connect your Alpaca paper trading account to view orders and positions.
         </p>
 
         {/* Security Notice */}
         <div className="alert alert-info mb-4">
-          <svg
-            xmlns="http://www.w3.org/2000/svg"
-            fill="none"
-            viewBox="0 0 24 24"
-            className="stroke-current shrink-0 w-5 h-5"
-          >
-            <path
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              strokeWidth="2"
-              d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"
-            />
+          <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" className="stroke-current shrink-0 w-5 h-5">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
           </svg>
-          <span className="text-xs">
-            Keys stored securely in Clerk private metadata (server-side only).
-            They never reach the client directly.
-          </span>
+          <span className="text-xs">Keys stored securely in Clerk private metadata (server-side only). They never reach the client directly.</span>
         </div>
 
         {/* API Key Field */}
@@ -307,18 +232,8 @@ export default function AlpacaKeySetup({
         {/* Error */}
         {error && (
           <div className="alert alert-error mb-4">
-            <svg
-              xmlns="http://www.w3.org/2000/svg"
-              className="stroke-current shrink-0 h-5 w-5"
-              fill="none"
-              viewBox="0 0 24 24"
-            >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth="2"
-                d="M10 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2m7-2a9 9 0 11-18 0 9 9 0 0118 0z"
-              />
+            <svg xmlns="http://www.w3.org/2000/svg" className="stroke-current shrink-0 h-5 w-5" fill="none" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M10 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2m7-2a9 9 0 11-18 0 9 9 0 0118 0z" />
             </svg>
             <span className="text-sm">{error}</span>
           </div>
@@ -326,7 +241,7 @@ export default function AlpacaKeySetup({
 
         {/* Save Button */}
         <button
-          className={`btn btn-primary w-full ${saving ? "btn-disabled" : ""}`}
+          className={`btn btn-primary w-full ${saving ? 'btn-disabled' : ''}`}
           onClick={handleSave}
           disabled={saving || !apiKey.trim() || !secretKey.trim()}
         >
@@ -336,14 +251,14 @@ export default function AlpacaKeySetup({
               Saving...
             </>
           ) : (
-            "Save Keys"
+            'Save Keys'
           )}
         </button>
 
         {/* Alpaca Sign Up Link */}
         <div className="mt-4 text-center">
           <p className="text-xs text-base-content/50">
-            Don&apos;t have an Alpaca account?{" "}
+            Don&apos;t have an Alpaca account?{' '}
             <a
               href="https://app.alpaca.markets/signup"
               target="_blank"

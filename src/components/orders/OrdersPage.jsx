@@ -1,19 +1,18 @@
-"use client";
+'use client'
 
-import { useState, useEffect, useCallback } from "react";
-import AlpacaKeySetup from "@/components/orders/AlpacaKeySetup";
-import { useStream } from "@/context/StreamContext";
-import AccountSummary from "@/components/orders/AccountSummary";
-import OrderHistory from "@/components/orders/OrderHistory";
-import OpenPositions from "@/components/orders/OpenPositions";
-import OrderModal from "@/components/orders/OrderModal";
-import PortfolioAnalysis from "@/components/orders/PortfolioAnalysis";
+import { useState, useEffect, useCallback } from 'react';
+import AlpacaKeySetup from '@/components/orders/AlpacaKeySetup';
+import AccountSummary from '@/components/orders/AccountSummary';
+import OrderHistory from '@/components/orders/OrderHistory';
+import OpenPositions from '@/components/orders/OpenPositions';
+import OrderModal from '@/components/orders/OrderModal';
+import PortfolioAnalysis from '@/components/orders/PortfolioAnalysis';
 
 const PERIODS = [
-  { key: "1m", label: "1M" },
-  { key: "3m", label: "3M" },
-  { key: "6m", label: "6M" },
-  { key: "1y", label: "1Y" },
+  { key: '1m', label: '1M' },
+  { key: '3m', label: '3M' },
+  { key: '6m', label: '6M' },
+  { key: '1y', label: '1Y' },
 ];
 
 export default function OrdersPage() {
@@ -22,23 +21,21 @@ export default function OrdersPage() {
   const [account, setAccount] = useState(null);
   const [orders, setOrders] = useState([]);
   const [positions, setPositions] = useState([]);
-  const [period, setPeriod] = useState("3m");
+  const [period, setPeriod] = useState('3m');
   const [loadingAccount, setLoadingAccount] = useState(false);
   const [loadingOrders, setLoadingOrders] = useState(false);
   const [loadingPositions, setLoadingPositions] = useState(false);
   const [orderModal, setOrderModal] = useState(null);
-  const [accountError, setAccountError] = useState("");
-  const [ordersError, setOrdersError] = useState("");
-  const [positionsError, setPositionsError] = useState("");
+  const [accountError, setAccountError] = useState('');
+  const [ordersError, setOrdersError] = useState('');
+  const [positionsError, setPositionsError] = useState('');
   const [showKeyManager, setShowKeyManager] = useState(false);
-
-  const { subscribe, unsubscribe } = useStream();
 
   // Check if Alpaca keys are configured
   const checkKeys = useCallback(async () => {
     setCheckingKeys(true);
     try {
-      const res = await fetch("/api/clerk/alpaca-keys-status");
+      const res = await fetch('/api/clerk/alpaca-keys-status');
       const data = await res.json();
       setKeysConfigured(data.configured === true);
     } catch {
@@ -55,9 +52,9 @@ export default function OrdersPage() {
   // Fetch account data
   const fetchAccount = useCallback(async () => {
     setLoadingAccount(true);
-    setAccountError("");
+    setAccountError('');
     try {
-      const res = await fetch("/api/alpaca/account");
+      const res = await fetch('/api/alpaca/account');
       if (res.ok) {
         const data = await res.json();
         setAccount(data);
@@ -79,7 +76,7 @@ export default function OrdersPage() {
   // Fetch orders
   const fetchOrders = useCallback(async (p) => {
     setLoadingOrders(true);
-    setOrdersError("");
+    setOrdersError('');
     try {
       const res = await fetch(`/api/alpaca/orders?period=${p}`);
       if (res.ok) {
@@ -104,17 +101,15 @@ export default function OrdersPage() {
   // Fetch positions
   const fetchPositions = useCallback(async () => {
     setLoadingPositions(true);
-    setPositionsError("");
+    setPositionsError('');
     try {
-      const res = await fetch("/api/alpaca/positions");
+      const res = await fetch('/api/alpaca/positions');
       if (res.ok) {
         const data = await res.json();
         setPositions(Array.isArray(data) ? data : []);
       } else {
         const data = await res.json().catch(() => ({}));
-        setPositionsError(
-          data.error || `Positions fetch failed (${res.status})`,
-        );
+        setPositionsError(data.error || `Positions fetch failed (${res.status})`);
         setPositions([]);
         if (res.status === 403) {
           setKeysConfigured(false);
@@ -136,17 +131,6 @@ export default function OrdersPage() {
       fetchPositions();
     }
   }, [keysConfigured, period, fetchAccount, fetchOrders, fetchPositions]);
-
-  // Auto-subscribe to position symbols for live P&L streaming
-  useEffect(() => {
-    if (positions.length > 0) {
-      const positionSymbols = positions.map((p) => p.symbol).filter(Boolean);
-      positionSymbols.forEach((sym) => subscribe(sym));
-      return () => {
-        positionSymbols.forEach((sym) => unsubscribe(sym));
-      };
-    }
-  }, [positions, subscribe, unsubscribe]);
 
   // Handle key configuration success
   const handleKeysConfigured = () => {
@@ -186,9 +170,7 @@ export default function OrdersPage() {
         <h1 className="text-3xl font-bold text-primary">Orders</h1>
         <div className="flex items-center gap-3">
           <span className="loading loading-spinner loading-md"></span>
-          <span className="text-base-content/60">
-            Checking configuration...
-          </span>
+          <span className="text-base-content/60">Checking configuration...</span>
         </div>
       </div>
     );
@@ -216,7 +198,7 @@ export default function OrdersPage() {
             {PERIODS.map((p) => (
               <button
                 key={p.key}
-                className={`btn btn-sm join-item ${period === p.key ? "btn-primary" : "btn-ghost"}`}
+                className={`btn btn-sm join-item ${period === p.key ? 'btn-primary' : 'btn-ghost'}`}
                 onClick={() => setPeriod(p.key)}
               >
                 {p.label}
@@ -230,17 +212,7 @@ export default function OrdersPage() {
             onClick={refreshAll}
             title="Refresh data"
           >
-            <svg
-              xmlns="http://www.w3.org/2000/svg"
-              width="14"
-              height="14"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="2"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-            >
+            <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
               <polyline points="23 4 23 10 17 10" />
               <path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10" />
             </svg>
@@ -252,17 +224,7 @@ export default function OrdersPage() {
             onClick={() => setShowKeyManager(!showKeyManager)}
             title="Manage Alpaca keys"
           >
-            <svg
-              xmlns="http://www.w3.org/2000/svg"
-              width="14"
-              height="14"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="2"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-            >
+            <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
               <path d="M21 2l-2 2m-7.61 7.61a5.5 5.5 0 1 1-7.778 7.778 5.5 5.5 0 0 1 7.777-7.777zm0 0L15.5 7.5m0 0l3 3L22 7l-3-3m-3.5 3.5L19 4" />
             </svg>
           </button>
@@ -281,24 +243,11 @@ export default function OrdersPage() {
       {/* Account Error Banner */}
       {accountError && (
         <div className="alert alert-error">
-          <svg
-            xmlns="http://www.w3.org/2000/svg"
-            className="stroke-current shrink-0 h-5 w-5"
-            fill="none"
-            viewBox="0 0 24 24"
-          >
-            <path
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              strokeWidth="2"
-              d="M10 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2m7-2a9 9 0 11-18 0 9 9 0 0118 0z"
-            />
+          <svg xmlns="http://www.w3.org/2000/svg" className="stroke-current shrink-0 h-5 w-5" fill="none" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M10 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2m7-2a9 9 0 11-18 0 9 9 0 0118 0z" />
           </svg>
           <span className="text-sm">{accountError}</span>
-          <button
-            className="btn btn-sm btn-ghost"
-            onClick={() => setKeysConfigured(false)}
-          >
+          <button className="btn btn-sm btn-ghost" onClick={() => setKeysConfigured(false)}>
             Re-enter Keys
           </button>
         </div>

@@ -1,305 +1,286 @@
 "use client";
 
 import { useState, useEffect, useCallback, useRef } from "react";
-import { useStream } from "@/context/StreamContext";
-import CorrelationCard from "@/components/portfolio/CorrelationCard";
-import OptimizerCard from "@/components/portfolio/OptimizerCard";
 
 /**
- * PortfolioOverview — Aggregated regime + risk + correlation + optimization summary.
- *
- * Pulls from:
- * 1. FastAPI GET /portfolio (aggregated risk flags, per-symbol breakdowns)
- * 2. FastAPI POST /correlation/detect (correlation regime, heatmap, blended risk)
- * 3. FastAPI POST /optimise/full (optimal weights, exposure scalar, DD constraint)
- * 4. Local StreamContext (real-time stream states for per-symbol pricing)
- *
- * Prerequisite: Symbols must be seeded via streaming before appearing.
+ * StatusBadge — small pill indicator for feature availability
  */
-export default function PortfolioOverview() {
-  const [portfolio, setPortfolio] = useState(null);
+function StatusBadge({ status }) {
+  const config = {
+    available: { className: "badge-success", label: "Available" },
+    unavailable: { className: "badge-error", label: "Unavailable" },
+    loading: { className: "badge-warning", label: "Checking..." },
+    partial: { className: "badge-warning", label: "Partial" },
+  };
+  const { className, label } = config[status] || config.unavailable;
+
+  return (
+    <span className={`badge badge-sm ${className}`}>
+      {status === "loading" && (
+        <span className="loading loading-spinner loading-xs mr-1"></span>
+      )}
+      {label}
+    </span>
+  );
+}
+
+/**
+ * MetricCard — summary metric display card
+ */
+function MetricCard({ label, value, subtext, icon }) {
+  return (
+    <div className="card bg-base-200 shadow-sm">
+      <div className="card-body p-4">
+        <div className="flex items-center justify-between mb-1">
+          <span className="text-xs text-base-content/50 uppercase tracking-wide">
+            {label}
+          </span>
+          {icon && <span className="text-base-content/30">{icon}</span>}
+        </div>
+        <div className="text-2xl font-bold font-mono">{value}</div>
+        {subtext && (
+          <div className="text-xs text-base-content/40 mt-1">{subtext}</div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+/**
+ * ComingSoonCard — friendly placeholder for features not yet deployed
+ */
+function ComingSoonCard({ title, description, icon, onRetry }) {
+  return (
+    <div className="card bg-base-200 shadow-lg border border-base-300/50">
+      <div className="card-body p-5">
+        {/* Header */}
+        <div className="flex items-center gap-2 mb-3">
+          <div className="w-8 h-8 rounded-lg bg-info/15 flex items-center justify-center">
+            {icon}
+          </div>
+          <div className="flex-1">
+            <h3 className="font-semibold text-sm">{title}</h3>
+            <span className="badge badge-info badge-sm badge-outline mt-0.5">
+              Coming Soon
+            </span>
+          </div>
+        </div>
+
+        {/* Info message */}
+        <div className="bg-info/5 border border-info/15 rounded-xl p-4">
+          <div className="flex items-start gap-3">
+            <svg
+              xmlns="http://www.w3.org/2000/svg"
+              width="18"
+              height="18"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              className="text-info shrink-0 mt-0.5"
+            >
+              <circle cx="12" cy="12" r="10" />
+              <path d="M12 16v-4" />
+              <path d="M12 8h.01" />
+            </svg>
+            <div className="flex-1">
+              <p className="text-sm text-base-content/70 leading-relaxed">
+                {description}
+              </p>
+              <p className="text-xs text-base-content/40 mt-2">
+                The backend service for this feature is being deployed. Check
+                back soon!
+              </p>
+            </div>
+          </div>
+        </div>
+
+        {/* Retry button */}
+        {onRetry && (
+          <div className="mt-3 flex justify-end">
+            <button
+              className="btn btn-xs btn-ghost gap-1 text-info"
+              onClick={onRetry}
+            >
+              <svg
+                xmlns="http://www.w3.org/2000/svg"
+                width="12"
+                height="12"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              >
+                <path d="M21 12a9 9 0 0 0-9-9 9.75 9.75 0 0 0-6.74 2.74L3 8" />
+                <path d="M3 3v5h5" />
+                <path d="M3 12a9 9 0 0 0 9 9 9.75 9.75 0 0 0 6.74-2.74L21 16" />
+                <path d="M16 16h5v5" />
+              </svg>
+              Check Again
+            </button>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+/**
+ * CorrelationDetection — correlation analysis section
+ */
+function CorrelationDetection({ symbols, positions }) {
+  const [data, setData] = useState(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
-  const [autoRefresh, setAutoRefresh] = useState(true);
+  const [errorCode, setErrorCode] = useState(null);
+  const [hint, setHint] = useState(null);
+  const [endpointAvailable, setEndpointAvailable] = useState(null); // null=unknown, true, false
+  const hasAutoFired = useRef(false);
 
-  // Correlation + Optimization state
-  const [correlationData, setCorrelationData] = useState(null);
-  const [correlationLoading, setCorrelationLoading] = useState(false);
-  const [optimizationData, setOptimizationData] = useState(null);
-  const [optimizationLoading, setOptimizationLoading] = useState(false);
-
-  // Open/close sections
-  const [showCorrelation, setShowCorrelation] = useState(false);
-  const [showOptimizer, setShowOptimizer] = useState(false);
-
-  const { streamStates, activeStreamCount, anyConnected, alerts, tickCounts } =
-    useStream();
-  const intervalRef = useRef(null);
-
-  // Subscribed symbols list
-  const symbols = Object.keys(streamStates);
-
-  // ── Compute returns matrix from price data ──────────────────────────────
-  // We need to fetch price data for each symbol to compute returns.
-  // The returns matrix is built from cached Yahoo Finance data.
-  const [returnsMatrix, setReturnsMatrix] = useState({});
-  const [returnsLoading, setReturnsLoading] = useState(false);
-
-  const fetchReturnsMatrix = useCallback(async (symList) => {
-    if (symList.length < 2) return;
-
-    setReturnsLoading(true);
-    try {
-      const results = {};
-      await Promise.all(
-        symList.map(async (sym) => {
-          try {
-            const res = await fetch(
-              `/api/prices?symbol=${encodeURIComponent(sym)}&period=1y`,
-            );
-            if (!res.ok) return;
-            const data = await res.json();
-            if (data.prices?.length > 1) {
-              // Compute simple returns from prices
-              const returns = [];
-              for (let i = 1; i < data.prices.length; i++) {
-                const r =
-                  (data.prices[i] - data.prices[i - 1]) / data.prices[i - 1];
-                returns.push(isFinite(r) ? r : 0);
-              }
-              results[sym] = returns;
-            }
-          } catch {
-            // Skip symbols with no data
-          }
-        }),
+  const detect = useCallback(async () => {
+    if (symbols.length < 2) {
+      setError("At least 2 symbols required");
+      setHint(
+        "Add more positions to your portfolio to enable correlation detection",
       );
-      setReturnsMatrix(results);
-    } finally {
-      setReturnsLoading(false);
+      setErrorCode("INSUFFICIENT_SYMBOLS");
+      return;
     }
-  }, []);
 
-  // Fetch returns when symbols change
-  useEffect(() => {
-    if (symbols.length >= 2) {
-      fetchReturnsMatrix(symbols);
+    // Skip if we already know the endpoint is not deployed
+    if (endpointAvailable === false) {
+      return;
     }
-  }, [symbols.join(","), fetchReturnsMatrix]);
 
-  // Current weights: equal-weight by default, or proportional to Kelly sizing from portfolio
-  const currentWeights = (() => {
-    if (!portfolio?.symbols?.length) {
-      // Equal weight
-      if (symbols.length === 0) return {};
-      const w = 1 / symbols.length;
-      return Object.fromEntries(symbols.map((s) => [s, w]));
-    }
-    // Use Kelly sizing from portfolio data
-    const total = portfolio.symbols.reduce((sum, sym) => {
-      return sum + (sym.recommended_f ?? sym.sizing?.recommended_f ?? 0);
-    }, 0);
-    if (total === 0) {
-      const w = 1 / portfolio.symbols.length;
-      return Object.fromEntries(portfolio.symbols.map((s) => [s.symbol, w]));
-    }
-    return Object.fromEntries(
-      portfolio.symbols.map((sym) => [
-        sym.symbol,
-        (sym.recommended_f ?? sym.sizing?.recommended_f ?? 0) / total,
-      ]),
-    );
-  })();
-
-  // ── Fetch portfolio from FastAPI ─────────────────────────────────────────
-  const fetchPortfolio = useCallback(async () => {
     setLoading(true);
     setError(null);
-    try {
-      const symbolsParam = symbols.length > 0 ? symbols.join(",") : undefined;
-      const params = new URLSearchParams();
-      if (symbolsParam) params.set("symbols", symbolsParam);
+    setErrorCode(null);
+    setHint(null);
 
-      const url = `/api/portfolio${params.toString() ? `?${params.toString()}` : ""}`;
-      const res = await fetch(url);
+    try {
+      const res = await fetch("/api/portfolio/correlation", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ symbols }),
+      });
+
+      const result = await res.json();
 
       if (!res.ok) {
-        const errData = await res.json().catch(() => ({}));
-        throw new Error(errData.error || `HTTP ${res.status}`);
+        setError(result.error || `Request failed (${res.status})`);
+        setErrorCode(result.code || "UNKNOWN");
+        setHint(result.hint || null);
+        setData(null);
+
+        // Mark endpoint as unavailable so we don't keep retrying
+        if (result.code === "ENDPOINT_NOT_DEPLOYED" || res.status === 404) {
+          setEndpointAvailable(false);
+        }
+        return;
       }
 
-      const data = await res.json();
-      setPortfolio(data);
+      setData(result);
+      setEndpointAvailable(true);
     } catch (err) {
-      setError(err.message || "Portfolio fetch failed");
+      setError(err.message || "Network error");
+      setErrorCode("NETWORK_ERROR");
+      setData(null);
     } finally {
       setLoading(false);
     }
-  }, [streamStates]);
+  }, [symbols, endpointAvailable]);
 
-  // ── Run correlation detection ────────────────────────────────────────────
-  const runCorrelation = useCallback(async () => {
-    const validSymbols = symbols.filter((s) => returnsMatrix[s]?.length > 0);
-    if (validSymbols.length < 2) return;
-
-    setCorrelationLoading(true);
-    try {
-      const filteredMatrix = {};
-      validSymbols.forEach((s) => {
-        filteredMatrix[s] = returnsMatrix[s];
-      });
-
-      const res = await fetch("/api/correlation/detect", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          symbols: validSymbols,
-          returns_matrix: filteredMatrix,
-        }),
-      });
-
-      if (!res.ok) {
-        const errData = await res.json().catch(() => ({}));
-        throw new Error(errData.error || `HTTP ${res.status}`);
-      }
-
-      const data = await res.json();
-      setCorrelationData(data);
-    } catch (err) {
-      console.error("[Correlation] Error:", err.message);
-      setCorrelationData({ error: err.message });
-    } finally {
-      setCorrelationLoading(false);
-    }
-  }, [symbols, returnsMatrix]);
-
-  // ── Run portfolio optimization ───────────────────────────────────────────
-  const runOptimize = useCallback(async () => {
-    const validSymbols = symbols.filter((s) => returnsMatrix[s]?.length > 0);
-    if (validSymbols.length < 2) return;
-
-    setOptimizationLoading(true);
-    try {
-      const filteredMatrix = {};
-      validSymbols.forEach((s) => {
-        filteredMatrix[s] = returnsMatrix[s];
-      });
-
-      const res = await fetch("/api/optimise/full", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          symbols: validSymbols,
-          returns_matrix: filteredMatrix,
-          current_weights: currentWeights,
-        }),
-      });
-
-      if (!res.ok) {
-        const errData = await res.json().catch(() => ({}));
-        throw new Error(errData.error || `HTTP ${res.status}`);
-      }
-
-      const data = await res.json();
-      setOptimizationData(data);
-    } catch (err) {
-      console.error("[Optimizer] Error:", err.message);
-      setOptimizationData({ error: err.message });
-    } finally {
-      setOptimizationLoading(false);
-    }
-  }, [symbols, returnsMatrix, currentWeights]);
-
-  // Auto-refresh portfolio on interval
+  // Auto-detect when we have enough symbols (only once)
   useEffect(() => {
-    if (autoRefresh && activeStreamCount > 0) {
-      fetchPortfolio();
-      intervalRef.current = setInterval(fetchPortfolio, 30000);
+    if (
+      symbols.length >= 2 &&
+      !data &&
+      !loading &&
+      !hasAutoFired.current &&
+      endpointAvailable !== false
+    ) {
+      hasAutoFired.current = true;
+      detect();
     }
-    return () => {
-      if (intervalRef.current) clearInterval(intervalRef.current);
-    };
-  }, [autoRefresh, activeStreamCount, fetchPortfolio]);
+  }, [symbols.length]);
 
-  // Initial fetch when streams become active
-  useEffect(() => {
-    if (activeStreamCount > 0) {
-      fetchPortfolio();
-    }
-  }, [activeStreamCount, fetchPortfolio]);
-
-  // No active streams
-  if (activeStreamCount === 0) {
+  // If endpoint is known to be unavailable, show Coming Soon card
+  if (endpointAvailable === false && !loading) {
     return (
-      <div className="space-y-4">
-        <div className="flex items-center justify-between">
-          <h2 className="text-2xl font-bold">Portfolio View</h2>
-        </div>
-        <div className="card bg-base-200 shadow-xl">
-          <div className="card-body items-center text-center py-12">
-            <svg
-              xmlns="http://www.w3.org/2000/svg"
-              className="h-12 w-12 text-base-content/20 mb-4"
-              fill="none"
-              viewBox="0 0 24 24"
-              stroke="currentColor"
-            >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth="1.5"
-                d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10"
-              />
-            </svg>
-            <h3 className="text-lg font-bold mb-2">No Active Streams</h3>
-            <p className="text-base-content/50 text-sm max-w-md">
-              Start streaming symbols from the Dashboard to see aggregated
-              portfolio risk metrics here. Use the &quot;Go Live&quot; button on
-              any ticker card.
-            </p>
-          </div>
-        </div>
-      </div>
+      <ComingSoonCard
+        title="Correlation Detection"
+        description="Analyze how your portfolio assets move together. Detect correlation regimes and identify diversification opportunities across your holdings."
+        icon={
+          <svg
+            xmlns="http://www.w3.org/2000/svg"
+            width="16"
+            height="16"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            className="text-info"
+          >
+            <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71" />
+            <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71" />
+          </svg>
+        }
+        onRetry={() => {
+          setEndpointAvailable(null);
+          hasAutoFired.current = false;
+          setData(null);
+          setError(null);
+          setErrorCode(null);
+          setHint(null);
+          detect();
+        }}
+      />
     );
   }
 
   return (
-    <div className="space-y-4">
-      {/* Header */}
-      <div className="flex items-center justify-between flex-wrap gap-3">
-        <div className="flex items-center gap-3">
-          <h2 className="text-2xl font-bold">Portfolio View</h2>
-          <span className="badge badge-primary badge-sm">
-            {activeStreamCount} stream{activeStreamCount !== 1 ? "s" : ""}
-          </span>
-          {anyConnected && (
-            <span className="badge badge-success badge-sm gap-1">
-              <span className="relative flex h-1.5 w-1.5">
-                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-success opacity-75" />
-                <span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-success" />
+    <div className="card bg-base-200 shadow-lg">
+      <div className="card-body p-4">
+        {/* Header */}
+        <div className="flex items-center justify-between mb-3">
+          <div className="flex items-center gap-2">
+            <div className="w-8 h-8 rounded-lg bg-warning/20 flex items-center justify-center">
+              <svg
+                xmlns="http://www.w3.org/2000/svg"
+                width="16"
+                height="16"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                className="text-warning"
+              >
+                <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71" />
+                <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71" />
+              </svg>
+            </div>
+            <div>
+              <h3 className="font-semibold text-sm">Correlation Detection</h3>
+              <span className="text-xs text-base-content/40">
+                {symbols.length} symbol{symbols.length !== 1 ? "s" : ""}
               </span>
-              LIVE
-            </span>
-          )}
-          <span className="badge badge-outline badge-sm">v3.0</span>
-        </div>
-        <div className="flex items-center gap-2">
-          <label className="flex items-center gap-2 cursor-pointer">
-            <span className="text-xs text-base-content/60">Auto-refresh</span>
-            <input
-              type="checkbox"
-              className="toggle toggle-primary toggle-sm"
-              checked={autoRefresh}
-              onChange={(e) => setAutoRefresh(e.target.checked)}
-            />
-          </label>
+            </div>
+          </div>
           <button
-            className="btn btn-sm btn-ghost gap-1"
-            onClick={fetchPortfolio}
-            disabled={loading}
+            className={`btn btn-sm btn-warning gap-1 ${loading ? "btn-disabled" : ""}`}
+            onClick={detect}
+            disabled={loading || symbols.length < 2}
           >
             {loading ? (
-              <span className="loading loading-spinner loading-xs" />
+              <span className="loading loading-spinner loading-xs"></span>
             ) : (
               <svg
                 xmlns="http://www.w3.org/2000/svg"
@@ -312,530 +293,683 @@ export default function PortfolioOverview() {
                 strokeLinecap="round"
                 strokeLinejoin="round"
               >
-                <polyline points="23 4 23 10 17 10" />
-                <path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10" />
+                <circle cx="11" cy="11" r="8" />
+                <path d="m21 21-4.3-4.3" />
               </svg>
             )}
+            Detect
           </button>
         </div>
-      </div>
 
-      {/* Error */}
-      {error && (
-        <div className="alert alert-error alert-sm">
-          <svg
-            xmlns="http://www.w3.org/2000/svg"
-            className="stroke-current shrink-0 h-4 w-4"
-            fill="none"
-            viewBox="0 0 24 24"
+        {/* Loading State */}
+        {loading && (
+          <div className="flex items-center justify-center py-8 gap-3">
+            <span className="loading loading-spinner loading-md text-warning"></span>
+            <span className="text-sm text-base-content/60">
+              Analyzing correlations...
+            </span>
+          </div>
+        )}
+
+        {/* Error State (non-deployment errors only, deployment errors show ComingSoon) */}
+        {!loading && error && errorCode !== "ENDPOINT_NOT_DEPLOYED" && (
+          <div
+            className={`alert ${errorCode === "INSUFFICIENT_SYMBOLS" ? "alert-warning" : "alert-error"} py-3`}
           >
-            <path
+            <div className="flex-1">
+              {errorCode === "INSUFFICIENT_SYMBOLS" ? (
+                <svg
+                  xmlns="http://www.w3.org/2000/svg"
+                  className="stroke-current shrink-0 h-5 w-5"
+                  fill="none"
+                  viewBox="0 0 24 24"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth="2"
+                    d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L4.082 16.5c-.77.833.192 2.5 1.732 2.5z"
+                  />
+                </svg>
+              ) : (
+                <svg
+                  xmlns="http://www.w3.org/2000/svg"
+                  className="stroke-current shrink-0 h-5 w-5"
+                  fill="none"
+                  viewBox="0 0 24 24"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth="2"
+                    d="M10 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2m7-2a9 9 0 11-18 0 9 9 0 0118 0z"
+                  />
+                </svg>
+              )}
+              <div>
+                <div className="font-medium text-sm">{error}</div>
+                {hint && <div className="text-xs opacity-70 mt-1">{hint}</div>}
+              </div>
+            </div>
+            <button className="btn btn-xs btn-ghost" onClick={detect}>
+              Retry
+            </button>
+          </div>
+        )}
+
+        {/* Success State — Correlation Matrix */}
+        {!loading && !error && data && (
+          <div className="space-y-3">
+            {/* Correlation Regime */}
+            {data.regime_label && (
+              <div className="flex items-center gap-2 mb-2">
+                <span className="text-xs text-base-content/50">Regime:</span>
+                <span className="badge badge-sm badge-primary">
+                  {data.regime_label}
+                </span>
+              </div>
+            )}
+
+            {/* Correlation Heatmap Table */}
+            {data.correlation_matrix && (
+              <div className="overflow-x-auto">
+                <table className="table table-zebra table-sm text-xs">
+                  <thead>
+                    <tr>
+                      <th></th>
+                      {symbols.map((s) => (
+                        <th key={s} className="text-center font-mono">
+                          {s}
+                        </th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {symbols.map((rowSym, i) => (
+                      <tr key={rowSym}>
+                        <td className="font-mono font-medium">{rowSym}</td>
+                        {symbols.map((colSym, j) => {
+                          const val = data.correlation_matrix?.[i]?.[j];
+                          const numVal =
+                            typeof val === "number" ? val : parseFloat(val);
+                          const bgColor = isNaN(numVal)
+                            ? ""
+                            : numVal > 0.7
+                              ? "bg-success/30"
+                              : numVal > 0.3
+                                ? "bg-success/15"
+                                : numVal < -0.7
+                                  ? "bg-error/30"
+                                  : numVal < -0.3
+                                    ? "bg-error/15"
+                                    : "bg-base-300/30";
+                          return (
+                            <td
+                              key={colSym}
+                              className={`text-center font-mono ${bgColor}`}
+                            >
+                              {isNaN(numVal) ? "—" : numVal.toFixed(2)}
+                            </td>
+                          );
+                        })}
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+
+            {/* Summary Info */}
+            {data.summary && (
+              <div className="text-xs text-base-content/50 bg-base-300/30 rounded-lg p-3">
+                <pre className="whitespace-pre-wrap">
+                  {JSON.stringify(data.summary, null, 2)}
+                </pre>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Empty/Idle State — no symbols */}
+        {!loading && !error && !data && symbols.length < 2 && (
+          <div className="text-center py-6 text-base-content/40">
+            <svg
+              xmlns="http://www.w3.org/2000/svg"
+              width="32"
+              height="32"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="1.5"
               strokeLinecap="round"
               strokeLinejoin="round"
-              strokeWidth="2"
-              d="M10 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2m7-2a9 9 0 11-18 0 9 9 0 0118 0z"
-            />
-          </svg>
-          <span className="text-sm">{error}</span>
-          <button className="btn btn-xs btn-ghost" onClick={fetchPortfolio}>
-            Retry
-          </button>
-        </div>
-      )}
-
-      {/* Risk Flags Banner */}
-      {portfolio && (
-        <RiskFlagsBanner
-          portfolio={portfolio}
-          correlationData={correlationData}
-        />
-      )}
-
-      {/* Portfolio Summary Stats */}
-      {portfolio && (
-        <PortfolioStats
-          portfolio={portfolio}
-          correlationData={correlationData}
-          optimizationData={optimizationData}
-        />
-      )}
-
-      {/* Per-Symbol Breakdown */}
-      {portfolio?.symbols && (
-        <div className="card bg-base-200 shadow-xl">
-          <div className="card-body">
-            <h3 className="card-title text-base">Symbol Breakdown</h3>
-            <SymbolBreakdownTable
-              symbols={portfolio.symbols}
-              streamStates={streamStates}
-              tickCounts={tickCounts}
-            />
-          </div>
-        </div>
-      )}
-
-      {/* ── v3.0: Correlation + Optimization Section ──────────────────────── */}
-      <div className="divider text-base-content/40 text-xs">
-        CORRELATION & OPTIMIZATION
-      </div>
-
-      {/* Collapsible: Correlation Detection */}
-      <div className="collapse collapse-arrow bg-base-200 rounded-lg">
-        <input
-          type="checkbox"
-          checked={showCorrelation}
-          onChange={() => setShowCorrelation(!showCorrelation)}
-        />
-        <div className="collapse-title text-sm font-semibold flex items-center gap-2">
-          🔗 Correlation Detection
-          {correlationData?.correlation_regime && (
-            <span
-              className={`badge badge-xs ${
-                correlationData.correlation_regime === "low_corr"
-                  ? "badge-success"
-                  : correlationData.correlation_regime === "high_corr" ||
-                      correlationData.correlation_regime === "crisis"
-                    ? "badge-error"
-                    : "badge-warning"
-              }`}
+              className="mx-auto mb-2 opacity-40"
             >
-              {correlationData.correlation_regime.replace("_", " ")}
-            </span>
-          )}
-          {correlationData?.mean_abs_rho != null && (
-            <span className="text-xs font-mono opacity-50">
-              |ρ|={correlationData.mean_abs_rho.toFixed(2)}
-            </span>
-          )}
-        </div>
-        <div className="collapse-content">
-          <CorrelationCard
-            symbols={symbols}
-            returnsMatrix={returnsMatrix}
-            data={correlationData}
-            loading={correlationLoading}
-            onRunCorrelation={runCorrelation}
-          />
-        </div>
-      </div>
-
-      {/* Collapsible: Portfolio Optimizer */}
-      <div className="collapse collapse-arrow bg-base-200 rounded-lg">
-        <input
-          type="checkbox"
-          checked={showOptimizer}
-          onChange={() => setShowOptimizer(!showOptimizer)}
-        />
-        <div className="collapse-title text-sm font-semibold flex items-center gap-2">
-          ⚖️ Portfolio Optimizer
-          {optimizationData?.exposure_scalar != null && (
-            <span
-              className={`badge badge-xs ${
-                optimizationData.exposure_scalar >= 0.9
-                  ? "badge-success"
-                  : optimizationData.exposure_scalar >= 0.5
-                    ? "badge-warning"
-                    : "badge-error"
-              }`}
-            >
-              {(optimizationData.exposure_scalar * 100).toFixed(0)}% exp
-            </span>
-          )}
-          {optimizationData?.drawdown_constraint && (
-            <span
-              className={`badge badge-xs ${optimizationData.drawdown_constraint.within_limits ? "badge-success" : "badge-error"}`}
-            >
-              {optimizationData.drawdown_constraint.within_limits
-                ? "DD OK"
-                : "DD breach"}
-            </span>
-          )}
-        </div>
-        <div className="collapse-content">
-          <OptimizerCard
-            symbols={symbols}
-            returnsMatrix={returnsMatrix}
-            currentWeights={currentWeights}
-            data={optimizationData}
-            loading={optimizationLoading}
-            onRunOptimize={runOptimize}
-          />
-        </div>
-      </div>
-
-      {/* Active Alerts from streaming */}
-      {alerts.length > 0 && (
-        <div className="card bg-base-200 shadow-xl">
-          <div className="card-body">
-            <h3 className="card-title text-base">
-              Recent Regime Alerts
-              <span className="badge badge-warning badge-sm">
-                {alerts.length}
-              </span>
-            </h3>
-            <div className="max-h-48 overflow-y-auto">
-              <ul className="space-y-2">
-                {alerts.slice(0, 10).map((alert) => (
-                  <li
-                    key={alert.id}
-                    className="flex items-center gap-3 text-sm"
-                  >
-                    <span
-                      className={`badge badge-xs ${
-                        alert.severity === "critical"
-                          ? "badge-error"
-                          : alert.severity === "warning"
-                            ? "badge-warning"
-                            : "badge-info"
-                      }`}
-                    >
-                      {alert.severity || "info"}
-                    </span>
-                    <span className="font-mono font-bold">{alert.symbol}</span>
-                    <span className="opacity-50">{alert.previous} →</span>
-                    <span className="font-mono">{alert.current}</span>
-                    {alert.message && (
-                      <span className="text-xs opacity-40 hidden sm:inline">
-                        — {alert.message}
-                      </span>
-                    )}
-                  </li>
-                ))}
-              </ul>
-            </div>
+              <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71" />
+              <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71" />
+            </svg>
+            <p className="text-sm">
+              Need at least 2 symbols for correlation analysis
+            </p>
+            <p className="text-xs mt-1">
+              Open more positions or add symbols to enable detection
+            </p>
           </div>
-        </div>
-      )}
-
-      {/* Loading skeleton */}
-      {loading && !portfolio && (
-        <div className="card bg-base-200 shadow-xl">
-          <div className="card-body p-4">
-            <div className="skeleton h-6 w-40 mb-3" />
-            <div className="flex gap-4 flex-wrap">
-              <div className="skeleton h-16 w-28" />
-              <div className="skeleton h-16 w-28" />
-              <div className="skeleton h-16 w-28" />
-            </div>
-          </div>
-        </div>
-      )}
+        )}
+      </div>
     </div>
   );
 }
 
-// ── Sub-components ────────────────────────────────────────────────────────────
+/**
+ * PortfolioOptimizer — portfolio optimization section
+ */
+function PortfolioOptimizer({ positions, totalValue }) {
+  const [data, setData] = useState(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState(null);
+  const [errorCode, setErrorCode] = useState(null);
+  const [hint, setHint] = useState(null);
+  const [endpointAvailable, setEndpointAvailable] = useState(null); // null=unknown, true, false
 
-function RiskFlagsBanner({ portfolio, correlationData }) {
-  const flags = [];
+  const optimize = useCallback(async () => {
+    if (!positions || positions.length === 0) {
+      setError("No positions to optimize");
+      setHint("Open some positions first to enable portfolio optimization");
+      setErrorCode("NO_POSITIONS");
+      return;
+    }
 
-  if (portfolio.high_risk_count > 0) {
-    flags.push({
-      level: "error",
-      label: `${portfolio.high_risk_count} high-risk symbol${portfolio.high_risk_count !== 1 ? "s" : ""}`,
-      detail: "Risk multiplier < 0.5×",
-    });
-  }
-  if (portfolio.concentration_flag) {
-    flags.push({
-      level: "warning",
-      label: "Concentration risk",
-      detail: "A position exceeds 40% Kelly allocation",
-    });
-  }
-  if (portfolio.regime_divergence_flag) {
-    flags.push({
-      level: "info",
-      label: "Regime divergence",
-      detail: "Portfolio spans many different regime states",
-    });
-  }
-  // v3.0: Add correlation risk flags
-  if (correlationData?.correlation_regime === "crisis") {
-    flags.push({
-      level: "error",
-      label: "Crisis correlation",
-      detail: "Extreme co-movement — reduce exposure to 50%",
-    });
-  } else if (correlationData?.correlation_regime === "high_corr") {
-    flags.push({
-      level: "warning",
-      label: "High correlation",
-      detail: "Assets moving together — limited diversification benefit",
-    });
-  }
-  if (portfolio.active_alerts?.length > 0) {
-    flags.push({
-      level: "warning",
-      label: `${portfolio.active_alerts.length} recent alert${portfolio.active_alerts.length !== 1 ? "s" : ""}`,
-      detail: portfolio.active_alerts.join(", "),
-    });
-  }
+    // Skip if we already know the endpoint is not deployed
+    if (endpointAvailable === false) {
+      return;
+    }
 
-  if (flags.length === 0) {
+    setLoading(true);
+    setError(null);
+    setErrorCode(null);
+    setHint(null);
+
+    try {
+      const posData = positions.map((p) => ({
+        symbol: p.symbol,
+        qty: parseFloat(p.qty) || 0,
+        market_value: parseFloat(p.market_value) || 0,
+        current_price: parseFloat(p.current_price) || 0,
+      }));
+
+      const res = await fetch("/api/portfolio/optimizer", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ positions: posData }),
+      });
+
+      const result = await res.json();
+
+      if (!res.ok) {
+        setError(result.error || `Request failed (${res.status})`);
+        setErrorCode(result.code || "UNKNOWN");
+        setHint(result.hint || null);
+        setData(null);
+
+        // Mark endpoint as unavailable so we don't keep retrying
+        if (result.code === "ENDPOINT_NOT_DEPLOYED" || res.status === 404) {
+          setEndpointAvailable(false);
+        }
+        return;
+      }
+
+      setData(result);
+      setEndpointAvailable(true);
+    } catch (err) {
+      setError(err.message || "Network error");
+      setErrorCode("NETWORK_ERROR");
+      setData(null);
+    } finally {
+      setLoading(false);
+    }
+  }, [positions, endpointAvailable]);
+
+  // If endpoint is known to be unavailable, show Coming Soon card
+  if (endpointAvailable === false && !loading) {
     return (
-      <div className="alert alert-success">
-        <svg
-          xmlns="http://www.w3.org/2000/svg"
-          className="stroke-current shrink-0 h-5 w-5"
-          fill="none"
-          viewBox="0 0 24 24"
-        >
-          <path
-            strokeLinecap="round"
-            strokeLinejoin="round"
-            strokeWidth="2"
-            d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"
-          />
-        </svg>
-        <span className="text-sm">All clear — no portfolio risk flags</span>
-      </div>
-    );
-  }
-
-  return (
-    <div className="space-y-2">
-      {flags.map((flag, i) => (
-        <div key={i} className={`alert alert-${flag.level} py-2`}>
+      <ComingSoonCard
+        title="Portfolio Optimizer"
+        description="Find the optimal asset allocation for your portfolio using mean-variance optimization. Get recommended weight adjustments to maximize risk-adjusted returns."
+        icon={
           <svg
             xmlns="http://www.w3.org/2000/svg"
-            className="stroke-current shrink-0 h-4 w-4"
-            fill="none"
+            width="16"
+            height="16"
             viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            className="text-info"
           >
-            {flag.level === "error" ? (
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth="2"
-                d="M10 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2m7-2a9 9 0 11-18 0 9 9 0 0118 0z"
-              />
-            ) : flag.level === "warning" ? (
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth="2"
-                d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L4.082 16.5c-.77.833.192 2.5 1.732 2.5z"
-              />
-            ) : (
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth="2"
-                d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
-              />
-            )}
+            <path d="M6 9H4.5a2.5 2.5 0 0 1 0-5C7 4 6 9 6 9Z" />
+            <path d="M18 9h1.5a2.5 2.5 0 0 0 0-5C17 4 18 9 18 9Z" />
+            <path d="M4 22h16" />
+            <path d="M10 14.66V17c0 .55-.47.98-.97 1.21C7.85 18.75 7 20 7 22" />
+            <path d="M14 14.66V17c0 .55.47.98.97 1.21C16.15 18.75 17 20 17 22" />
+            <path d="M18 2H6v7a6 6 0 0 0 12 0V2Z" />
           </svg>
-          <div className="flex-1">
-            <span className="text-sm font-semibold">{flag.label}</span>
-            <span className="text-xs opacity-70 ml-2">{flag.detail}</span>
-          </div>
-        </div>
-      ))}
-    </div>
-  );
-}
-
-function PortfolioStats({ portfolio, correlationData, optimizationData }) {
-  return (
-    <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-6 gap-3">
-      <div className="stat bg-base-200 rounded-lg p-3 shadow">
-        <div className="stat-title text-xs">Portfolio VaR 95</div>
-        <div className="stat-value text-lg font-mono text-error">
-          {portfolio.portfolio_var95 != null
-            ? `${(portfolio.portfolio_var95 * 100).toFixed(2)}%`
-            : "—"}
-        </div>
-        <div className="stat-desc text-xs">√(ΣVaR²)</div>
-      </div>
-      <div className="stat bg-base-200 rounded-lg p-3 shadow">
-        <div className="stat-title text-xs">Active Symbols</div>
-        <div className="stat-value text-lg font-mono">
-          {portfolio.symbols?.length ?? 0}
-        </div>
-        <div className="stat-desc text-xs">streamed</div>
-      </div>
-      <div className="stat bg-base-200 rounded-lg p-3 shadow">
-        <div className="stat-title text-xs">High Risk</div>
-        <div className="stat-value text-lg font-mono text-warning">
-          {portfolio.high_risk_count ?? 0}
-        </div>
-        <div className="stat-desc text-xs">risk_mult &lt; 0.5×</div>
-      </div>
-      <div className="stat bg-base-200 rounded-lg p-3 shadow">
-        <div className="stat-title text-xs">Concentration</div>
-        <div className="stat-value text-lg font-mono">
-          {portfolio.concentration_flag ? "⚠️" : "✓"}
-        </div>
-        <div className="stat-desc text-xs">
-          {portfolio.concentration_flag ? "flagged" : "balanced"}
-        </div>
-      </div>
-      {/* v3.0: New correlation stat */}
-      <div className="stat bg-base-200 rounded-lg p-3 shadow">
-        <div className="stat-title text-xs">Corr Regime</div>
-        <div
-          className={`stat-value text-sm font-bold ${
-            correlationData?.correlation_regime === "low_corr"
-              ? "text-success"
-              : correlationData?.correlation_regime === "crisis" ||
-                  correlationData?.correlation_regime === "high_corr"
-                ? "text-error"
-                : correlationData?.correlation_regime === "mid_corr"
-                  ? "text-warning"
-                  : ""
-          }`}
-        >
-          {correlationData?.correlation_regime
-            ? correlationData.correlation_regime.replace("_", " ")
-            : "—"}
-        </div>
-        <div className="stat-desc text-xs">
-          {correlationData?.mean_abs_rho != null
-            ? `|ρ|=${correlationData.mean_abs_rho.toFixed(2)}`
-            : "not detected"}
-        </div>
-      </div>
-      {/* v3.0: New exposure stat */}
-      <div className="stat bg-base-200 rounded-lg p-3 shadow">
-        <div className="stat-title text-xs">Exposure</div>
-        <div
-          className={`stat-value text-lg font-mono ${
-            optimizationData?.exposure_scalar != null &&
-            optimizationData.exposure_scalar >= 0.9
-              ? "text-success"
-              : optimizationData?.exposure_scalar >= 0.5
-                ? "text-warning"
-                : "text-error"
-          }`}
-        >
-          {optimizationData?.exposure_scalar != null
-            ? `${(optimizationData.exposure_scalar * 100).toFixed(0)}%`
-            : "—"}
-        </div>
-        <div className="stat-desc text-xs">
-          {optimizationData?.drawdown_constraint
-            ? optimizationData.drawdown_constraint.within_limits
-              ? "DD OK"
-              : "DD breach"
-            : "not optimized"}
-        </div>
-      </div>
-    </div>
-  );
-}
-
-function SymbolBreakdownTable({
-  symbols = [],
-  streamStates = {},
-  tickCounts = {},
-}) {
-  if (!symbols.length) {
-    return (
-      <div className="text-sm text-base-content/40 py-4 text-center">
-        No symbol data available. Start streaming to populate.
-      </div>
+        }
+        onRetry={() => {
+          setEndpointAvailable(null);
+          setData(null);
+          setError(null);
+          setErrorCode(null);
+          setHint(null);
+          optimize();
+        }}
+      />
     );
   }
 
   return (
-    <div className="overflow-x-auto">
-      <table className="table table-sm">
-        <thead>
-          <tr>
-            <th>Symbol</th>
-            <th>Regime</th>
-            <th>Risk Mult</th>
-            <th>Kelly Size</th>
-            <th>VaR 95</th>
-            <th>Ticks</th>
-            <th>Stream</th>
-          </tr>
-        </thead>
-        <tbody>
-          {symbols.map((sym) => {
-            const streamState = streamStates[sym.symbol] || {};
-            const regimeLabel =
-              sym.regime_label || sym.regime?.regime_label || "—";
-            const isBear = regimeLabel.toLowerCase().includes("bear");
-            const isBull = regimeLabel.toLowerCase().includes("bull");
+    <div className="card bg-base-200 shadow-lg">
+      <div className="card-body p-4">
+        {/* Header */}
+        <div className="flex items-center justify-between mb-3">
+          <div className="flex items-center gap-2">
+            <div className="w-8 h-8 rounded-lg bg-warning/20 flex items-center justify-center">
+              <svg
+                xmlns="http://www.w3.org/2000/svg"
+                width="16"
+                height="16"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                className="text-warning"
+              >
+                <path d="M6 9H4.5a2.5 2.5 0 0 1 0-5C7 4 6 9 6 9Z" />
+                <path d="M18 9h1.5a2.5 2.5 0 0 0 0-5C17 4 18 9 18 9Z" />
+                <path d="M4 22h16" />
+                <path d="M10 14.66V17c0 .55-.47.98-.97 1.21C7.85 18.75 7 20 7 22" />
+                <path d="M14 14.66V17c0 .55.47.98.97 1.21C16.15 18.75 17 20 17 22" />
+                <path d="M18 2H6v7a6 6 0 0 0 12 0V2Z" />
+              </svg>
+            </div>
+            <div>
+              <h3 className="font-semibold text-sm">Portfolio Optimizer</h3>
+              <span className="text-xs text-base-content/40">
+                {positions?.length || 0} position
+                {positions?.length !== 1 ? "s" : ""}
+              </span>
+            </div>
+          </div>
+          <button
+            className={`btn btn-sm btn-warning gap-1 ${loading ? "btn-disabled" : ""}`}
+            onClick={optimize}
+            disabled={loading || !positions || positions.length === 0}
+          >
+            {loading ? (
+              <span className="loading loading-spinner loading-xs"></span>
+            ) : (
+              <svg
+                xmlns="http://www.w3.org/2000/svg"
+                width="14"
+                height="14"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              >
+                <path d="M6 9H4.5a2.5 2.5 0 0 1 0-5C7 4 6 9 6 9Z" />
+                <path d="M18 9h1.5a2.5 2.5 0 0 0 0-5C17 4 18 9 18 9Z" />
+                <path d="M4 22h16" />
+                <path d="M10 14.66V17c0 .55-.47.98-.97 1.21C7.85 18.75 7 20 7 22" />
+                <path d="M14 14.66V17c0 .55.47.98.97 1.21C16.15 18.75 17 20 17 22" />
+                <path d="M18 2H6v7a6 6 0 0 0 12 0V2Z" />
+              </svg>
+            )}
+            Optimize
+          </button>
+        </div>
 
-            return (
-              <tr key={sym.symbol}>
-                <td className="font-mono font-bold">{sym.symbol}</td>
-                <td>
-                  <span
-                    className={`badge badge-xs ${
-                      isBear
-                        ? "badge-error"
-                        : isBull
-                          ? "badge-success"
-                          : "badge-warning"
-                    }`}
-                  >
-                    {regimeLabel}
-                  </span>
-                </td>
-                <td className="font-mono">
-                  <RiskMultBar
-                    value={sym.risk_multiplier ?? sym.regime?.risk_multiplier}
+        {/* Loading State */}
+        {loading && (
+          <div className="flex items-center justify-center py-8 gap-3">
+            <span className="loading loading-spinner loading-md text-warning"></span>
+            <span className="text-sm text-base-content/60">
+              Optimizing portfolio allocation...
+            </span>
+          </div>
+        )}
+
+        {/* Error State (non-deployment errors only) */}
+        {!loading && error && errorCode !== "ENDPOINT_NOT_DEPLOYED" && (
+          <div
+            className={`alert ${errorCode === "NO_POSITIONS" ? "alert-warning" : "alert-error"} py-3`}
+          >
+            <div className="flex-1">
+              {errorCode === "NO_POSITIONS" ? (
+                <svg
+                  xmlns="http://www.w3.org/2000/svg"
+                  className="stroke-current shrink-0 h-5 w-5"
+                  fill="none"
+                  viewBox="0 0 24 24"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth="2"
+                    d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L4.082 16.5c-.77.833.192 2.5 1.732 2.5z"
                   />
-                </td>
-                <td className="font-mono text-sm">
-                  {sym.recommended_f != null
-                    ? `${(sym.recommended_f * 100).toFixed(1)}%`
-                    : sym.sizing?.recommended_f != null
-                      ? `${(sym.sizing.recommended_f * 100).toFixed(1)}%`
-                      : "—"}
-                </td>
-                <td className="font-mono text-sm">
-                  {sym.var_95 != null
-                    ? `${(sym.var_95 * 100).toFixed(2)}%`
-                    : sym.risk?.var_95 != null
-                      ? `${(sym.risk.var_95 * 100).toFixed(2)}%`
-                      : "—"}
-                </td>
-                <td className="font-mono text-sm">
-                  {tickCounts[sym.symbol] || 0}
-                </td>
-                <td>
-                  {streamState.isConnected ? (
-                    <span className="badge badge-xs badge-success gap-0.5">
-                      <span className="relative flex h-1.5 w-1.5">
-                        <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-success opacity-75" />
-                        <span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-success" />
-                      </span>
-                      LIVE
-                    </span>
-                  ) : streamState.isSeeded ? (
-                    <span className="badge badge-xs badge-warning">seeded</span>
-                  ) : (
-                    <span className="badge badge-xs badge-ghost">offline</span>
+                </svg>
+              ) : (
+                <svg
+                  xmlns="http://www.w3.org/2000/svg"
+                  className="stroke-current shrink-0 h-5 w-5"
+                  fill="none"
+                  viewBox="0 0 24 24"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth="2"
+                    d="M10 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2m7-2a9 9 0 11-18 0 9 9 0 0118 0z"
+                  />
+                </svg>
+              )}
+              <div>
+                <div className="font-medium text-sm">{error}</div>
+                {hint && <div className="text-xs opacity-70 mt-1">{hint}</div>}
+              </div>
+            </div>
+            <button className="btn btn-xs btn-ghost" onClick={optimize}>
+              Retry
+            </button>
+          </div>
+        )}
+
+        {/* Success State — Optimized Weights */}
+        {!loading && !error && data && (
+          <div className="space-y-3">
+            {/* Optimal Weights */}
+            {data.optimal_weights && (
+              <div>
+                <h4 className="text-xs font-semibold text-base-content/50 uppercase mb-2">
+                  Optimal Allocation
+                </h4>
+                <div className="space-y-2">
+                  {Object.entries(data.optimal_weights).map(
+                    ([symbol, weight]) => {
+                      const pct =
+                        typeof weight === "number"
+                          ? weight * 100
+                          : parseFloat(weight) * 100;
+                      const isNaN_ = isNaN(pct);
+                      return (
+                        <div key={symbol} className="flex items-center gap-3">
+                          <span className="font-mono text-sm w-20">
+                            {symbol}
+                          </span>
+                          <div className="flex-1 bg-base-300 rounded-full h-3 overflow-hidden">
+                            <div
+                              className="bg-warning h-full rounded-full transition-all"
+                              style={{
+                                width: isNaN_
+                                  ? "0%"
+                                  : `${Math.min(Math.abs(pct), 100)}%`,
+                              }}
+                            />
+                          </div>
+                          <span className="font-mono text-sm w-16 text-right">
+                            {isNaN_ ? "—" : `${pct.toFixed(1)}%`}
+                          </span>
+                        </div>
+                      );
+                    },
                   )}
-                </td>
-              </tr>
-            );
-          })}
-        </tbody>
-      </table>
+                </div>
+              </div>
+            )}
+
+            {/* Key Metrics */}
+            {data.expected_return != null && (
+              <div className="grid grid-cols-2 gap-2 mt-3">
+                <div className="bg-base-300/30 rounded-lg p-2">
+                  <div className="text-xs text-base-content/40">
+                    Expected Return
+                  </div>
+                  <div className="font-mono font-bold text-success">
+                    {(typeof data.expected_return === "number"
+                      ? data.expected_return * 100
+                      : parseFloat(data.expected_return) * 100
+                    ).toFixed(2)}
+                    %
+                  </div>
+                </div>
+                <div className="bg-base-300/30 rounded-lg p-2">
+                  <div className="text-xs text-base-content/40">
+                    Optimal Risk
+                  </div>
+                  <div className="font-mono font-bold text-warning">
+                    {(typeof data.optimal_risk === "number"
+                      ? data.optimal_risk * 100
+                      : parseFloat(data.optimal_risk || 0) * 100
+                    ).toFixed(2)}
+                    %
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Sharpe Ratio */}
+            {data.sharpe_ratio != null && (
+              <div className="bg-base-300/30 rounded-lg p-2">
+                <div className="text-xs text-base-content/40">Sharpe Ratio</div>
+                <div className="font-mono font-bold text-lg">
+                  {typeof data.sharpe_ratio === "number"
+                    ? data.sharpe_ratio.toFixed(3)
+                    : data.sharpe_ratio}
+                </div>
+              </div>
+            )}
+
+            {/* Raw Data Toggle */}
+            <details className="mt-2">
+              <summary className="text-xs text-base-content/40 cursor-pointer hover:text-base-content/60">
+                View raw optimization data
+              </summary>
+              <pre className="text-xs text-base-content/50 bg-base-300/30 rounded-lg p-3 mt-2 overflow-x-auto">
+                {JSON.stringify(data, null, 2)}
+              </pre>
+            </details>
+          </div>
+        )}
+
+        {/* Empty/Idle State — no positions */}
+        {!loading &&
+          !error &&
+          !data &&
+          (!positions || positions.length === 0) && (
+            <div className="text-center py-6 text-base-content/40">
+              <svg
+                xmlns="http://www.w3.org/2000/svg"
+                width="32"
+                height="32"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="1.5"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                className="mx-auto mb-2 opacity-40"
+              >
+                <path d="M6 9H4.5a2.5 2.5 0 0 1 0-5C7 4 6 9 6 9Z" />
+                <path d="M18 9h1.5a2.5 2.5 0 0 0 0-5C17 4 18 9 18 9Z" />
+                <path d="M4 22h16" />
+                <path d="M10 14.66V17c0 .55-.47.98-.97 1.21C7.85 18.75 7 20 7 22" />
+                <path d="M14 14.66V17c0 .55.47.98.97 1.21C16.15 18.75 17 20 17 22" />
+                <path d="M18 2H6v7a6 6 0 0 0 12 0V2Z" />
+              </svg>
+              <p className="text-sm">No positions to optimize</p>
+              <p className="text-xs mt-1">
+                Open positions to enable portfolio optimization
+              </p>
+            </div>
+          )}
+      </div>
     </div>
   );
 }
 
-function RiskMultBar({ value }) {
-  if (value == null) return <span>—</span>;
-  const pct = Math.min(value / 1.5, 1) * 100;
-  const color =
-    value >= 1.0 ? "bg-success" : value >= 0.5 ? "bg-info" : "bg-error";
+/**
+ * PortfolioOverview — main portfolio page component
+ * Shows summary metrics + Correlation Detection + Portfolio Optimizer
+ */
+export default function PortfolioOverview({ positions = [], account = null }) {
+  const [autoRefresh, setAutoRefresh] = useState(false);
+  const [lastUpdated, setLastUpdated] = useState(null);
+  const intervalRef = useRef(null);
+
+  // Extract symbol list from positions
+  const symbols = positions.map((p) => p.symbol).filter(Boolean);
+
+  // Calculate portfolio metrics
+  const totalValue = positions.reduce(
+    (sum, p) => sum + (parseFloat(p.market_value) || 0),
+    0,
+  );
+  const totalExposure =
+    positions.length > 0
+      ? (positions.reduce(
+          (sum, p) => sum + (parseFloat(p.market_value) || 0),
+          0,
+        ) /
+          (parseFloat(account?.equity) || totalValue || 1)) *
+        100
+      : 0;
+
+  // Simple VaR estimation (5th percentile based on position concentration)
+  const concentrationRisk =
+    positions.length > 0
+      ? Math.max(
+          ...positions.map(
+            (p) => (parseFloat(p.market_value) || 0) / totalValue,
+          ),
+        )
+      : 0;
+  const estimatedVaR =
+    positions.length > 0
+      ? (concentrationRisk * 0.25 * 100).toFixed(1) // rough 95% VaR estimate
+      : 0;
+
+  const handleAutoRefresh = useCallback((checked) => {
+    setAutoRefresh(checked);
+    setLastUpdated(new Date());
+  }, []);
+
+  // Auto-refresh interval
+  useEffect(() => {
+    if (intervalRef.current) {
+      clearInterval(intervalRef.current);
+      intervalRef.current = null;
+    }
+
+    if (autoRefresh) {
+      intervalRef.current = setInterval(() => {
+        setLastUpdated(new Date());
+      }, 30000);
+    }
+
+    return () => {
+      if (intervalRef.current) {
+        clearInterval(intervalRef.current);
+      }
+    };
+  }, [autoRefresh]);
+
   return (
-    <div className="flex items-center gap-2">
-      <div className="w-12 bg-base-300 rounded-full h-1.5">
-        <div
-          className={`h-1.5 rounded-full ${color}`}
-          style={{ width: `${pct}%` }}
+    <div className="space-y-6">
+      {/* Page Header */}
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+        <div className="flex items-center gap-3">
+          <h1 className="text-3xl font-bold text-primary">
+            Portfolio Overview
+          </h1>
+          <span className="badge badge-primary badge-sm">v3.0</span>
+        </div>
+        <div className="flex items-center gap-3">
+          <label className="flex items-center gap-2 cursor-pointer">
+            <span className="text-xs text-base-content/60">Auto 30s</span>
+            <input
+              type="checkbox"
+              className="toggle toggle-primary toggle-sm"
+              checked={autoRefresh}
+              onChange={(e) => handleAutoRefresh(e.target.checked)}
+            />
+          </label>
+          {lastUpdated && (
+            <span className="text-xs text-base-content/40">
+              {lastUpdated.toLocaleTimeString()}
+            </span>
+          )}
+        </div>
+      </div>
+
+      {/* Summary Metrics Row */}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+        <MetricCard
+          label="Portfolio VaR 95"
+          value={`${estimatedVaR}%`}
+          subtext={
+            positions.length > 0
+              ? `${positions.length} position${positions.length !== 1 ? "s" : ""}`
+              : "No positions"
+          }
+          icon="📊"
+        />
+        <MetricCard
+          label="Active Symbols"
+          value={symbols.length.toString()}
+          subtext={
+            symbols.length > 0
+              ? symbols.slice(0, 3).join(", ") +
+                (symbols.length > 3 ? "..." : "")
+              : "None"
+          }
+          icon="📈"
+        />
+        <MetricCard
+          label="Corr Regime"
+          value="—"
+          subtext="Requires correlation data"
+          icon="🔗"
+        />
+        <MetricCard
+          label="Exposure"
+          value={`${Math.min(totalExposure, 100).toFixed(0)}%`}
+          subtext={
+            totalValue > 0
+              ? `$${totalValue.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+              : "$0.00"
+          }
+          icon="💰"
         />
       </div>
-      <span className="text-xs">{value.toFixed(2)}×</span>
+
+      {/* Correlation & Optimization Section */}
+      <div>
+        <div className="divider text-base-content/40 uppercase tracking-wider text-sm font-semibold">
+          Correlation & Optimization
+        </div>
+      </div>
+
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <CorrelationDetection symbols={symbols} positions={positions} />
+        <PortfolioOptimizer positions={positions} totalValue={totalValue} />
+      </div>
     </div>
   );
 }

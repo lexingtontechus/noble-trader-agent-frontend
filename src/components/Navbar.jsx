@@ -9,25 +9,37 @@ const NAV_ITEMS = [
   { key: "dashboard", label: "Dashboard", icon: "📊" },
   { key: "orders", label: "Orders", icon: "📋" },
   { key: "simulate", label: "Simulate", icon: "🎲" },
-  { key: "portfolio", label: "Portfolio", icon: "📁" },
+  { key: "portfolio", label: "Portfolio", icon: "📊" },
   { key: "search", label: "Search", icon: "🔍" },
+  { key: "admin", label: "Admin", icon: "🔐" },
   {
     key: "docs",
     label: "Docs",
     icon: "📖",
-    href: "/docs.html",
     external: true,
+    href: "/docs.html",
   },
+];
+
+const THEMES = [
+  "noble",
+  "dark",
+  "light",
+  "cupcake",
+  "business",
+  "synthwave",
+  "nord",
 ];
 
 export default function Navbar({ activeView, setActiveView }) {
   const [backendHealthy, setBackendHealthy] = useState(null);
-  const { activeStreamCount, anyConnected, totalTicks } = useStream();
 
   useEffect(() => {
     let cancelled = false;
 
     async function checkHealth() {
+      // Skip health check when tab is hidden to reduce unnecessary API calls
+      if (typeof document !== "undefined" && document.hidden) return;
       try {
         const res = await fetch("/api/health");
         if (!res.ok) throw new Error("unhealthy");
@@ -41,9 +53,17 @@ export default function Navbar({ activeView, setActiveView }) {
 
     checkHealth();
     const interval = setInterval(checkHealth, 30000);
+
+    // Re-check when tab becomes visible
+    const handleVisibility = () => {
+      if (!document.hidden) checkHealth();
+    };
+    document.addEventListener("visibilitychange", handleVisibility);
+
     return () => {
       cancelled = true;
       clearInterval(interval);
+      document.removeEventListener("visibilitychange", handleVisibility);
     };
   }, []);
 
@@ -74,19 +94,10 @@ export default function Navbar({ activeView, setActiveView }) {
                 href={item.href}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="tab"
+                className={`tab ${activeView === item.key ? "tab-active" : ""}`}
               >
                 <span className="mr-1">{item.icon}</span>
                 {item.label}
-                <svg
-                  xmlns="http://www.w3.org/2000/svg"
-                  viewBox="0 0 16 16"
-                  fill="currentColor"
-                  className="w-3 h-3 ml-1 opacity-50 inline-block"
-                >
-                  <path d="M6.22 8.72a.75.75 0 001.06 0l3.22-3.22v2.69a.75.75 0 001.5 0v-4.5a.75.75 0 00-.75-.75h-4.5a.75.75 0 000 1.5h2.69L6.22 7.66a.75.75 0 000 1.06z" />
-                  <path d="M3.5 6.25a.75.75 0 00-.75.75v5.25c0 .414.336.75.75.75h5.25a.75.75 0 00.75-.75v-2.5a.75.75 0 00-1.5 0v1.75H4.25V7.75h1.75a.75.75 0 000-1.5H3.5z" />
-                </svg>
               </a>
             ) : (
               <button
@@ -113,7 +124,7 @@ export default function Navbar({ activeView, setActiveView }) {
                 href={item.href}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="tab tab-sm"
+                className={`tab tab-sm ${activeView === item.key ? "tab-active" : ""}`}
                 aria-label={item.label}
               >
                 {item.icon}
@@ -133,31 +144,8 @@ export default function Navbar({ activeView, setActiveView }) {
         </div>
       </div>
 
-      {/* Right side: Stream, Theme, Health, User */}
+      {/* Right side: Theme, Health, User */}
       <div className="navbar-end gap-2">
-        {/* Streaming indicator */}
-        {activeStreamCount > 0 && (
-          <div className="flex items-center gap-1">
-            <span className="relative flex h-2.5 w-2.5">
-              {anyConnected ? (
-                <>
-                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-success opacity-75" />
-                  <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-success" />
-                </>
-              ) : (
-                <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-warning" />
-              )}
-            </span>
-            <span className="badge badge-xs badge-outline">
-              {activeStreamCount}{" "}
-              {activeStreamCount === 1 ? "stream" : "streams"}
-              {totalTicks > 0 && (
-                <span className="ml-1 opacity-60">· {totalTicks}t</span>
-              )}
-            </span>
-          </div>
-        )}
-
         <ThemeSwitcher />
 
         {/* Backend health indicator */}
@@ -193,7 +181,16 @@ export default function Navbar({ activeView, setActiveView }) {
         </div>
 
         {/* Clerk UserButton */}
-        <UserButton afterSignOutUrl="/" />
+        <UserButton afterSignOutUrl="/">
+          <UserButton.MenuItems>
+            <UserButton.Link
+              label="Docs"
+              labelIcon="📖"
+              href="/public/docs.html"
+              target="_blank"
+            />
+          </UserButton.MenuItems>
+        </UserButton>
       </div>
     </div>
   );

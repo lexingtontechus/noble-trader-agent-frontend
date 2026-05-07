@@ -1,15 +1,15 @@
-"use client";
+'use client'
 
 export default function AccountSummary({ account }) {
   if (!account) return null;
 
   const fmt = (val) => {
-    if (val == null) return "—";
-    const num = typeof val === "string" ? parseFloat(val) : val;
-    if (isNaN(num)) return "—";
-    return new Intl.NumberFormat("en-US", {
-      style: "currency",
-      currency: "USD",
+    if (val == null) return '—';
+    const num = typeof val === 'string' ? parseFloat(val) : val;
+    if (isNaN(num)) return '—';
+    return new Intl.NumberFormat('en-US', {
+      style: 'currency',
+      currency: 'USD',
       minimumFractionDigits: 2,
     }).format(num);
   };
@@ -21,9 +21,7 @@ export default function AccountSummary({ account }) {
           <h2 className="card-title text-lg">Account Summary</h2>
           <div className="flex gap-2 items-center">
             {account.status && (
-              <span
-                className={`badge badge-sm ${account.status === "ACTIVE" ? "badge-success" : "badge-warning"}`}
-              >
+              <span className={`badge badge-sm ${account.status === 'ACTIVE' ? 'badge-success' : 'badge-warning'}`}>
                 {account.status}
               </span>
             )}
@@ -39,9 +37,7 @@ export default function AccountSummary({ account }) {
         <div className="stats stats-vertical sm:stats-horizontal shadow w-full">
           <div className="stat">
             <div className="stat-title text-xs">Equity</div>
-            <div className="stat-value text-lg text-primary">
-              {fmt(account.equity)}
-            </div>
+            <div className="stat-value text-lg text-primary">{fmt(account.equity)}</div>
           </div>
           <div className="stat">
             <div className="stat-title text-xs">Cash</div>
@@ -49,15 +45,11 @@ export default function AccountSummary({ account }) {
           </div>
           <div className="stat">
             <div className="stat-title text-xs">Buying Power</div>
-            <div className="stat-value text-lg">
-              {fmt(account.buying_power)}
-            </div>
+            <div className="stat-value text-lg">{fmt(account.buying_power)}</div>
           </div>
           <div className="stat">
             <div className="stat-title text-xs">Long Market Value</div>
-            <div className="stat-value text-lg">
-              {fmt(account.long_market_value)}
-            </div>
+            <div className="stat-value text-lg">{fmt(account.long_market_value)}</div>
           </div>
         </div>
 
@@ -67,10 +59,9 @@ export default function AccountSummary({ account }) {
             {account.account_number && (
               <span>Account: {account.account_number}</span>
             )}
-            {account.short_market_value != null &&
-              parseFloat(account.short_market_value) > 0 && (
-                <span>Short MV: {fmt(account.short_market_value)}</span>
-              )}
+            {account.short_market_value != null && parseFloat(account.short_market_value) > 0 && (
+              <span>Short MV: {fmt(account.short_market_value)}</span>
+            )}
           </div>
         )}
       </div>

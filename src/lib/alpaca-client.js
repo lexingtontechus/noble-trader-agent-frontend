@@ -1,10 +1,6 @@
-const ALPACA_BASE =
-  process.env.ALPACA_PAPER_BASE_URL || "https://paper-api.alpaca.markets/v2";
+const ALPACA_BASE = process.env.ALPACA_PAPER_BASE_URL || "https://paper-api.alpaca.markets/v2";
 
-export async function alpacaFetch(
-  path,
-  { apiKey, secretKey, method = "GET", body = null } = {},
-) {
+export async function alpacaFetch(path, { apiKey, secretKey, method = "GET", body = null } = {}) {
   if (!apiKey || !secretKey) {
     throw new Error("Alpaca API keys are required");
   }
@@ -30,8 +26,7 @@ export async function alpacaFetch(
   }
 
   if (!res.ok) {
-    const message =
-      data.message || data.error?.message || `Alpaca API error: ${res.status}`;
+    const message = data.message || data.error?.message || `Alpaca API error: ${res.status}`;
     throw new Error(message);
   }
 
@@ -42,11 +37,7 @@ export async function getAccount(apiKey, secretKey) {
   return alpacaFetch("/account", { apiKey, secretKey });
 }
 
-export async function getOrders(
-  apiKey,
-  secretKey,
-  { status = "all", after = null } = {},
-) {
+export async function getOrders(apiKey, secretKey, { status = "all", after = null } = {}) {
   let path = `/orders?status=${status}&direction=desc&limit=100`;
   if (after) path += `&after=${after}`;
   const result = await alpacaFetch(path, { apiKey, secretKey });

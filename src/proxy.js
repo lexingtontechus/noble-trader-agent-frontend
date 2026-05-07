@@ -4,7 +4,8 @@ const isPublicRoute = createRouteMatcher([
   "/",
   "/sign-in(.*)",
   "/sign-up(.*)",
-  "/api/health(.*)",
+  "/clerk-sync-keyless(.*)",
+  "/api/(.*)",  // All API routes are public — BFF handles auth to FastAPI
 ]);
 
 export default clerkMiddleware(async (auth, request) => {

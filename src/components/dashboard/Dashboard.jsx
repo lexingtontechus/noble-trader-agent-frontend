@@ -4,9 +4,9 @@ import { useState, useEffect, useCallback, useRef } from "react";
 import TickerCard from "@/components/dashboard/TickerCard";
 import ComparisonTable from "@/components/dashboard/ComparisonTable";
 import RegimeSummaryBanner from "@/components/dashboard/RegimeSummaryBanner";
+import { useStream } from "@/context/StreamContext";
 import StreamStatusPanel from "@/components/streaming/StreamStatusPanel";
 import AlertHistory from "@/components/streaming/AlertHistory";
-import { useStream } from "@/context/StreamContext";
 
 const DEFAULT_TICKERS = [
   { symbol: "GC=F", displayName: "Gold" },
@@ -28,11 +28,14 @@ export default function Dashboard() {
   const [loading, setLoading] = useState({});
   const [errors, setErrors] = useState({});
   const [showComparison, setShowComparison] = useState(false);
-  const [showStreamPanel, setShowStreamPanel] = useState(false);
   const intervalRef = useRef(null);
-
-  const { activeStreamCount, anyConnected, streamAll, stopAll, totalTicks } =
-    useStream();
+  const {
+    subscriptions,
+    subscribeAll,
+    unsubscribeAll,
+    activeStreamCount,
+    anyConnected,
+  } = useStream();
 
   const fetchTicker = useCallback(async (symbol, periodKey) => {
     const apiPeriod = PERIOD_MAP[periodKey] || "6mo";
@@ -71,21 +74,20 @@ export default function Dashboard() {
     fetchAllTickers();
   }, [fetchAllTickers]);
 
-  // Auto-refresh interval (only when NOT streaming — streaming handles its own updates)
+  // Auto-refresh interval
   useEffect(() => {
     if (intervalRef.current) {
       clearInterval(intervalRef.current);
       intervalRef.current = null;
     }
 
-    // Auto-refresh only if not streaming live
-    if (autoRefresh && !anyConnected) {
+    if (autoRefresh) {
       intervalRef.current = setInterval(
         () => {
           fetchAllTickers();
         },
         2 * 60 * 1000,
-      ); // 2 minutes
+      );
     }
 
     return () => {
@@ -93,7 +95,7 @@ export default function Dashboard() {
         clearInterval(intervalRef.current);
       }
     };
-  }, [autoRefresh, fetchAllTickers, anyConnected]);
+  }, [autoRefresh, fetchAllTickers]);
 
   const handleRetry = useCallback(
     (symbol) => {
@@ -116,9 +118,111 @@ export default function Dashboard() {
 
   const anyLoading = Object.values(loading).some(Boolean);
   const allLoaded = DEFAULT_TICKERS.every((t) => tickerData[t.symbol]);
+  const hasSubscriptions = subscriptions.size > 0;
+  const allDefaultLive = DEFAULT_TICKERS.every((t) =>
+    subscriptions.has(t.symbol),
+  );
 
   return (
     <div className="space-y-6">
+      {/* Streaming Control Bar — prominent at top */}
+      <div className="card bg-base-200 shadow-xl border border-base-300">
+        <div className="card-body p-3">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            {/* Left: Live status indicator */}
+            <div className="flex items-center gap-3">
+              <div className="flex items-center gap-2">
+                {anyConnected ? (
+                  <span className="badge badge-success gap-1">
+                    <span className="relative flex h-2 w-2">
+                      <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-success opacity-75"></span>
+                      <span className="relative inline-flex rounded-full h-2 w-2 bg-success"></span>
+                    </span>
+                    LIVE
+                  </span>
+                ) : (
+                  <span className="badge badge-ghost gap-1">
+                    <span className="h-2 w-2 rounded-full bg-base-content/30"></span>
+                    OFFLINE
+                  </span>
+                )}
+                <span className="text-xs text-base-content/60">
+                  {activeStreamCount} stream{activeStreamCount !== 1 ? "s" : ""}{" "}
+                  active
+                </span>
+              </div>
+            </div>
+
+            {/* Right: Go Live All / Stop All */}
+            <div className="flex items-center gap-2">
+              {!hasSubscriptions ? (
+                <button
+                  className="btn btn-sm btn-primary gap-1 shadow-md"
+                  onClick={() =>
+                    subscribeAll(DEFAULT_TICKERS.map((t) => t.symbol))
+                  }
+                >
+                  <svg
+                    xmlns="http://www.w3.org/2000/svg"
+                    className="h-4 w-4"
+                    fill="none"
+                    viewBox="0 0 24 24"
+                    stroke="currentColor"
+                  >
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      strokeWidth="2"
+                      d="M13 10V3L4 14h7v7l9-11h-7z"
+                    />
+                  </svg>
+                  📡 Go Live — All Tickers
+                </button>
+              ) : (
+                <>
+                  {!allDefaultLive && (
+                    <button
+                      className="btn btn-sm btn-primary btn-outline gap-1"
+                      onClick={() =>
+                        subscribeAll(DEFAULT_TICKERS.map((t) => t.symbol))
+                      }
+                    >
+                      📡 Go Live All
+                    </button>
+                  )}
+                  <button
+                    className="btn btn-sm btn-error gap-1 shadow-md"
+                    onClick={unsubscribeAll}
+                  >
+                    <svg
+                      xmlns="http://www.w3.org/2000/svg"
+                      className="h-4 w-4"
+                      fill="none"
+                      viewBox="0 0 24 24"
+                      stroke="currentColor"
+                    >
+                      <path
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        strokeWidth="2"
+                        d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
+                      />
+                      <path
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        strokeWidth="2"
+                        d="M9 10a1 1 0 011-1h4a1 1 0 011 1v4a1 1 0 01-1 1h-4a1 1 0 01-1-1v-4z"
+                      />
+                    </svg>
+                    ⏹ Stop All
+                  </button>
+                </>
+              )}
+            </div>
+          </div>
+        </div>
+      </div>
+
       {/* Controls Row */}
       <div className="flex flex-wrap items-center justify-between gap-4">
         {/* Period Selector */}
@@ -136,62 +240,6 @@ export default function Dashboard() {
 
         {/* Right side controls */}
         <div className="flex items-center gap-4">
-          {/* Stream All / Stop All */}
-          {activeStreamCount === 0 ? (
-            <button
-              className="btn btn-sm btn-outline btn-success gap-1"
-              onClick={() => streamAll(DEFAULT_TICKERS.map((t) => t.symbol))}
-            >
-              <span className="relative flex h-2 w-2">
-                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-success opacity-75" />
-                <span className="relative inline-flex rounded-full h-2 w-2 bg-success" />
-              </span>
-              Go Live All
-            </button>
-          ) : (
-            <div className="flex items-center gap-1">
-              <button
-                className={`btn btn-sm gap-1 ${showStreamPanel ? "btn-primary" : "btn-ghost"}`}
-                onClick={() => setShowStreamPanel(!showStreamPanel)}
-              >
-                <span className="relative flex h-2 w-2">
-                  {anyConnected && (
-                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-success opacity-75" />
-                  )}
-                  <span
-                    className={`relative inline-flex rounded-full h-2 w-2 ${anyConnected ? "bg-success" : "bg-base-content/30"}`}
-                  />
-                </span>
-                Streams
-                <span className="badge badge-xs badge-primary">
-                  {activeStreamCount}
-                </span>
-                {totalTicks > 0 && (
-                  <span className="text-xs opacity-50">{totalTicks}t</span>
-                )}
-              </button>
-              <button
-                className="btn btn-xs btn-ghost btn-circle text-error"
-                onClick={stopAll}
-                title="Stop all streams"
-              >
-                <svg
-                  xmlns="http://www.w3.org/2000/svg"
-                  width="12"
-                  height="12"
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="2"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                >
-                  <rect x="6" y="6" width="12" height="12" />
-                </svg>
-              </button>
-            </div>
-          )}
-
           {/* Auto-refresh toggle */}
           <label className="flex items-center gap-2 cursor-pointer">
             <span className="text-xs text-base-content/60">Auto-refresh</span>
@@ -200,7 +248,6 @@ export default function Dashboard() {
               className="toggle toggle-primary toggle-sm"
               checked={autoRefresh}
               onChange={(e) => setAutoRefresh(e.target.checked)}
-              disabled={anyConnected}
             />
           </label>
 
@@ -246,12 +293,7 @@ export default function Dashboard() {
       {lastUpdated && (
         <div className="text-xs text-base-content/40">
           Last updated: {lastUpdated.toLocaleTimeString()}
-          {anyConnected && (
-            <span className="ml-2 badge badge-xs badge-success badge-outline">
-              LIVE
-            </span>
-          )}
-          {autoRefresh && !anyConnected && (
+          {autoRefresh && (
             <span className="ml-2 badge badge-xs badge-primary badge-outline">
               auto 2m
             </span>
@@ -261,14 +303,6 @@ export default function Dashboard() {
 
       {/* Regime Summary Banner */}
       <RegimeSummaryBanner tickers={tickerObjects} />
-
-      {/* Stream Panel + Alert History (collapsible) */}
-      {showStreamPanel && (
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-          <StreamStatusPanel />
-          <AlertHistory />
-        </div>
-      )}
 
       {/* Comparison Table */}
       {showComparison && allLoaded && (
@@ -280,8 +314,19 @@ export default function Dashboard() {
         </div>
       )}
 
+      {/* Streaming Status + Alerts */}
+      <div className="grid grid-cols-2 lg:grid-cols-2 gap-6">
+        <div className="col-span-1">
+          <StreamStatusPanel />
+        </div>
+        <div className="col-span-1">
+          <AlertHistory />
+        </div>
+      </div>
+
       {/* Ticker Cards Grid */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+      <div className="flex flex-wrap gap-2">
+        {/*grid grid-cols-1 lg:grid-cols-3 gap-6">*/}
         {DEFAULT_TICKERS.map((t) => (
           <TickerCard
             key={t.symbol}

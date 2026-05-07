@@ -1,59 +1,39 @@
-import { pushTick } from "@/lib/fastapi-client";
+import { NextResponse } from "next/server";
+import { getFastAPIAuthHeaders } from "@/lib/fastapi-auth";
 
-/**
- * POST /api/stream/tick
- * Push a price tick to a seeded streaming session and receive a regime snapshot.
- * Body: { symbol, price, ts? }
- *
- * If the session doesn't exist on the FastAPI backend (e.g. it was evicted),
- * returns a 404 with a hint to re-seed.
- */
+const FASTAPI_BASE =
+  process.env.NEXT_PUBLIC_FASTAPI_BASE_URL ||
+  "https://noble-trader-fastapi-backend.onrender.com";
+
 export async function POST(request) {
-  let symbol = null;
-
   try {
-    const body = await request.json();
-    symbol = body.symbol;
-    const { price, ts } = body;
-
-    if (!symbol || price == null) {
-      return Response.json(
-        { error: "symbol and price required" },
+    const { symbol, price } = await request.json();
+    if (!symbol || price == null)
+      return NextResponse.json(
+        { error: "Symbol and price required" },
         { status: 400 },
       );
+
+    const authHeaders = await getFastAPIAuthHeaders();
+
+    const res = await fetch(`${FASTAPI_BASE}/stream/tick`, {
+      method: "POST",
+      headers: {
+        ...authHeaders,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ symbol, price }),
+      signal: AbortSignal.timeout(30000),
+    });
+
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.detail || `FastAPI tick failed: ${res.status}`);
     }
 
-    if (typeof price !== "number" || price <= 0) {
-      return Response.json(
-        { error: "price must be a positive number" },
-        { status: 400 },
-      );
-    }
-
-    const tickResponse = await pushTick(symbol, price, ts);
-    return Response.json(tickResponse);
-  } catch (error) {
-    console.error("Stream tick error:", error);
-
-    // Check if it's a session-not-found error from FastAPI
-    const message = error.message || "";
-    if (
-      message.includes("not found") ||
-      message.includes("no session") ||
-      message.includes("404")
-    ) {
-      return Response.json(
-        {
-          error: `No active streaming session for ${symbol || "unknown"}. Re-seed the session first.`,
-          needsReseed: true,
-        },
-        { status: 404 },
-      );
-    }
-
-    return Response.json(
-      { error: `Tick push failed: ${message}` },
-      { status: 500 },
-    );
+    const data = await res.json();
+    return NextResponse.json(data);
+  } catch (err) {
+    return NextResponse.json({ error: err.message }, { status: 500 });
   }
 }

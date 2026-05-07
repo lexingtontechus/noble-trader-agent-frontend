@@ -103,14 +103,14 @@ export default function OrderModal({ symbol, onClose, onSuccess }) {
 
   return (
     <>
-      <dialog className="modal modal-open" ref={modalRef}>
+      <dialog className="modal modal-open modal-top" ref={modalRef}>
         {/* Backdrop - clicking it closes the modal */}
         <div
           className="modal-backdrop bg-black/60"
           onClick={handleBackdropClick}
         ></div>
 
-        <div className="modal-box w-full max-w-lg relative">
+        <div className="modal-box max-w-2xl p-8 bg-base-300 w-full">
           {/* Close button - prominent X in top right */}
           <button
             className="btn btn-sm btn-circle btn-ghost absolute right-3 top-3 z-10 hover:bg-base-300"
@@ -390,28 +390,6 @@ export default function OrderModal({ symbol, onClose, onSuccess }) {
           </p>
         </div>
       </dialog>
-
-      {/* Success Toast */}
-      {toast && (
-        <div className="toast toast-top toast-center z-[9999]">
-          <div className="alert alert-success">
-            <svg
-              xmlns="http://www.w3.org/2000/svg"
-              className="stroke-current shrink-0 h-5 w-5"
-              fill="none"
-              viewBox="0 0 24 24"
-            >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth="2"
-                d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"
-              />
-            </svg>
-            <span>{toast}</span>
-          </div>
-        </div>
-      )}
     </>
   );
 }

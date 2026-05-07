@@ -1,74 +1,24 @@
 import OpenAI from "openai";
 
-// OpenRouter — OpenAI-compatible API, no location restrictions
-// Get your key at: https://openrouter.ai/keys
-// Strategy: try free models first, auto-fallback to cheap paid if rate-limited
-// For Vercel: add OPENROUTER_API_KEY in Project Settings > Environment Variables
-let client = null;
+// Groq — free tier, OpenAI-compatible API, no location restrictions
+// Free tier: 30 requests/min, 14,400 requests/day
+// Get your free key at: https://console.groq.com/keys
+// For Vercel: add GROQ_API_KEY in Project Settings > Environment Variables
+let groqClient = null;
 
-function getClient() {
-  if (!process.env.OPENROUTER_API_KEY) {
+function getGroq() {
+  if (!process.env.GROQ_API_KEY) {
     throw new Error(
-      "OPENROUTER_API_KEY is not configured. Add it to your .env.local or Vercel environment variables.",
+      "GROQ_API_KEY is not configured. Add it to your .env.local or Vercel environment variables.",
     );
   }
-  if (!client) {
-    client = new OpenAI({
-      apiKey: process.env.OPENROUTER_API_KEY,
-      baseURL: "https://openrouter.ai/api/v1",
-      defaultHeaders: {
-        "HTTP-Referer": "https://noble-trader.vercel.app",
-        "X-Title": "Noble Trader",
-      },
+  if (!groqClient) {
+    groqClient = new OpenAI({
+      apiKey: process.env.GROQ_API_KEY,
+      baseURL: "https://api.groq.com/openai/v1",
     });
   }
-  return client;
-}
-
-// Model tiers: free first, then cheap paid fallbacks
-const MODEL_TIERS = [
-  "meta-llama/llama-3.3-70b-instruct:free", // Free — Llama 3.3 70B
-  "google/gemma-3-27b-it:free", // Free — Gemma 3 27B
-  "meta-llama/llama-3.1-8b-instruct", // Paid — $0.05/M input, $0.08/M output (dirt cheap)
-];
-
-async function tryGenerate(api, prompt) {
-  let lastError = null;
-
-  for (const model of MODEL_TIERS) {
-    try {
-      const completion = await api.chat.completions.create({
-        model,
-        messages: [
-          {
-            role: "system",
-            content:
-              "You are a quantitative trading analyst. Provide concise, actionable market commentary in 3-4 sentences.",
-          },
-          { role: "user", content: prompt },
-        ],
-        max_tokens: 300,
-        temperature: 0.7,
-      });
-
-      const commentary = completion.choices?.[0]?.message?.content;
-      if (commentary) {
-        return { commentary, model };
-      }
-    } catch (err) {
-      lastError = err;
-      // If rate-limited on this model, try the next tier
-      if (err.status === 429) {
-        console.warn(`Model ${model} rate-limited, falling back...`);
-        continue;
-      }
-      // For other errors, also try next model
-      console.warn(`Model ${model} failed:`, err.message);
-      continue;
-    }
-  }
-
-  throw lastError || new Error("All model tiers failed");
+  return groqClient;
 }
 
 export async function POST(request) {
@@ -89,26 +39,42 @@ Stop: ${risk?.suggested_stop?.toFixed(2) || "N/A"} | TP: ${risk?.suggested_tp?.t
 
 Provide specific, actionable insights based on the regime state and risk metrics.`;
 
-    const api = getClient();
-    const { commentary } = await tryGenerate(api, prompt);
+    const groq = getGroq();
+    const completion = await groq.chat.completions.create({
+      model: "llama-3.3-70b-versatile",
+      messages: [
+        {
+          role: "system",
+          content:
+            "You are a quantitative trading analyst. Provide concise, actionable market commentary in 3-4 sentences.",
+        },
+        { role: "user", content: prompt },
+      ],
+      max_tokens: 300,
+      temperature: 0.7,
+    });
 
+    const commentary =
+      completion.choices?.[0]?.message?.content || "Analysis unavailable.";
     return Response.json({ commentary });
   } catch (error) {
     console.error("Commentary API error:", error);
 
-    if (error.message?.includes("OPENROUTER_API_KEY")) {
+    // Specific error for missing API key
+    if (error.message?.includes("GROQ_API_KEY")) {
       return Response.json(
         {
           error:
-            "OpenRouter API key not configured. Please set OPENROUTER_API_KEY in your environment variables.",
+            "Groq API key not configured. Please set GROQ_API_KEY in your environment variables.",
         },
         { status: 503 },
       );
     }
 
+    // Handle rate limit errors
     if (error.status === 429) {
       return Response.json(
-        { error: "All models rate-limited. Please try again in a moment." },
+        { error: "Groq rate limit reached. Please try again in a minute." },
         { status: 429 },
       );
     }
