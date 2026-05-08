@@ -6,7 +6,7 @@ export default function Footer() {
       <div className="flex flex-col gap-2 items-center w-full">
         <div className="flex flex-wrap items-center justify-center gap-2">
           <span className="text-sm font-semibold text-base-content/70">
-            Noble Trader v3.0
+            Noble Trader v2.0
           </span>
           <span className="badge badge-warning badge-sm">Paper Trading Only</span>
         </div>
@@ -14,7 +14,7 @@ export default function Footer() {
           <span className="badge badge-outline badge-sm">HMM Regime Detection</span>
           <span className="badge badge-outline badge-sm">Kelly Sizing</span>
           <span className="badge badge-outline badge-sm">VaR/CVaR Risk</span>
-          <span className="badge badge-outline badge-sm">Monte Carlo Sim</span>
+          <span className="badge badge-primary badge-sm">Monte Carlo Simulation</span>
           <span className="badge badge-outline badge-sm">Portfolio View</span>
           <span className="badge badge-outline badge-sm">Corr Detection</span>
           <span className="badge badge-outline badge-sm">Weight Optimizer</span>

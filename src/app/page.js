@@ -8,9 +8,10 @@ import Dashboard from "@/components/dashboard/Dashboard";
 import OrdersPage from "@/components/orders/OrdersPage";
 import SearchPage from "@/components/search/SearchPage";
 import SimulatePage from "@/components/simulation/SimulatePage";
-import PortfolioOverview from "@/components/portfolio/PortfolioOverview";
+import PortfolioPage from "@/components/portfolio/PortfolioPage";
 import AdminPage from "@/components/admin/AdminPage";
 import { StreamProvider } from "@/context/StreamContext";
+import NotificationToast from "@/components/shared/NotificationToast";
 
 export default function Home() {
   const [activeView, setActiveView] = useState("dashboard");
@@ -51,17 +52,18 @@ export default function Home() {
         <StreamProvider>
           <div className="min-h-screen flex flex-col">
             <Navbar activeView={activeView} setActiveView={setActiveView} />
-            <main className="flex-1 container mx-auto px-4 py-6 overflow-auto">
+            <main className="flex-1 container mx-auto px-4 py-6 pb-20 sm:pb-6 overflow-auto">
               <div key={activeView} className="animate-fade-in-up">
                 {activeView === "dashboard" && <Dashboard />}
                 {activeView === "orders" && <OrdersPage />}
                 {activeView === "search" && <SearchPage />}
                 {activeView === "simulate" && <SimulatePage />}
-                {activeView === "portfolio" && <PortfolioOverview />}
+                {activeView === "portfolio" && <PortfolioPage />}
                 {activeView === "admin" && <AdminPage />}
               </div>
             </main>
             <Footer />
+            <NotificationToast />
           </div>
         </StreamProvider>
       }

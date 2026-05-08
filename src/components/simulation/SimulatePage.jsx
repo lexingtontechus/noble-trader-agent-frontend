@@ -3,6 +3,7 @@
 import { useState, useCallback } from 'react'
 import SimulationPanel from './SimulationPanel'
 import PriceFanChart from './PriceFanChart'
+import { notifySuccess, notifyError } from '@/lib/notifications'
 
 const POPULAR_SYMBOLS = [
   { symbol: 'SPY', name: 'S&P 500' },
@@ -42,11 +43,13 @@ export default function SimulatePage() {
       if (data.prices?.length >= 81) {
         setPrices(data.prices)
         setCurrentPrice(data.prices[data.prices.length - 1])
+        notifySuccess(`Loaded ${data.prices.length} price bars for ${symbol}`)
       } else {
         throw new Error(`Insufficient price data (${data.prices?.length ?? 0} bars, need 81+)`)
       }
     } catch (err) {
       setPriceError(err.message)
+      notifyError(`Failed to load prices: ${err.message}`)
     } finally {
       setFetchingPrices(false)
     }

@@ -7,6 +7,7 @@ import RegimeSummaryBanner from "@/components/dashboard/RegimeSummaryBanner";
 import { useStream } from "@/context/StreamContext";
 import StreamStatusPanel from "@/components/streaming/StreamStatusPanel";
 import AlertHistory from "@/components/streaming/AlertHistory";
+import { notifySuccess, notifyError } from "@/lib/notifications";
 
 const DEFAULT_TICKERS = [
   { symbol: "GC=F", displayName: "Gold" },
@@ -20,6 +21,12 @@ const PERIOD_MAP = {
   "2Y": "2y",
 };
 
+// Auto-refresh interval: 5 minutes
+const AUTO_REFRESH_INTERVAL = 5 * 60 * 1000;
+
+// Debounce delay for period changes (300ms)
+const PERIOD_DEBOUNCE_MS = 300;
+
 export default function Dashboard() {
   const [period, setPeriod] = useState("6M");
   const [autoRefresh, setAutoRefresh] = useState(false);
@@ -29,6 +36,7 @@ export default function Dashboard() {
   const [errors, setErrors] = useState({});
   const [showComparison, setShowComparison] = useState(false);
   const intervalRef = useRef(null);
+  const periodDebounceRef = useRef(null);
   const {
     subscriptions,
     subscribeAll,
@@ -59,6 +67,7 @@ export default function Dashboard() {
       setTickerData((prev) => ({ ...prev, [symbol]: data }));
     } catch (err) {
       setErrors((prev) => ({ ...prev, [symbol]: err.message }));
+      notifyError(`Failed to load ${symbol}: ${err.message}`);
     } finally {
       setLoading((prev) => ({ ...prev, [symbol]: false }));
     }
@@ -74,7 +83,7 @@ export default function Dashboard() {
     fetchAllTickers();
   }, [fetchAllTickers]);
 
-  // Auto-refresh interval
+  // Auto-refresh interval (5 minutes)
   useEffect(() => {
     if (intervalRef.current) {
       clearInterval(intervalRef.current);
@@ -82,12 +91,9 @@ export default function Dashboard() {
     }
 
     if (autoRefresh) {
-      intervalRef.current = setInterval(
-        () => {
-          fetchAllTickers();
-        },
-        2 * 60 * 1000,
-      );
+      intervalRef.current = setInterval(() => {
+        fetchAllTickers();
+      }, AUTO_REFRESH_INTERVAL);
     }
 
     return () => {
@@ -97,6 +103,18 @@ export default function Dashboard() {
     };
   }, [autoRefresh, fetchAllTickers]);
 
+  // Notify on successful fetch completion
+  useEffect(() => {
+    const allDone = DEFAULT_TICKERS.every(
+      (t) => !loading[t.symbol] && (tickerData[t.symbol] || errors[t.symbol]),
+    );
+    const anySucceeded = DEFAULT_TICKERS.some((t) => tickerData[t.symbol]);
+    if (allDone && anySucceeded && lastUpdated) {
+      notifySuccess("Dashboard refreshed");
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [loading, tickerData, errors]);
+
   const handleRetry = useCallback(
     (symbol) => {
       fetchTicker(symbol, period);
@@ -105,9 +123,20 @@ export default function Dashboard() {
   );
 
   const handlePeriodChange = useCallback((newPeriod) => {
+    // Debounce: clear any pending period change, set new timeout
+    if (periodDebounceRef.current) {
+      clearTimeout(periodDebounceRef.current);
+    }
+
+    // Immediately update the visual period selector
     setPeriod(newPeriod);
-    setTickerData({});
-    setErrors({});
+
+    // Debounce the actual data fetch — keep stale data while loading
+    periodDebounceRef.current = setTimeout(() => {
+      // Don't clear tickerData — let new data replace it when it arrives (optimistic)
+      setErrors({});
+      // Fetch will be triggered by period state change → fetchAllTickers dependency
+    }, PERIOD_DEBOUNCE_MS);
   }, []);
 
   // Build ticker objects for banner and comparison
@@ -295,7 +324,7 @@ export default function Dashboard() {
           Last updated: {lastUpdated.toLocaleTimeString()}
           {autoRefresh && (
             <span className="ml-2 badge badge-xs badge-primary badge-outline">
-              auto 2m
+              auto 5m
             </span>
           )}
         </div>

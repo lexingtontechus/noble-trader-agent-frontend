@@ -7,6 +7,7 @@ import OrderHistory from '@/components/orders/OrderHistory';
 import OpenPositions from '@/components/orders/OpenPositions';
 import OrderModal from '@/components/orders/OrderModal';
 import PortfolioAnalysis from '@/components/orders/PortfolioAnalysis';
+import { notifySuccess, notifyWarning } from '@/lib/notifications';
 
 const PERIODS = [
   { key: '1m', label: '1M' },
@@ -64,6 +65,7 @@ export default function OrdersPage() {
         // If 403, keys are invalid — re-check
         if (res.status === 403) {
           setKeysConfigured(false);
+          notifyWarning('Alpaca API keys appear invalid. Please re-enter your keys.');
         }
       }
     } catch (err) {
@@ -88,6 +90,7 @@ export default function OrdersPage() {
         setOrders([]);
         if (res.status === 403) {
           setKeysConfigured(false);
+          notifyWarning('Alpaca API keys appear invalid. Please re-enter your keys.');
         }
       }
     } catch (err) {
@@ -113,6 +116,7 @@ export default function OrdersPage() {
         setPositions([]);
         if (res.status === 403) {
           setKeysConfigured(false);
+          notifyWarning('Alpaca API keys appear invalid. Please re-enter your keys.');
         }
       }
     } catch (err) {
@@ -136,6 +140,7 @@ export default function OrdersPage() {
   const handleKeysConfigured = () => {
     setKeysConfigured(true);
     setShowKeyManager(false);
+    notifySuccess('Alpaca keys configured successfully!');
   };
 
   // Handle key removal

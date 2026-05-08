@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useRef, useCallback } from "react";
+import { notifySuccess, notifyError } from "@/lib/notifications";
 
 export default function OrderModal({ symbol, onClose, onSuccess }) {
   const [side, setSide] = useState("buy");
@@ -81,6 +82,7 @@ export default function OrderModal({ symbol, onClose, onSuccess }) {
       }
 
       setToast(`${side.toUpperCase()} ${qty} ${symbol} order submitted!`);
+      notifySuccess(`${side.toUpperCase()} ${qty} ${symbol} order submitted!`);
       setTimeout(() => {
         setToast("");
         onSuccess();
@@ -88,6 +90,7 @@ export default function OrderModal({ symbol, onClose, onSuccess }) {
       }, 2000);
     } catch (err) {
       setError(err.message);
+      notifyError(`Order failed: ${err.message}`);
       setConfirming(false);
     } finally {
       setSubmitting(false);

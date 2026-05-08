@@ -6,7 +6,51 @@ const FASTAPI_BASE =
 let _cachedToken = null;
 let _tokenExpiry = 0;
 
+// ── Request deduplication ────────────────────────────────────────────────────
+const pendingRequests = new Map();
+
+/**
+ * Generate a dedup key from URL + body.
+ */
+function dedupKey(url, body) {
+  if (!body) return url;
+  return `${url}::${typeof body === "string" ? body : JSON.stringify(body)}`;
+}
+
+/**
+ * Deduplicated fetch wrapper.
+ * If an identical request (same URL + body) is already in-flight,
+ * return the same promise instead of firing a second request.
+ */
+async function fetchWithDedup(url, options = {}) {
+  const body = options.body || null;
+  const key = dedupKey(url, body);
+
+  // Check for an in-flight identical request
+  if (pendingRequests.has(key)) {
+    return pendingRequests.get(key);
+  }
+
+  // Create the request promise
+  const requestPromise = fetchWithRetry(url, options).finally(() => {
+    pendingRequests.delete(key);
+  });
+
+  pendingRequests.set(key, requestPromise);
+  return requestPromise;
+}
+
+// Default timeout: 30s (60s for simulate which has longer cold-start needs)
+const DEFAULT_TIMEOUT = 30000;
+const SIMULATE_TIMEOUT = 60000;
+
+/**
+ * Fetch with retry and exponential backoff.
+ * Backoff: 1s, 2s, 4s (1000 * 2^i)
+ */
 async function fetchWithRetry(url, options = {}, retries = 3) {
+  const timeout = options.timeout || DEFAULT_TIMEOUT;
+
   for (let i = 0; i < retries; i++) {
     try {
       const headers = { ...options.headers };
@@ -23,7 +67,7 @@ async function fetchWithRetry(url, options = {}, retries = 3) {
       const res = await fetch(url, {
         ...options,
         headers,
-        signal: AbortSignal.timeout(60000), // 60s timeout for Render cold starts
+        signal: AbortSignal.timeout(timeout),
       });
       if (res.ok) return res;
       if (res.status >= 400 && res.status < 500) {
@@ -33,7 +77,8 @@ async function fetchWithRetry(url, options = {}, retries = 3) {
       // 5xx — retry
     } catch (e) {
       if (i === retries - 1) throw e;
-      await new Promise((r) => setTimeout(r, (i + 1) * 2000)); // exponential backoff
+      // Exponential backoff: 1000 * 2^i → 1s, 2s, 4s
+      await new Promise((r) => setTimeout(r, 1000 * Math.pow(2, i)));
     }
   }
 }
@@ -47,7 +92,7 @@ export async function analyseFull(prices, symbol = "UNKNOWN", options = {}) {
     base_risk_limit: options.base_risk_limit ?? 0.02,
   };
 
-  const res = await fetchWithRetry(`${FASTAPI_BASE}/analyse/full`, {
+  const res = await fetchWithDedup(`${FASTAPI_BASE}/analyse/full`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(body),
@@ -56,7 +101,7 @@ export async function analyseFull(prices, symbol = "UNKNOWN", options = {}) {
 }
 
 export async function detectRegime(prices, symbol = "UNKNOWN") {
-  const res = await fetchWithRetry(`${FASTAPI_BASE}/regime/detect`, {
+  const res = await fetchWithDedup(`${FASTAPI_BASE}/regime/detect`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ prices, symbol }),
@@ -69,7 +114,7 @@ export async function detectRegime(prices, symbol = "UNKNOWN") {
  * Alias for detectRegime, kept for semantic clarity in fallback paths.
  */
 export async function detectRegimeOnly(prices, symbol = "UNKNOWN") {
-  const res = await fetchWithRetry(`${FASTAPI_BASE}/regime/detect`, {
+  const res = await fetchWithDedup(`${FASTAPI_BASE}/regime/detect`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ prices, symbol }),
@@ -87,7 +132,7 @@ export async function sizeKelly(prices, symbol = "UNKNOWN", options = {}) {
   };
   if (options.returns) body.returns = options.returns;
 
-  const res = await fetchWithRetry(`${FASTAPI_BASE}/size/kelly`, {
+  const res = await fetchWithDedup(`${FASTAPI_BASE}/size/kelly`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(body),
@@ -106,7 +151,7 @@ export async function analyseRisk(prices, symbol = "UNKNOWN", options = {}) {
   };
   if (options.returns) body.returns = options.returns;
 
-  const res = await fetchWithRetry(`${FASTAPI_BASE}/risk/analyse`, {
+  const res = await fetchWithDedup(`${FASTAPI_BASE}/risk/analyse`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(body),
@@ -217,6 +262,7 @@ export async function getFastApiToken() {
 /**
  * Run Monte Carlo regime transition simulation.
  * POST /simulate/{symbol}
+ * Uses 60s timeout for heavy computation.
  */
 export async function simulateRegime(symbol, prices, options = {}) {
   const body = {
@@ -235,6 +281,7 @@ export async function simulateRegime(symbol, prices, options = {}) {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(body),
       auth: auth || undefined,
+      timeout: SIMULATE_TIMEOUT,
     },
   );
   return res.json();

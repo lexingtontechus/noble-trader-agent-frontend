@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import SearchResults from '@/components/search/SearchResults';
 import OrderModal from '@/components/orders/OrderModal';
+import { notifySuccess, notifyError } from '@/lib/notifications';
 
 const POPULAR_TICKERS = [
   'AAPL', 'MSFT', 'GOOGL', 'AMZN', 'TSLA', 'NVDA', 'META', 'SPY',
@@ -78,8 +79,10 @@ export default function SearchPage() {
 
       setResults(data);
       setRecentSearches(saveRecentSearch(trimmed));
+      notifySuccess(`Analysis complete for ${trimmed}`);
     } catch (err) {
       setError(err.message);
+      notifyError(`Search failed: ${err.message}`);
     } finally {
       setLoading(false);
     }

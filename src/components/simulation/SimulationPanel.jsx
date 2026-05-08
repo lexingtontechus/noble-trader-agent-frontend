@@ -2,6 +2,7 @@
 
 import { useState, useCallback } from 'react'
 import PriceFanChart from './PriceFanChart'
+import { notifySuccess, notifyError } from '@/lib/notifications'
 
 export default function SimulationPanel({ symbol, prices = [], currentPrice = null }) {
   const [horizon, setHorizon] = useState(20)
@@ -37,8 +38,10 @@ export default function SimulationPanel({ symbol, prices = [], currentPrice = nu
 
       const data = await res.json()
       setSimulation(data)
+      notifySuccess(`Simulation complete for ${symbol}`)
     } catch (err) {
       setError(err.message || 'Simulation failed')
+      notifyError(`Simulation failed: ${err.message || 'Unknown error'}`)
     } finally {
       setLoading(false)
     }
