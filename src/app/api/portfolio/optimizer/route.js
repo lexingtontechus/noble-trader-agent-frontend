@@ -3,6 +3,36 @@ import { getAlpacaKeys } from "@/lib/clerk-metadata";
 import { getPositions } from "@/lib/alpaca-client";
 import { getCached, setCache } from "@/lib/cache";
 
+/**
+ * Convert an array of closing prices to log-returns.
+ * Returns an array of length n-1 (one less than prices).
+ */
+function toLogReturns(prices) {
+  const returns = [];
+  for (let i = 1; i < prices.length; i++) {
+    if (prices[i] > 0 && prices[i - 1] > 0) {
+      returns.push(Math.log(prices[i] / prices[i - 1]));
+    }
+  }
+  return returns;
+}
+
+/**
+ * Fetch historical prices for a symbol using Yahoo Finance via our /api/prices route.
+ */
+async function fetchHistoricalPrices(symbol, period = "1y") {
+  const res = await fetch(
+    `http://localhost:3000/api/prices?symbol=${encodeURIComponent(symbol)}&period=${period}`,
+    { signal: AbortSignal.timeout(30000) },
+  );
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.error || `Failed to fetch prices for ${symbol}`);
+  }
+  const data = await res.json();
+  return data.prices || [];
+}
+
 export async function POST(request) {
   try {
     const body = await request.json();
@@ -43,17 +73,88 @@ export async function POST(request) {
       );
     }
 
-    const symbols = positions.map((p) => p.symbol).sort();
-    const cacheKey = `optimizer:${symbols.join(",")}`;
+    const symbols = positions.map((p) => p.symbol);
+    const cacheKey = `optimizer:${[...symbols].sort().join(",")}`;
     const cached = getCached(cacheKey);
     if (cached) return Response.json(cached);
 
-    const result = await optimisePortfolio(positions, prices_data || {}, {
-      target_return,
-      risk_free_rate,
+    // If the client provided a returns_matrix directly, use it
+    let returnsMatrix = prices_data?.returns_matrix || null;
+
+    if (!returnsMatrix) {
+      // Fetch historical prices for each symbol and convert to log-returns
+      const allPrices = await Promise.all(
+        symbols.map((sym) => fetchHistoricalPrices(sym)),
+      );
+
+      // Validate we have enough data for all symbols
+      const minLen = Math.min(...allPrices.map((p) => p.length));
+      if (minLen < 20) {
+        return Response.json(
+          {
+            error: `Insufficient price data (minimum 20 bars needed, got ${minLen})`,
+            code: "INSUFFICIENT_DATA",
+            hint: "Some symbols may not have enough historical price data for optimization.",
+          },
+          { status: 400 },
+        );
+      }
+
+      // Trim all to the same length and convert to log-returns
+      const logReturns = allPrices.map((prices) =>
+        toLogReturns(prices.slice(-minLen)),
+      );
+
+      // Build returns_matrix: n_bars × n_assets (each row = one time bar, each col = one asset)
+      const nBars = logReturns[0].length;
+      returnsMatrix = [];
+      for (let i = 0; i < nBars; i++) {
+        const row = logReturns.map((retArr) => retArr[i] || 0);
+        returnsMatrix.push(row);
+      }
+    }
+
+    // Call the backend with proper returns_matrix format
+    const result = await optimisePortfolio(symbols, returnsMatrix, {
+      risk_free_rate: risk_free_rate || 0.04,
     });
-    setCache(cacheKey, result, 10 * 60 * 1000); // 10 min cache
-    return Response.json(result);
+
+    // Map backend response to frontend-expected format
+    const optimisation = result.optimisation || result;
+    const correlation = result.correlation || null;
+
+    const mapped = {
+      // Optimization results
+      optimal_weights: {},
+      expected_return: optimisation.expected_return || 0,
+      optimal_risk: optimisation.expected_vol || 0,
+      sharpe_ratio: optimisation.sharpe_ratio || 0,
+      expected_max_drawdown: optimisation.expected_max_drawdown || 0,
+      dd_constraint_met: optimisation.dd_constraint_met ?? true,
+      converged: optimisation.converged ?? true,
+      regime_exposure: optimisation.regime_exposure || 1,
+      // Weight arrays from backend
+      weights: optimisation.weights || [],
+      regime_adj_weights: optimisation.regime_adj_weights || [],
+      per_asset_bounds: optimisation.per_asset_bounds || [],
+      // Correlation results (if full endpoint)
+      correlation_regime: correlation?.corr_regime || null,
+      correlation_confidence: correlation?.corr_confidence || 0,
+      correlation_matrix: correlation?.correlation_matrix || null,
+      blended_risk_multiplier: correlation?.blended_risk_multiplier || 1,
+      // Include raw response for debugging
+      _raw: result,
+    };
+
+    // Build optimal_weights object from weights array + symbols
+    if (mapped.weights.length > 0 && symbols.length > 0) {
+      symbols.forEach((sym, i) => {
+        mapped.optimal_weights[sym] = mapped.weights[i] || 0;
+      });
+    }
+
+    setCache(cacheKey, mapped, 10 * 60 * 1000); // 10 min cache
+    return Response.json(mapped);
   } catch (error) {
     console.error("Portfolio optimizer error:", error);
 
@@ -68,7 +169,7 @@ export async function POST(request) {
         {
           error: "Portfolio optimization is not yet available on the server",
           code: "ENDPOINT_NOT_DEPLOYED",
-          hint: "This feature requires the /optimise/full endpoint to be deployed on the FastAPI backend. The backend service is being updated — check back soon.",
+          hint: "This feature requires the /optimise/full endpoint to be deployed on the FastAPI backend. The backend multi_asset router needs to be enabled in main.py.",
         },
         { status: 404 },
       );

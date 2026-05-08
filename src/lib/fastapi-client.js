@@ -326,36 +326,66 @@ export function getAlertsSSEUrl() {
   return `${FASTAPI_BASE}/sse/alerts`;
 }
 
-export async function detectCorrelation(symbols, returns_data = {}) {
+/**
+ * Detect correlation regime across multiple assets.
+ * POST /correlation/detect
+ *
+ * Backend requires: symbols + returns_matrix (n_bars × n_assets 2D array of log-returns)
+ *
+ * @param {string[]} symbols - List of ticker symbols
+ * @param {number[][]} returnsMatrix - (n_bars × n_assets) matrix of log-returns
+ * @param {object} options - Optional params (window, ewma_span, n_hmm_states)
+ * @returns {Promise<object>} Correlation regime response
+ */
+export async function detectCorrelation(symbols, returnsMatrix, options = {}) {
   const body = {
     symbols,
-    returns_data,
+    returns_matrix: returnsMatrix,
+    window: options.window ?? 60,
+    ewma_span: options.ewma_span ?? 20,
+    n_hmm_states: options.n_hmm_states ?? 4,
   };
 
+  const auth = await getFastApiToken();
   const res = await fetchWithRetry(`${FASTAPI_BASE}/correlation/detect`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(body),
+    auth: auth || undefined,
   });
   return res.json();
 }
 
-export async function optimisePortfolio(
-  positions,
-  prices_data = {},
-  options = {},
-) {
+/**
+ * Run full portfolio optimization (correlation detect + optimise in one call).
+ * POST /optimise/full
+ *
+ * Backend requires: symbols + returns_matrix (n_bars × n_assets 2D array of log-returns)
+ *
+ * @param {string[]} symbols - List of ticker symbols
+ * @param {number[][]} returnsMatrix - (n_bars × n_assets) matrix of log-returns
+ * @param {object} options - Optional params (max_dd_limit, max_weight, risk_free_rate, etc.)
+ * @returns {Promise<object>} Full optimization response (correlation + optimisation)
+ */
+export async function optimisePortfolio(symbols, returnsMatrix, options = {}) {
   const body = {
-    positions,
-    prices_data,
-    target_return: options.target_return ?? 0.1,
+    symbols,
+    returns_matrix: returnsMatrix,
+    max_dd_limit: options.max_dd_limit ?? 0.20,
+    max_weight: options.max_weight ?? 0.40,
     risk_free_rate: options.risk_free_rate ?? 0.04,
+    use_asset_regimes: options.use_asset_regimes ?? true,
+    corr_window: options.corr_window ?? 60,
+    corr_ewma: options.corr_ewma ?? 20,
   };
 
+  const auth = await getFastApiToken();
   const res = await fetchWithRetry(`${FASTAPI_BASE}/optimise/full`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(body),
+    auth: auth || undefined,
+    timeout: SIMULATE_TIMEOUT,
   });
   return res.json();
 }
