@@ -69,3 +69,29 @@ Stage Summary:
 - Fixed "invalid crypto time_in_force" error by restricting TIF options per asset class
 - Full Alpaca API compliance for all supported order types and time-in-force values
 - Three-layer validation: frontend dropdown filtering → frontend review → backend validation
+
+---
+Task ID: 3
+Agent: main
+Task: Create observation builder endpoint connecting frontend to backend obs_builder.py
+
+Work Log:
+- Analyzed ObservationFeatures.jsx showing "Full 24-feature vector requires the observation builder endpoint" — features [0-13] all zeros
+- Confirmed backend obs_builder.py (InferenceObservationBuilder) had NO API endpoint — was only used in tests
+- Created backend router: regime_platform/routers/observation.py with POST /observation/build
+- Added Pydantic schemas: ObservationRequest (prices + high + low + optional params), ObservationResponse (24-dim vector + labels + regime info)
+- Registered observation router in main.py alongside v3.0 routers
+- Added fetchHistoricalOHLC() to yahoo-prices.js for high/low price data (ATR & HHLL features need OHLC)
+- Added buildObservation() to fastapi-client.js calling backend /observation/build
+- Created BFF route: /api/observation/build (fetches OHLC from Yahoo, calls backend)
+- Rewrote ObservationFeatures.jsx to auto-fetch observation vector on mount
+- Added loading spinner, error state with retry, 'Live' badge for full vector
+- Added Markov uniform warning when HMM hasn't converged
+- Passes symbol + period through SearchResults → ObservationFeatures
+- Handles SERVICE_STARTING error for Render spin-up
+- Build succeeds, both repos pushed
+
+Stage Summary:
+- Backend: POST /observation/build — new endpoint exposing InferenceObservationBuilder
+- Frontend: ObservationFeatures now populates all 24 features from real observation vector
+- Frontend repo: 31011f6, Backend repo: 3f149e4
