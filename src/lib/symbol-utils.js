@@ -13,18 +13,31 @@
  * BTC-USD                →  BTC/USD             →  Crypto
  * ETH-USD                →  ETH/USD             →  Crypto
  * ANY-USD                →  ANY/USD             →  Crypto
- * EURUSD=X               →  N/A (not tradable)  →  Forex
- * GBPUSD=X               →  N/A (not tradable)  →  Forex
+ * EURUSD=X               →  EURUSD              →  Forex
+ * GBPUSD=X               →  GBPUSD              →  Forex
  * GC=F (Gold future)     →  N/A (not tradable)  →  Future
  * ^GSPC (S&P 500 index)  →  N/A (use SPY ETF)   →  Index
  * AAPL                   →  AAPL                →  Stock
  * ───────────────────────────────────────────────────────────
+ *
+ * IMPORTANT: Forex is NOT tradable on Alpaca (only US equities
+ * and crypto).  However, we still convert the symbol format so
+ * that features like correlation detection and portfolio
+ * optimization can work with forex data from Yahoo Finance.
+ * The OrderModal and order creation route block forex orders
+ * separately via getAssetClass().
  */
 
 /**
  * Convert a Yahoo Finance symbol to an Alpaca-compatible symbol.
  * Returns the converted symbol, or null if the asset is not
  * tradable on Alpaca (e.g. indices, futures).
+ *
+ * NOTE: Forex symbols (EURUSD=X → EURUSD) ARE converted here
+ * because other features (correlation, optimizer) need the
+ * Alpaca format.  Forex order placement is blocked separately
+ * in OrderModal and /api/alpaca/orders/create via isAlpacaTradable()
+ * which checks getAssetClass().
  */
 export function yahooToAlpacaSymbol(yahooSymbol) {
   if (!yahooSymbol || typeof yahooSymbol !== 'string') return yahooSymbol;
@@ -39,11 +52,12 @@ export function yahooToAlpacaSymbol(yahooSymbol) {
     return `${cryptoMatch[1]}/${cryptoMatch[2]}`;
   }
 
-  // 2. Forex: "EURUSD=X" → NOT tradable on Alpaca
-  //    Alpaca does NOT support forex trading.
-  //    Only US equities and crypto are supported.
+  // 2. Forex: "EURUSD=X" → "EURUSD"
+  //    Yahoo appends "=X" to forex pairs
+  //    Alpaca uses the bare pair code
+  //    NOTE: Forex is NOT tradable on Alpaca — blocked in OrderModal
   if (sym.endsWith('=X')) {
-    return null;
+    return sym.replace(/=X$/, '');
   }
 
   // 3. Futures: "GC=F", "ES=F", "CL=F" → not tradable on Alpaca
@@ -77,10 +91,9 @@ export function getAlpacaTradeabilityReason(yahooSymbol) {
     return 'Indices are not directly tradeable — use the corresponding ETF (e.g. SPY for S&P 500)';
   }
 
-  // Forex check — Alpaca does NOT support forex trading
+  // Forex is NOT supported by Alpaca (only US equities and crypto)
   if (sym.endsWith('=X')) {
-    const converted = sym.replace(/=X$/, '');
-    return `Forex pair ${converted} is not available on Alpaca — Alpaca only supports US equities and crypto trading`;
+    return 'Forex trading is not available on Alpaca — Alpaca only supports US equities and crypto trading';
   }
 
   return null;
@@ -88,9 +101,21 @@ export function getAlpacaTradeabilityReason(yahooSymbol) {
 
 /**
  * Check whether a Yahoo Finance symbol can be traded on Alpaca.
+ * Forex is excluded because Alpaca only supports US equities and crypto.
  */
 export function isAlpacaTradable(yahooSymbol) {
-  return yahooToAlpacaSymbol(yahooSymbol) !== null;
+  if (!yahooSymbol || typeof yahooSymbol !== 'string') return false;
+
+  const sym = yahooSymbol.trim().toUpperCase();
+
+  // Forex not tradable on Alpaca
+  if (sym.endsWith('=X')) return false;
+
+  // Futures / indices not tradable
+  if (sym.includes('=F')) return false;
+  if (sym.startsWith('^')) return false;
+
+  return true;
 }
 
 /**
@@ -112,6 +137,10 @@ export function getAssetClass(yahooSymbol) {
 /**
  * Reverse conversion: Alpaca symbol → Yahoo Finance symbol.
  * Useful when we need to fetch Yahoo Finance data for an Alpaca position.
+ *
+ * Known crypto pairs: "BTC/USD" → "BTC-USD"
+ * Known forex pairs: "EURUSD" → "EURUSD=X"
+ * Everything else: pass through unchanged
  */
 export function alpacaToYahooSymbol(alpacaSymbol) {
   if (!alpacaSymbol || typeof alpacaSymbol !== 'string') return alpacaSymbol;
@@ -124,7 +153,16 @@ export function alpacaToYahooSymbol(alpacaSymbol) {
     return `${cryptoMatch[1]}-${cryptoMatch[2]}`;
   }
 
-  // Forex: We can't reliably reverse this without knowing which
-  // 6-letter codes are forex vs stocks. Best to leave as-is.
+  // Forex: "EURUSD" → "EURUSD=X"
+  //        6-letter all-alpha codes that match known forex pairs
+  const FOREX_PAIRS = [
+    'EURUSD', 'GBPUSD', 'USDJPY', 'AUDUSD', 'USDCAD',
+    'USDCHF', 'NZDUSD', 'EURGBP', 'EURJPY', 'GBPJPY',
+  ];
+  if (FOREX_PAIRS.includes(sym)) {
+    return `${sym}=X`;
+  }
+
+  // Everything else (stocks, ETFs) — same format in both systems
   return sym;
 }

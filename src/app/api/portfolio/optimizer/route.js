@@ -3,6 +3,7 @@ import { getAlpacaKeys } from "@/lib/clerk-metadata";
 import { getPositions } from "@/lib/alpaca-client";
 import { getCached, setCache } from "@/lib/cache";
 import { fetchHistoricalPrices } from "@/lib/yahoo-prices";
+import { alpacaToYahooSymbol } from "@/lib/symbol-utils";
 
 /**
  * Convert an array of closing prices to log-returns.
@@ -68,8 +69,12 @@ export async function POST(request) {
 
     if (!returnsMatrix) {
       // Fetch historical prices for each symbol and convert to log-returns
+      // IMPORTANT: Alpaca position symbols (BTC/USD, EURUSD) must be
+      // converted back to Yahoo Finance format (BTC-USD, EURUSD=X)
+      // before calling fetchHistoricalPrices which uses Yahoo Finance.
+      const yahooSymbols = symbols.map((sym) => alpacaToYahooSymbol(sym));
       const allPrices = await Promise.all(
-        symbols.map((sym) =>
+        yahooSymbols.map((sym) =>
           fetchHistoricalPrices(sym).then((d) => d.prices),
         ),
       );

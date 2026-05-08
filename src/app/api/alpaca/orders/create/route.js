@@ -1,6 +1,6 @@
 import { createOrder } from "@/lib/alpaca-client";
 import { getAlpacaKeys } from "@/lib/clerk-metadata";
-import { yahooToAlpacaSymbol, getAssetClass } from "@/lib/symbol-utils";
+import { yahooToAlpacaSymbol, getAssetClass, isAlpacaTradable, getAlpacaTradeabilityReason } from "@/lib/symbol-utils";
 
 /**
  * Alpaca order-type & time-in-force validation per asset class.
@@ -39,11 +39,20 @@ export async function POST(request) {
       return Response.json({ error: "side must be 'buy' or 'sell'" }, { status: 400 });
     }
 
-    // Safety net: convert Yahoo Finance symbols to Alpaca format
+    // Block non-tradable assets (forex, futures, indices)
+    if (!isAlpacaTradable(symbol)) {
+      const reason = getAlpacaTradeabilityReason(symbol) || `Symbol "${symbol}" is not tradeable on Alpaca`;
+      return Response.json(
+        { error: reason },
+        { status: 400 }
+      );
+    }
+
+    // Convert Yahoo Finance symbols to Alpaca format
     const alpacaSymbol = yahooToAlpacaSymbol(symbol);
     if (alpacaSymbol === null) {
       return Response.json(
-        { error: `Symbol "${symbol}" is not tradeable on Alpaca (futures/indices not supported)` },
+        { error: `Symbol "${symbol}" is not tradeable on Alpaca` },
         { status: 400 }
       );
     }
