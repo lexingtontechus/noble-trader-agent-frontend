@@ -91,7 +91,7 @@ export default function SearchResults({ data, onBuySell }) {
               🔬 HMM Features
             </div>
             <div className="collapse-content">
-              <ObservationFeatures data={analysis} />
+              <ObservationFeatures data={analysis} symbol={symbol} period={period} />
             </div>
           </div>
           <div className="collapse collapse-arrow bg-base-300 rounded-lg">

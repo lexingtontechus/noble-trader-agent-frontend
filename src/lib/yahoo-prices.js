@@ -62,3 +62,41 @@ export async function fetchHistoricalPrices(symbol, period = "1y") {
   setCache(cacheKey, data, CACHE_TTL.PRICE_HISTORICAL);
   return data;
 }
+
+/**
+ * Fetch historical OHLC data (close, high, low) for a symbol from Yahoo Finance.
+ * Used by the observation builder which needs high/low for ATR and HHLL features.
+ *
+ * @param {string} symbol - Ticker symbol
+ * @param {string} period - Time period ("6mo", "1y", "2y")
+ * @returns {Promise<{ symbol: string, period: string, prices: number[], high: number[], low: number[], dates: string[], count: number }>}
+ */
+export async function fetchHistoricalOHLC(symbol, period = "1y") {
+  // Check cache first
+  const cacheKey = `ohlc:${symbol}:${period}`;
+  const cached = getCached(cacheKey);
+  if (cached) return cached;
+
+  const { period1, period2 } = getPeriodDates(period);
+  const result = await yahooFinance.chart(symbol, { period1, period2 });
+
+  const quotes = (result.quotes || []).filter(
+    (q) => q.close != null && q.high != null && q.low != null,
+  );
+  const prices = quotes.map((q) => q.close);
+  const high   = quotes.map((q) => q.high);
+  const low    = quotes.map((q) => q.low);
+  const dates  = quotes.map((q) =>
+    new Date(q.date).toISOString().split("T")[0],
+  );
+
+  if (prices.length < 81) {
+    throw new Error(
+      `Insufficient data for ${symbol}: ${prices.length} bars (minimum 81 required for observation builder)`,
+    );
+  }
+
+  const data = { symbol, period, prices, high, low, dates, count: prices.length };
+  setCache(cacheKey, data, CACHE_TTL.PRICE_HISTORICAL);
+  return data;
+}

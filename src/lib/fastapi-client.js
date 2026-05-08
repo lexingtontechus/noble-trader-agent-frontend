@@ -430,3 +430,46 @@ export async function optimisePortfolio(symbols, returnsMatrix, options = {}) {
   }
   return res.json();
 }
+
+/**
+ * Build a 24-feature observation vector from price series.
+ * POST /observation/build
+ *
+ * Uses InferenceObservationBuilder under the hood — features 14–19
+ * are live Markov regime features from a fitted HMM (never uniform priors).
+ *
+ * @param {number[]} prices - Close price series (min 81 bars)
+ * @param {number[]} high - High price series (same length as prices)
+ * @param {number[]} low - Low price series (same length as prices)
+ * @param {string} symbol - Ticker symbol
+ * @param {object} options - Optional params (window, refit_every, n_hmm_states, recommended_f)
+ * @returns {Promise<object>} ObservationResponse with 24-dim vector
+ */
+export async function buildObservation(prices, high, low, symbol = "UNKNOWN", options = {}) {
+  const body = {
+    prices,
+    high,
+    low,
+    symbol,
+    window: options.window ?? 200,
+    refit_every: options.refit_every ?? 50,
+    n_hmm_states: options.n_hmm_states ?? 4,
+    recommended_f: options.recommended_f ?? 0.0,
+  };
+
+  const authHeaders = await getFastAPIAuthHeaders();
+  const res = await fetchWithRetry(`${FASTAPI_BASE}/observation/build`, {
+    method: "POST",
+    headers: { ...authHeaders, "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+    timeout: SIMULATE_TIMEOUT,
+    retries: 5, // Extra retries for Render spin-up
+  });
+
+  // Guard against HTML responses
+  const ct = res.headers.get("content-type") || "";
+  if (ct.includes("text/html")) {
+    throw new Error("Backend returned HTML instead of JSON. The service may be starting up.");
+  }
+  return res.json();
+}
