@@ -44,19 +44,43 @@ export async function getOrders(apiKey, secretKey, { status = "all", after = nul
   return Array.isArray(result) ? result : [];
 }
 
+/**
+ * Create an order on Alpaca.
+ * Supports: market, limit, stop, stop_limit, trailing_stop
+ * Ref: https://docs.alpaca.markets/reference/postorder
+ */
 export async function createOrder(apiKey, secretKey, order) {
+  const body = {
+    symbol: order.symbol,
+    qty: String(order.qty || 100),
+    side: order.side || "buy",
+    type: order.type || "market",
+    time_in_force: order.time_in_force || "day",
+  };
+
+  // Limit price — required for limit & stop_limit orders
+  if (order.limit_price) {
+    body.limit_price = String(order.limit_price);
+  }
+
+  // Stop price — required for stop & stop_limit orders
+  if (order.stop_price) {
+    body.stop_price = String(order.stop_price);
+  }
+
+  // Trailing stop — either trail_price or trail_percent (not both)
+  if (order.trail_price) {
+    body.trail_price = String(order.trail_price);
+  }
+  if (order.trail_percent) {
+    body.trail_percent = String(order.trail_percent);
+  }
+
   return alpacaFetch("/orders", {
     apiKey,
     secretKey,
     method: "POST",
-    body: {
-      symbol: order.symbol,
-      qty: String(order.qty || 100),
-      side: order.side || "buy",
-      type: order.type || "market",
-      time_in_force: order.time_in_force || "day",
-      ...(order.limit_price && { limit_price: String(order.limit_price) }),
-    },
+    body,
   });
 }
 

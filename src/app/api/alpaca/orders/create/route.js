@@ -1,6 +1,28 @@
 import { createOrder } from "@/lib/alpaca-client";
 import { getAlpacaKeys } from "@/lib/clerk-metadata";
-import { yahooToAlpacaSymbol, isAlpacaTradable } from "@/lib/symbol-utils";
+import { yahooToAlpacaSymbol, getAssetClass } from "@/lib/symbol-utils";
+
+/**
+ * Alpaca order-type & time-in-force validation per asset class.
+ * Ref: https://docs.alpaca.markets/reference/postorder
+ */
+const VALID_TYPES = {
+  equity: ["market", "limit", "stop", "stop_limit", "trailing_stop"],
+  crypto: ["market", "limit", "stop_limit"],
+  forex:  ["market", "limit"],
+};
+
+const VALID_TIF = {
+  equity: ["day", "gtc", "opg", "cls", "ioc", "fok"],
+  crypto: ["gtc", "ioc"],
+  forex:  ["gtc", "ioc", "day"],
+};
+
+function getCategory(assetClass) {
+  if (assetClass === "crypto") return "crypto";
+  if (assetClass === "forex")  return "forex";
+  return "equity";
+}
 
 export async function POST(request) {
   try {
@@ -10,7 +32,7 @@ export async function POST(request) {
     }
 
     const body = await request.json();
-    let { symbol, qty, side, type, time_in_force, limit_price } = body;
+    let { symbol, qty, side, type, time_in_force, limit_price, stop_price, trail_price, trail_percent } = body;
 
     if (!symbol) {
       return Response.json({ error: "symbol required" }, { status: 400 });
@@ -20,7 +42,6 @@ export async function POST(request) {
     }
 
     // Safety net: convert Yahoo Finance symbols to Alpaca format
-    // e.g. "ETH-USD" → "ETH/USD", "EURUSD=X" → "EURUSD"
     const alpacaSymbol = yahooToAlpacaSymbol(symbol);
     if (alpacaSymbol === null) {
       return Response.json(
@@ -29,18 +50,63 @@ export async function POST(request) {
       );
     }
 
-    // If the symbol was converted, use the Alpaca format
     if (alpacaSymbol !== symbol) {
       console.log(`[OrderCreate] Symbol converted: ${symbol} → ${alpacaSymbol}`);
+    }
+
+    // Validate order type & time_in_force against asset class rules
+    const assetClass = getAssetClass(symbol);
+    const category = getCategory(assetClass);
+    const allowedTypes = VALID_TYPES[category];
+    const allowedTIF = VALID_TIF[category];
+
+    const orderType = type || "market";
+    const tif = time_in_force || (category === "crypto" ? "gtc" : "day");
+
+    if (!allowedTypes.includes(orderType)) {
+      return Response.json(
+        { error: `Order type "${orderType}" is not supported for ${category} assets. Allowed: ${allowedTypes.join(", ")}` },
+        { status: 400 }
+      );
+    }
+
+    if (!allowedTIF.includes(tif)) {
+      return Response.json(
+        { error: `Time-in-force "${tif}" is not supported for ${category} assets. Allowed: ${allowedTIF.join(", ")}` },
+        { status: 400 }
+      );
+    }
+
+    // Validate required price fields per order type
+    if ((orderType === "limit" || orderType === "stop_limit") && !limit_price) {
+      return Response.json(
+        { error: `limit_price is required for ${orderType} orders` },
+        { status: 400 }
+      );
+    }
+    if ((orderType === "stop" || orderType === "stop_limit") && !stop_price) {
+      return Response.json(
+        { error: `stop_price is required for ${orderType} orders` },
+        { status: 400 }
+      );
+    }
+    if (orderType === "trailing_stop" && !trail_price && !trail_percent) {
+      return Response.json(
+        { error: "trail_price or trail_percent is required for trailing_stop orders" },
+        { status: 400 }
+      );
     }
 
     const order = await createOrder(keys.apiKey, keys.secretKey, {
       symbol: alpacaSymbol,
       qty: qty || 100,
       side,
-      type: type || "market",
-      time_in_force: time_in_force || "day",
+      type: orderType,
+      time_in_force: tif,
       limit_price,
+      stop_price,
+      trail_price,
+      trail_percent,
     });
 
     return Response.json(order);
