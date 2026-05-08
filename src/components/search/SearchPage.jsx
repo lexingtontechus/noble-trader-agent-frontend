@@ -4,11 +4,29 @@ import { useState, useEffect, useCallback } from 'react';
 import SearchResults from '@/components/search/SearchResults';
 import OrderModal from '@/components/orders/OrderModal';
 import { notifySuccess, notifyError } from '@/lib/notifications';
+import { getAssetClass } from '@/lib/symbol-utils';
 
 const POPULAR_TICKERS = [
   'AAPL', 'MSFT', 'GOOGL', 'AMZN', 'TSLA', 'NVDA', 'META', 'SPY',
   'QQQ', 'DIA', 'IWM', 'GLD', 'SLV', 'BTC-USD', 'ETH-USD', 'EURUSD=X',
 ];
+
+// Badge colors for different asset classes
+const ASSET_CLASS_BADGE = {
+  stock: '',
+  crypto: 'badge-primary',
+  forex: 'badge-secondary',
+  futures: 'badge-accent',
+  index: 'badge-ghost',
+};
+
+const ASSET_CLASS_LABEL = {
+  stock: '',
+  crypto: '₿',
+  forex: '💱',
+  futures: '📈',
+  index: '📊',
+};
 
 const PERIODS = [
   { key: '6mo', label: '6M' },
@@ -171,15 +189,24 @@ export default function SearchPage() {
       <div>
         <h2 className="text-sm font-medium text-base-content/60 mb-2">Popular Tickers</h2>
         <div className="flex flex-wrap gap-2">
-          {POPULAR_TICKERS.map((ticker) => (
-            <button
-              key={ticker}
-              className="btn btn-sm btn-outline"
-              onClick={() => handleTickerClick(ticker)}
-            >
-              {ticker}
-            </button>
-          ))}
+          {POPULAR_TICKERS.map((ticker) => {
+            const cls = getAssetClass(ticker);
+            const isNonStock = cls !== 'stock';
+            return (
+              <button
+                key={ticker}
+                className={`btn btn-sm btn-outline ${isNonStock ? 'gap-1' : ''}`}
+                onClick={() => handleTickerClick(ticker)}
+              >
+                {ticker}
+                {isNonStock && (
+                  <span className={`badge badge-xs ${ASSET_CLASS_BADGE[cls] || ''}`}>
+                    {ASSET_CLASS_LABEL[cls] || cls}
+                  </span>
+                )}
+              </button>
+            );
+          })}
         </div>
       </div>
 

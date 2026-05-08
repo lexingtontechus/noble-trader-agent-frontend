@@ -24,3 +24,24 @@ Stage Summary:
 - Secondary bug: localhost:3000 in BFF routes doesn't work on Vercel
 - Both issues fixed and deployed to `lexingtontechus/noble-trader-agent-frontend`
 - No backend changes needed (auth is correct, endpoints exist)
+---
+Task ID: 1
+Agent: main
+Task: Fix wrong symbol format passed to Alpaca when trading searched symbols (crypto/forex)
+
+Work Log:
+- Analyzed uploaded screenshots showing errors: `asset 'ETH-USD' not found` and `asset "EURUSD=X" not found`
+- Traced the full data flow: SearchPage → SearchResults → OrderModal → BFF route → Alpaca API
+- Identified root cause: Yahoo Finance format symbols (e.g., BTC-USD, ETH-USD, EURUSD=X) were passed directly to Alpaca which expects different formats (BTC/USD, ETH/USD, EURUSD)
+- Created `/src/lib/symbol-utils.js` with conversion utilities: `yahooToAlpacaSymbol()`, `isAlpacaTradable()`, `getAlpacaTradeabilityReason()`, `getAssetClass()`, `alpacaToYahooSymbol()`
+- Updated `OrderModal.jsx` to convert symbols before submission, show conversion notice, and block non-tradable assets (futures/indices)
+- Updated BFF route `/api/alpaca/orders/create/route.js` with server-side symbol conversion as safety net
+- Updated `SearchPage.jsx` with asset class badges on popular tickers (₿ for crypto, 💱 for forex)
+- Updated `SearchResults.jsx` to show Alpaca-converted symbols on Buy/Sell buttons with conversion badges
+- Build succeeds with no errors
+
+Stage Summary:
+- Symbol conversion rules: `BTC-USD`→`BTC/USD` (crypto), `EURUSD=X`→`EURUSD` (forex), `GC=F`→null (futures not tradeable), `^GSPC`→null (indices not tradeable)
+- Two-layer defense: frontend conversion in OrderModal + backend conversion in BFF route
+- User now sees conversion notice in OrderModal and SearchResults showing the mapping
+- Non-tradable assets (futures, indices) are blocked before order submission with clear warnings

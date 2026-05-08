@@ -1,7 +1,13 @@
 "use client";
 
 import { useState, useEffect, useRef, useCallback } from "react";
-import { notifySuccess, notifyError } from "@/lib/notifications";
+import { notifySuccess, notifyError, notifyWarning } from "@/lib/notifications";
+import {
+  yahooToAlpacaSymbol,
+  getAlpacaTradeabilityReason,
+  isAlpacaTradable,
+  getAssetClass,
+} from "@/lib/symbol-utils";
 
 export default function OrderModal({ symbol, onClose, onSuccess }) {
   const [side, setSide] = useState("buy");
@@ -15,6 +21,16 @@ export default function OrderModal({ symbol, onClose, onSuccess }) {
   const [toast, setToast] = useState("");
   const modalRef = useRef(null);
   const firstInputRef = useRef(null);
+
+  // Convert the incoming Yahoo Finance symbol to Alpaca format
+  const alpacaSymbol = yahooToAlpacaSymbol(symbol);
+  const assetClass = getAssetClass(symbol);
+  const tradeabilityReason = getAlpacaTradeabilityReason(symbol);
+  const canTrade = isAlpacaTradable(symbol);
+
+  // Show the Alpaca-compatible symbol to the user (or the original if same)
+  const displaySymbol = alpacaSymbol || symbol;
+  const symbolConverted = alpacaSymbol !== symbol && alpacaSymbol !== null;
 
   // Lock body scroll when modal is open
   useEffect(() => {
@@ -53,12 +69,21 @@ export default function OrderModal({ symbol, onClose, onSuccess }) {
   }, [confirming]);
 
   const handleSubmit = async () => {
+    // Block submission for non-tradable assets
+    if (!canTrade) {
+      const msg = tradeabilityReason || `${symbol} is not available for trading on Alpaca`;
+      setError(msg);
+      notifyError(msg);
+      setConfirming(false);
+      return;
+    }
+
     setSubmitting(true);
     setError("");
 
     try {
       const body = {
-        symbol,
+        symbol: alpacaSymbol, // Always send the Alpaca-compatible symbol
         qty: Number(qty),
         side,
         type: orderType,
@@ -81,8 +106,8 @@ export default function OrderModal({ symbol, onClose, onSuccess }) {
         throw new Error(data.error || "Order failed");
       }
 
-      setToast(`${side.toUpperCase()} ${qty} ${symbol} order submitted!`);
-      notifySuccess(`${side.toUpperCase()} ${qty} ${symbol} order submitted!`);
+      setToast(`${side.toUpperCase()} ${qty} ${displaySymbol} order submitted!`);
+      notifySuccess(`${side.toUpperCase()} ${qty} ${displaySymbol} order submitted!`);
       setTimeout(() => {
         setToast("");
         onSuccess();
@@ -138,11 +163,33 @@ export default function OrderModal({ symbol, onClose, onSuccess }) {
 
           {/* Title */}
           <h3 className="font-bold text-lg mb-1">
-            {side === "buy" ? "Buy" : "Sell"} {symbol}
+            {side === "buy" ? "Buy" : "Sell"} {displaySymbol}
           </h3>
           <p className="text-sm text-base-content/60 mb-5">
             Place a paper trading order via Alpaca
           </p>
+
+          {/* Symbol conversion notice */}
+          {symbolConverted && (
+            <div className="alert alert-info mb-3 py-2">
+              <svg xmlns="http://www.w3.org/2000/svg" className="stroke-current shrink-0 h-4 w-4" fill="none" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+              </svg>
+              <span className="text-xs">
+                Symbol converted: {symbol} → {alpacaSymbol} ({assetClass})
+              </span>
+            </div>
+          )}
+
+          {/* Non-tradable asset warning */}
+          {!canTrade && (
+            <div className="alert alert-warning mb-3 py-2">
+              <svg xmlns="http://www.w3.org/2000/svg" className="stroke-current shrink-0 h-4 w-4" fill="none" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L4.082 16.5c-.77.833.192 2.5 1.732 2.5z" />
+              </svg>
+              <span className="text-xs">{tradeabilityReason}</span>
+            </div>
+          )}
 
           {!confirming ? (
             <>
@@ -154,7 +201,7 @@ export default function OrderModal({ symbol, onClose, onSuccess }) {
                 <input
                   type="text"
                   className="input input-bordered w-full opacity-70"
-                  value={symbol}
+                  value={displaySymbol}
                   disabled
                 />
               </div>
@@ -273,7 +320,15 @@ export default function OrderModal({ symbol, onClose, onSuccess }) {
                 </button>
                 <button
                   className={`btn ${side === "buy" ? "btn-success" : "btn-error"} w-full sm:w-auto order-1 sm:order-2`}
-                  onClick={() => setConfirming(true)}
+                  onClick={() => {
+                    if (!canTrade) {
+                      const msg = tradeabilityReason || `${symbol} is not available for trading on Alpaca`;
+                      setError(msg);
+                      notifyWarning(msg);
+                      return;
+                    }
+                    setConfirming(true);
+                  }}
                   disabled={orderType === "limit" && !limitPrice}
                 >
                   Review Order
@@ -288,7 +343,17 @@ export default function OrderModal({ symbol, onClose, onSuccess }) {
                 <div className="bg-base-200 rounded-lg p-4 space-y-2.5">
                   <div className="flex justify-between text-sm">
                     <span className="text-base-content/60">Symbol</span>
-                    <span className="font-mono font-bold">{symbol}</span>
+                    <span className="font-mono font-bold">{displaySymbol}</span>
+                  </div>
+                  {symbolConverted && (
+                    <div className="flex justify-between text-sm">
+                      <span className="text-base-content/60">Original</span>
+                      <span className="font-mono text-base-content/50">{symbol} → {alpacaSymbol}</span>
+                    </div>
+                  )}
+                  <div className="flex justify-between text-sm">
+                    <span className="text-base-content/60">Asset Class</span>
+                    <span className="badge badge-sm badge-outline">{assetClass}</span>
                   </div>
                   <div className="flex justify-between text-sm">
                     <span className="text-base-content/60">Side</span>

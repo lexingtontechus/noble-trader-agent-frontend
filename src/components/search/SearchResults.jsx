@@ -7,6 +7,7 @@ import ObservationFeatures from '@/components/analysis/ObservationFeatures'
 import RiskCard from '@/components/analysis/RiskCard'
 import RecommendationsCard from '@/components/analysis/RecommendationsCard'
 import CommentaryCard from '@/components/analysis/CommentaryCard'
+import { yahooToAlpacaSymbol, getAssetClass } from '@/lib/symbol-utils'
 
 function CommentaryCardWrapper({ symbol, regime, sizing, risk }) {
   const [commentary, setCommentary] = useState('')
@@ -49,15 +50,21 @@ export default function SearchResults({ data, onBuySell }) {
   return (
     <div className="space-y-4 animate-fade-in-up">
       {/* Buy/Sell Buttons */}
-      <div className="flex gap-3 flex-wrap">
+      <div className="flex gap-3 flex-wrap items-center">
         <button className="btn btn-success btn-sm" onClick={() => onBuySell(symbol)}>
-          Buy {symbol}
+          Buy {yahooToAlpacaSymbol(symbol) || symbol}
         </button>
         <button className="btn btn-error btn-sm" onClick={() => onBuySell(symbol)}>
-          Sell {symbol}
+          Sell {yahooToAlpacaSymbol(symbol) || symbol}
         </button>
+        {yahooToAlpacaSymbol(symbol) !== symbol && yahooToAlpacaSymbol(symbol) !== null && (
+          <span className="badge badge-info badge-sm">
+            {symbol} → {yahooToAlpacaSymbol(symbol)}
+          </span>
+        )}
         <span className="badge badge-outline badge-sm">{period}</span>
         <span className="badge badge-ghost badge-sm">{prices?.length || 0} bars</span>
+        <span className="badge badge-sm badge-ghost">{getAssetClass(symbol)}</span>
       </div>
 
       {/* Two-column layout */}
