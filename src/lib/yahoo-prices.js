@@ -1,6 +1,7 @@
 import YahooFinance from "yahoo-finance2";
 import { getCached, setCache } from "@/lib/cache";
 import { CACHE_TTL } from "@/lib/config";
+import { normalizeToYahooSymbol } from "@/lib/symbol-utils";
 
 const yahooFinance = new YahooFinance({ suppressNotices: ["ripHistorical"] });
 
@@ -38,13 +39,18 @@ function getPeriodDates(period) {
  * @returns {Promise<{ symbol: string, period: string, prices: number[], dates: string[], count: number }>}
  */
 export async function fetchHistoricalPrices(symbol, period = "1y") {
-  // Check cache first
-  const cacheKey = `prices:${symbol}:${period}`;
+  // Normalize the symbol to Yahoo Finance format before querying.
+  // This ensures bare crypto ("BTC" → "BTC-USD") and other formats
+  // are correctly handled at the Yahoo Finance gateway.
+  const yahooSymbol = normalizeToYahooSymbol(symbol);
+
+  // Check cache first (use the normalized symbol as the cache key)
+  const cacheKey = `prices:${yahooSymbol}:${period}`;
   const cached = getCached(cacheKey);
   if (cached) return cached;
 
   const { period1, period2 } = getPeriodDates(period);
-  const result = await yahooFinance.chart(symbol, { period1, period2 });
+  const result = await yahooFinance.chart(yahooSymbol, { period1, period2 });
 
   const quotes = (result.quotes || []).filter((q) => q.close != null);
   const prices = quotes.map((q) => q.close);
@@ -58,7 +64,7 @@ export async function fetchHistoricalPrices(symbol, period = "1y") {
     );
   }
 
-  const data = { symbol, period, prices, dates, count: prices.length };
+  const data = { symbol: yahooSymbol, period, prices, dates, count: prices.length };
   setCache(cacheKey, data, CACHE_TTL.PRICE_HISTORICAL);
   return data;
 }
@@ -72,13 +78,16 @@ export async function fetchHistoricalPrices(symbol, period = "1y") {
  * @returns {Promise<{ symbol: string, period: string, prices: number[], high: number[], low: number[], dates: string[], count: number }>}
  */
 export async function fetchHistoricalOHLC(symbol, period = "1y") {
-  // Check cache first
-  const cacheKey = `ohlc:${symbol}:${period}`;
+  // Normalize the symbol to Yahoo Finance format before querying.
+  const yahooSymbol = normalizeToYahooSymbol(symbol);
+
+  // Check cache first (use the normalized symbol as the cache key)
+  const cacheKey = `ohlc:${yahooSymbol}:${period}`;
   const cached = getCached(cacheKey);
   if (cached) return cached;
 
   const { period1, period2 } = getPeriodDates(period);
-  const result = await yahooFinance.chart(symbol, { period1, period2 });
+  const result = await yahooFinance.chart(yahooSymbol, { period1, period2 });
 
   const quotes = (result.quotes || []).filter(
     (q) => q.close != null && q.high != null && q.low != null,
@@ -96,7 +105,7 @@ export async function fetchHistoricalOHLC(symbol, period = "1y") {
     );
   }
 
-  const data = { symbol, period, prices, high, low, dates, count: prices.length };
+  const data = { symbol: yahooSymbol, period, prices, high, low, dates, count: prices.length };
   setCache(cacheKey, data, CACHE_TTL.PRICE_HISTORICAL);
   return data;
 }

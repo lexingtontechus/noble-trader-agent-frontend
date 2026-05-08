@@ -1,6 +1,7 @@
 import YahooFinance from "yahoo-finance2";
 import { analyseFull } from "@/lib/fastapi-client";
 import { getCached, setCache } from "@/lib/cache";
+import { normalizeToYahooSymbol } from "@/lib/symbol-utils";
 
 const yahooFinance = new YahooFinance({ suppressNotices: ["ripHistorical"] });
 
@@ -31,13 +32,17 @@ export async function POST(request) {
       return Response.json({ error: "symbol required" }, { status: 400 });
     }
 
-    const cacheKey = `analyse:${symbol}:${period}`;
+    // Normalize the symbol to Yahoo Finance format.
+    // Bare crypto like "BTC" becomes "BTC-USD" so Yahoo Finance can find it.
+    const yahooSymbol = normalizeToYahooSymbol(symbol);
+
+    const cacheKey = `analyse:${yahooSymbol}:${period}`;
     const cached = getCached(cacheKey);
     if (cached) return Response.json(cached);
 
     // Fetch prices
     const { period1, period2 } = getPeriodDates(period);
-    const result = await yahooFinance.chart(symbol, { period1, period2 });
+    const result = await yahooFinance.chart(yahooSymbol, { period1, period2 });
 
     const quotes = (result.quotes || []).filter((q) => q.close != null);
     const prices = quotes.map((q) => q.close);
@@ -57,7 +62,7 @@ export async function POST(request) {
       base_risk_limit,
     });
 
-    const data = { symbol, period, prices, dates, count: prices.length, analysis };
+    const data = { symbol: yahooSymbol, period, prices, dates, count: prices.length, analysis };
     setCache(cacheKey, data);
     return Response.json(data);
   } catch (error) {

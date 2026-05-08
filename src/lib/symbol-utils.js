@@ -29,6 +29,144 @@
  */
 
 /**
+ * Well-known cryptocurrency base currencies.
+ * Used to detect bare crypto symbols (e.g. "BTC") that need to be
+ * converted to Yahoo Finance format (e.g. "BTC-USD") before
+ * calling the Yahoo Finance API.
+ *
+ * When a user types just "BTC" or "ETH" in the search box, or
+ * when Alpaca returns a position with a bare crypto base symbol,
+ * this set allows us to recognize it as crypto rather than a
+ * stock ticker.
+ */
+const CRYPTO_BASES = new Set([
+  // Top market-cap coins
+  'BTC', 'ETH', 'BNB', 'XRP', 'ADA', 'SOL', 'DOT', 'DOGE',
+  'AVAX', 'MATIC', 'LINK', 'UNI', 'ATOM', 'LTC', 'ETC',
+  'XLM', 'ALGO', 'VET', 'NEAR', 'FIL', 'FTM', 'APT',
+  'ARB', 'OP', 'SHIB', 'CRO', 'LDO', 'SAND', 'MANA',
+  'AAVE', 'MKR', 'GRT', 'CRV', 'SNX', 'COMP', 'YFI',
+  'SUSHI', '1INCH', 'ENJ', 'BAT', 'ZRX', 'RENDER',
+  'IMX', 'STX', 'TIA', 'SEI', 'SUI', 'PEPE', 'WIF',
+  'BONK', 'JUP', 'JTO', 'PYTH', 'ONDO', 'ENA', 'ETHFI',
+  'W', 'STARK', 'STRK', 'DYDX', 'GMX', 'PENDLE', 'IO',
+  // Stablecoins (for completeness)
+  'USDT', 'USDC', 'DAI', 'BUSD', 'TUSD', 'FRAX',
+  // Wrapped / pegged tokens
+  'WBTC', 'WETH', 'STETH', 'CBETH', 'RETH',
+  // Other frequently traded
+  'XTZ', 'HBAR', 'FLOW', 'KAVA', 'RUNE', 'INJ', 'OSMO',
+  'TWT', 'CHZ', 'ZIL', 'ONT', 'IOST', 'ICX', 'WAVES',
+  'DASH', 'NEO', 'KLAY', 'FTM',
+]);
+
+/**
+ * Known fiat currency codes used in forex and crypto pairs.
+ * Used by normalizeToYahooSymbol() to detect forex pairs when
+ * a 6-letter all-alpha code is provided (e.g. "EURUSD").
+ */
+const FIAT_CODES = new Set([
+  'USD', 'EUR', 'GBP', 'JPY', 'AUD', 'CAD', 'CHF', 'NZD',
+  'CNY', 'HKD', 'SGD', 'SEK', 'NOK', 'MXN', 'BRL', 'ZAR',
+  'KRW', 'INR', 'RUB', 'TRY', 'THB', 'IDR', 'MYR', 'PHP',
+  'CZK', 'PLN', 'ILS', 'CLP', 'COP', 'PEN', 'ARS', 'TWD',
+]);
+
+/**
+ * Normalize ANY symbol to the correct Yahoo Finance format.
+ *
+ * This is the single source of truth for "whatever the user or
+ * system gives us → what Yahoo Finance expects".  Call this at
+ * every entry point that calls the Yahoo Finance API.
+ *
+ * Handles all known input formats:
+ * ┌─────────────────┬─────────────────┬────────────┐
+ * │ Input           │ Output          │ Type       │
+ * ├─────────────────┼─────────────────┼────────────┤
+ * │ "BTC"           │ "BTC-USD"       │ Bare crypto│
+ * │ "ETH"           │ "ETH-USD"       │ Bare crypto│
+ * │ "BTC/USD"       │ "BTC-USD"       │ Alpaca cry.│
+ * │ "BTC-USD"       │ "BTC-USD"       │ Yahoo cry. │
+ * │ "BTCUSD"        │ "BTC-USD"       │ Concat cry.│
+ * │ "EURUSD"        │ "EURUSD=X"      │ Forex      │
+ * │ "EURUSD=X"      │ "EURUSD=X"      │ Yahoo forex│
+ * │ "AAPL"          │ "AAPL"          │ Stock      │
+ * │ "GC=F"          │ "GC=F"          │ Future     │
+ * │ "^GSPC"         │ "^GSPC"         │ Index      │
+ * └─────────────────┴─────────────────┴────────────┘
+ *
+ * @param {string} symbol - Symbol in any known format
+ * @returns {string} Symbol in Yahoo Finance format
+ */
+export function normalizeToYahooSymbol(symbol) {
+  if (!symbol || typeof symbol !== 'string') return symbol;
+
+  const sym = symbol.trim().toUpperCase();
+
+  // ── Already in Yahoo Finance format ────────────────────────
+
+  // Crypto: "BTC-USD" (already correct)
+  if (/^[A-Z]{2,5}-[A-Z]{3}$/.test(sym)) return sym;
+
+  // Forex: "EURUSD=X" (already correct)
+  if (sym.endsWith('=X')) return sym;
+
+  // Futures: "GC=F" (already correct)
+  if (sym.includes('=F')) return sym;
+
+  // Indices: "^GSPC" (already correct)
+  if (sym.startsWith('^')) return sym;
+
+  // ── Alpaca format conversions ──────────────────────────────
+
+  // Crypto: "BTC/USD" → "BTC-USD"
+  const cryptoSlashMatch = sym.match(/^([A-Z]{2,5})\/([A-Z]{3})$/);
+  if (cryptoSlashMatch) {
+    return `${cryptoSlashMatch[1]}-${cryptoSlashMatch[2]}`;
+  }
+
+  // ── Bare crypto detection ──────────────────────────────────
+
+  // Known bare crypto base: "BTC" → "BTC-USD"
+  if (CRYPTO_BASES.has(sym)) {
+    return `${sym}-USD`;
+  }
+
+  // ── Concatenated crypto pair detection ─────────────────────
+
+  // "BTCUSD" → check if starts with a known crypto base + fiat
+  // This handles cases where Alpaca or other systems return
+  // crypto pairs without a separator.
+  if (/^[A-Z]{3,8}$/.test(sym) && sym.length >= 6) {
+    // Try splitting at known crypto bases (longest first)
+    const sortedBases = [...CRYPTO_BASES].sort((a, b) => b.length - a.length);
+    for (const base of sortedBases) {
+      if (sym.startsWith(base)) {
+        const quote = sym.slice(base.length);
+        if (quote.length >= 3 && FIAT_CODES.has(quote)) {
+          return `${base}-${quote}`;
+        }
+      }
+    }
+  }
+
+  // ── Forex detection ────────────────────────────────────────
+
+  // 6-letter all-alpha code: "EURUSD" → "EURUSD=X"
+  // Must be exactly 6 alpha chars that split into two known fiat codes
+  if (/^[A-Z]{6}$/.test(sym)) {
+    const first3 = sym.slice(0, 3);
+    const last3 = sym.slice(3, 6);
+    if (FIAT_CODES.has(first3) && FIAT_CODES.has(last3)) {
+      return `${sym}=X`;
+    }
+  }
+
+  // ── Default: treat as stock / ETF ──────────────────────────
+  return sym;
+}
+
+/**
  * Convert a Yahoo Finance symbol to an Alpaca-compatible symbol.
  * Returns the converted symbol, or null if the asset is not
  * tradable on Alpaca (e.g. indices, futures).
@@ -120,14 +258,33 @@ export function isAlpacaTradable(yahooSymbol) {
 
 /**
  * Get the asset class for display purposes.
+ * Accepts symbols in any format (Yahoo, Alpaca, or bare).
  */
-export function getAssetClass(yahooSymbol) {
-  if (!yahooSymbol || typeof yahooSymbol !== 'string') return 'unknown';
+export function getAssetClass(symbol) {
+  if (!symbol || typeof symbol !== 'string') return 'unknown';
 
-  const sym = yahooSymbol.trim().toUpperCase();
+  const sym = symbol.trim().toUpperCase();
 
+  // Yahoo crypto: "BTC-USD"
   if (/^[A-Z]{2,5}-[A-Z]{3}$/.test(sym)) return 'crypto';
+
+  // Alpaca crypto: "BTC/USD"
+  if (/^[A-Z]{2,5}\/[A-Z]{3}$/.test(sym)) return 'crypto';
+
+  // Bare known crypto base: "BTC", "ETH"
+  if (CRYPTO_BASES.has(sym)) return 'crypto';
+
+  // Yahoo forex: "EURUSD=X"
   if (sym.endsWith('=X')) return 'forex';
+
+  // 6-letter all-alpha forex pair: "EURUSD"
+  if (/^[A-Z]{6}$/.test(sym)) {
+    const first3 = sym.slice(0, 3);
+    const last3 = sym.slice(3, 6);
+    if (FIAT_CODES.has(first3) && FIAT_CODES.has(last3)) return 'forex';
+  }
+
+  // Futures / indices
   if (sym.includes('=F')) return 'futures';
   if (sym.startsWith('^')) return 'index';
 
@@ -139,8 +296,9 @@ export function getAssetClass(yahooSymbol) {
  * Useful when we need to fetch Yahoo Finance data for an Alpaca position.
  *
  * Known crypto pairs: "BTC/USD" → "BTC-USD"
- * Known forex pairs: "EURUSD" → "EURUSD=X"
- * Everything else: pass through unchanged
+ * Bare crypto bases:  "BTC"     → "BTC-USD"   (NEW)
+ * Known forex pairs:  "EURUSD"  → "EURUSD=X"
+ * Everything else:    pass through unchanged
  */
 export function alpacaToYahooSymbol(alpacaSymbol) {
   if (!alpacaSymbol || typeof alpacaSymbol !== 'string') return alpacaSymbol;
@@ -148,19 +306,26 @@ export function alpacaToYahooSymbol(alpacaSymbol) {
   const sym = alpacaSymbol.trim().toUpperCase();
 
   // Crypto: "BTC/USD" → "BTC-USD"
-  const cryptoMatch = sym.match(/^([A-Z]{2,5})\/([A-Z]{3})$/);
-  if (cryptoMatch) {
-    return `${cryptoMatch[1]}-${cryptoMatch[2]}`;
+  const cryptoSlashMatch = sym.match(/^([A-Z]{2,5})\/([A-Z]{3})$/);
+  if (cryptoSlashMatch) {
+    return `${cryptoSlashMatch[1]}-${cryptoSlashMatch[2]}`;
+  }
+
+  // Bare crypto base: "BTC" → "BTC-USD"
+  // Alpaca sometimes returns just the base symbol for crypto positions,
+  // or users may type a bare crypto symbol in the search box.
+  if (CRYPTO_BASES.has(sym)) {
+    return `${sym}-USD`;
   }
 
   // Forex: "EURUSD" → "EURUSD=X"
-  //        6-letter all-alpha codes that match known forex pairs
-  const FOREX_PAIRS = [
-    'EURUSD', 'GBPUSD', 'USDJPY', 'AUDUSD', 'USDCAD',
-    'USDCHF', 'NZDUSD', 'EURGBP', 'EURJPY', 'GBPJPY',
-  ];
-  if (FOREX_PAIRS.includes(sym)) {
-    return `${sym}=X`;
+  //        6-letter all-alpha codes that match known fiat pairs
+  if (/^[A-Z]{6}$/.test(sym)) {
+    const first3 = sym.slice(0, 3);
+    const last3 = sym.slice(3, 6);
+    if (FIAT_CODES.has(first3) && FIAT_CODES.has(last3)) {
+      return `${sym}=X`;
+    }
   }
 
   // Everything else (stocks, ETFs) — same format in both systems

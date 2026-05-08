@@ -2,6 +2,7 @@ import { fetchHistoricalOHLC } from "@/lib/yahoo-prices";
 import { buildObservation } from "@/lib/fastapi-client";
 import { getCached, setCache } from "@/lib/cache";
 import { CACHE_TTL } from "@/lib/config";
+import { normalizeToYahooSymbol } from "@/lib/symbol-utils";
 
 export async function POST(request) {
   try {
@@ -12,25 +13,29 @@ export async function POST(request) {
       return Response.json({ error: "symbol required" }, { status: 400 });
     }
 
+    // Normalize the symbol to Yahoo Finance format.
+    // Bare crypto like "BTC" becomes "BTC-USD" so Yahoo Finance can find it.
+    const yahooSymbol = normalizeToYahooSymbol(symbol);
+
     // Check cache
-    const cacheKey = `observation:${symbol}:${period}`;
+    const cacheKey = `observation:${yahooSymbol}:${period}`;
     const cached = getCached(cacheKey);
     if (cached) return Response.json(cached);
 
     // Fetch OHLC data from Yahoo Finance (we need high/low for ATR & HHLL)
-    const ohlc = await fetchHistoricalOHLC(symbol, period);
+    const ohlc = await fetchHistoricalOHLC(yahooSymbol, period);
 
     // Call FastAPI backend /observation/build
     const observation = await buildObservation(
       ohlc.prices,
       ohlc.high,
       ohlc.low,
-      symbol,
+      yahooSymbol,
       { window, refit_every, n_hmm_states, recommended_f },
     );
 
     const data = {
-      symbol,
+      symbol: yahooSymbol,
       period,
       ...observation,
     };

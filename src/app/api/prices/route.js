@@ -2,6 +2,7 @@ import { fetchHistoricalPrices } from "@/lib/yahoo-prices";
 import { getCached } from "@/lib/cache";
 import { checkRateLimit, getClientIp } from "@/lib/rate-limiter";
 import { RATE_LIMIT } from "@/lib/config";
+import { normalizeToYahooSymbol } from "@/lib/symbol-utils";
 
 export async function GET(request) {
   // Rate limit: 10 requests per minute per IP for historical data
@@ -26,12 +27,16 @@ export async function GET(request) {
   }
 
   const { searchParams } = new URL(request.url);
-  const symbol = searchParams.get("symbol");
+  const rawSymbol = searchParams.get("symbol");
   const period = searchParams.get("period") || "6mo";
 
-  if (!symbol) {
+  if (!rawSymbol) {
     return Response.json({ error: "symbol parameter required" }, { status: 400 });
   }
+
+  // Normalize the symbol to Yahoo Finance format.
+  // Bare crypto like "BTC" becomes "BTC-USD" so Yahoo Finance can find it.
+  const symbol = normalizeToYahooSymbol(rawSymbol);
 
   // Check cache first (shared with BFF routes via yahoo-prices module)
   const cacheKey = `prices:${symbol}:${period}`;
