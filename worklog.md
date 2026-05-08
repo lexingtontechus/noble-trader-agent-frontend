@@ -231,3 +231,23 @@ Stage Summary:
 - Backend: Updated main.py to v3.0.0 with all routers included, pushed to remote (commit 36640f1)
 - Key fix: /correlation/detect, /optimise, /optimise/full endpoints will now be available when Render redeploys
 - render.yaml autoDeploy enabled — Render should auto-detect the push and redeploy
+
+---
+Task ID: Auth-Fix-1
+Agent: Main Orchestrator
+Task: Fix "Not authenticated" errors on Correlation Detection and Portfolio Optimizer
+
+Work Log:
+- Traced error flow: Frontend → BFF routes → fastapi-client.js → FastAPI backend
+- Identified Bug 1 (Frontend): `detectCorrelation()` and `optimisePortfolio()` in fastapi-client.js used `getFastApiToken()` which tries broken OAuth2/API-key flow — always returned null, so no Authorization header was sent
+- Identified Bug 2 (Backend): `clerk_auth.py` hardcoded JWKS URL to `large-shark-21.clerk.accounts.dev`, but frontend runs in keyless mode with `communal-guppy-27.clerk.accounts.dev` — tokens from different instances can't cross-verify
+- Fixed frontend: Updated all FastAPI-calling functions (detectCorrelation, optimisePortfolio, simulateRegime, getPortfolio, getPortfolioSymbols) to use `getFastAPIAuthHeaders()` instead of `getFastApiToken()`
+- Enhanced `getFastAPIAuthHeaders()` with 4 auth methods: (1) Clerk auth().getToken(), (2) __session cookie direct read, (3) forward incoming Authorization header, (4) X-API-Key env var fallback
+- Fixed backend: Updated `clerk_auth.py` to dynamically extract JWKS URL from JWT issuer claim (iss) instead of hardcoding. Added JWKS cache per issuer (1-hour TTL). Added `CLERK_JWKS_URL` env var for explicit override.
+- Updated `jwt_auth.py` `get_authed_user()` to use `_try_clerk_verification()` which dynamically detects Clerk tokens by checking the issuer before attempting verification
+
+Stage Summary:
+- Frontend: Committed 8672860, pushed to remote
+- Backend: Committed c113b8c, pushed to remote
+- Both repos deployed with auth fixes
+- Key change: Clerk JWT tokens from ANY instance (including keyless mode) can now be verified by the backend
