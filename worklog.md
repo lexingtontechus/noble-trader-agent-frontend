@@ -208,3 +208,26 @@ Stage Summary:
 - Category 1 (UX): NotificationToast component, mobile bottom nav bar, Simulate/Admin views accessible, footer v2.0
 - Category 2 (Efficiency): LRU cache with 100-entry limit, adaptive polling (15s/30s/60s), request dedup, exponential backoff, z-ai + Groq dual-provider commentary with 10-min cache
 - All optimizations verified working — app compiles and serves correctly
+
+---
+Task ID: Deploy-1
+Agent: Main Orchestrator
+Task: Deploy all changes to both backend and frontend repos
+
+Work Log:
+- Verified frontend repo (lexingtontechus/noble-trader-agent-frontend) is fully synced — clean working tree, up to date with origin/main (commit d548cd8)
+- Cloned backend repo (Noble-Trading-App/noble-trader-fastapi-backend) to /tmp/backend-repo
+- Identified root cause of /correlation/detect and /optimise/full 404 errors: deployed main.py was v1.0.0 and only included v2.x routers (regime, sizing, risk, pipeline, simulate, portfolio, auth_router) — missing the multi_asset router
+- The multi_asset router (regime_platform/routers/multi_asset.py) contains all three missing endpoints: /correlation/detect, /optimise, /optimise/full
+- Updated main.py from v1.0.0 to v3.0.0 to include all routers: multi_asset, gpu, feeds, stream_rest, stream_ws
+- Added lifespan context manager for Redis persistence and GPU initialization
+- Updated health endpoint with version, sessions, redis, gpu info
+- Updated root endpoint with full endpoint listing including all v3.0 endpoints
+- Enabled autoDeploy: true in render.yaml
+- Committed and pushed backend to remote (commit 36640f1)
+
+Stage Summary:
+- Frontend: Already deployed and synced (commit d548cd8) — no changes needed
+- Backend: Updated main.py to v3.0.0 with all routers included, pushed to remote (commit 36640f1)
+- Key fix: /correlation/detect, /optimise, /optimise/full endpoints will now be available when Render redeploys
+- render.yaml autoDeploy enabled — Render should auto-detect the push and redeploy
