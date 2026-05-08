@@ -2,6 +2,7 @@ import { detectCorrelation } from "@/lib/fastapi-client";
 import { getAlpacaKeys } from "@/lib/clerk-metadata";
 import { getPositions } from "@/lib/alpaca-client";
 import { getCached, setCache } from "@/lib/cache";
+import { fetchHistoricalPrices } from "@/lib/yahoo-prices";
 
 /**
  * Convert an array of closing prices to log-returns.
@@ -15,23 +16,6 @@ function toLogReturns(prices) {
     }
   }
   return returns;
-}
-
-/**
- * Fetch historical prices for a symbol using Yahoo Finance via our /api/prices route.
- * Returns array of closing prices.
- */
-async function fetchHistoricalPrices(symbol, period = "1y") {
-  const res = await fetch(
-    `http://localhost:3000/api/prices?symbol=${encodeURIComponent(symbol)}&period=${period}`,
-    { signal: AbortSignal.timeout(30000) },
-  );
-  if (!res.ok) {
-    const err = await res.json().catch(() => ({}));
-    throw new Error(err.error || `Failed to fetch prices for ${symbol}`);
-  }
-  const data = await res.json();
-  return data.prices || [];
 }
 
 export async function POST(request) {
@@ -74,7 +58,9 @@ export async function POST(request) {
     if (!returnsMatrix) {
       // Fetch historical prices for each symbol and convert to log-returns
       const allPrices = await Promise.all(
-        targetSymbols.map((sym) => fetchHistoricalPrices(sym)),
+        targetSymbols.map((sym) =>
+          fetchHistoricalPrices(sym).then((d) => d.prices),
+        ),
       );
 
       // Validate we have enough data for all symbols
@@ -160,6 +146,21 @@ export async function POST(request) {
           hint: "Please make sure you are signed in and try again.",
         },
         { status: 401 },
+      );
+    }
+
+    // Backend starting up (Render free-tier spin-up)
+    if (
+      msg.includes("starting up") ||
+      msg.includes("html instead of json")
+    ) {
+      return Response.json(
+        {
+          error: "Backend service is starting up",
+          code: "SERVICE_STARTING",
+          hint: "The FastAPI backend on Render is waking up from sleep. This usually takes 30-60 seconds. Please try again shortly.",
+        },
+        { status: 503 },
       );
     }
 

@@ -49,8 +49,10 @@ const SIMULATE_TIMEOUT = 60000;
  */
 async function fetchWithRetry(url, options = {}, retries = 3) {
   const timeout = options.timeout || DEFAULT_TIMEOUT;
+  // Use more retries for Render spin-up scenarios (the caller can override)
+  const maxRetries = options.retries || retries;
 
-  for (let i = 0; i < retries; i++) {
+  for (let i = 0; i < maxRetries; i++) {
     try {
       const headers = { ...options.headers };
 
@@ -68,14 +70,39 @@ async function fetchWithRetry(url, options = {}, retries = 3) {
         headers,
         signal: AbortSignal.timeout(timeout),
       });
-      if (res.ok) return res;
+
+      if (res.ok) {
+        // Guard against Render free-tier spin-up: the service may return
+        // a 200 OK HTML page while it is still starting up.
+        const contentType = res.headers.get("content-type") || "";
+        if (contentType.includes("text/html")) {
+          // Treat as transient – retry with backoff
+          if (i === retries - 1) {
+            throw new Error(
+              "Backend service is starting up. Please try again in a moment.",
+            );
+          }
+          await new Promise((r) => setTimeout(r, 1000 * Math.pow(2, i)));
+          continue;
+        }
+        return res;
+      }
+
       if (res.status >= 400 && res.status < 500) {
+        // Try to parse JSON error; if the body is HTML (Render 404 page etc.)
+        // fall back to a safe error message.
+        const contentType = res.headers.get("content-type") || "";
+        if (contentType.includes("text/html")) {
+          throw new Error(
+            `Backend returned HTML instead of JSON (HTTP ${res.status}). The service may be starting up.`,
+          );
+        }
         const err = await res.json().catch(() => ({ detail: res.statusText }));
         throw new Error(err.detail || `HTTP ${res.status}`);
       }
       // 5xx — retry
     } catch (e) {
-      if (i === retries - 1) throw e;
+      if (i === maxRetries - 1) throw e;
       // Exponential backoff: 1000 * 2^i → 1s, 2s, 4s
       await new Promise((r) => setTimeout(r, 1000 * Math.pow(2, i)));
     }
@@ -352,7 +379,14 @@ export async function detectCorrelation(symbols, returnsMatrix, options = {}) {
     method: "POST",
     headers: { ...authHeaders, "Content-Type": "application/json" },
     body: JSON.stringify(body),
+    retries: 5, // Extra retries for Render spin-up
   });
+
+  // Guard against HTML responses (e.g. Render spin-up page)
+  const ct = res.headers.get("content-type") || "";
+  if (ct.includes("text/html")) {
+    throw new Error("Backend returned HTML instead of JSON. The service may be starting up.");
+  }
   return res.json();
 }
 
@@ -386,6 +420,13 @@ export async function optimisePortfolio(symbols, returnsMatrix, options = {}) {
     headers: { ...authHeaders, "Content-Type": "application/json" },
     body: JSON.stringify(body),
     timeout: SIMULATE_TIMEOUT,
+    retries: 5, // Extra retries for Render spin-up
   });
+
+  // Guard against HTML responses (e.g. Render spin-up page)
+  const ct = res.headers.get("content-type") || "";
+  if (ct.includes("text/html")) {
+    throw new Error("Backend returned HTML instead of JSON. The service may be starting up.");
+  }
   return res.json();
 }

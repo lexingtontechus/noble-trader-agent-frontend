@@ -314,7 +314,7 @@ function CorrelationDetection({ symbols, positions }) {
         {/* Error State (non-deployment errors only, deployment errors show ComingSoon) */}
         {!loading && error && errorCode !== "ENDPOINT_NOT_DEPLOYED" && (
           <div
-            className={`alert ${errorCode === "INSUFFICIENT_SYMBOLS" ? "alert-warning" : "alert-error"} py-3`}
+            className={`alert ${errorCode === "INSUFFICIENT_SYMBOLS" || errorCode === "SERVICE_STARTING" ? "alert-warning" : "alert-error"} py-3`}
           >
             <div className="flex-1">
               {errorCode === "INSUFFICIENT_SYMBOLS" ? (
@@ -331,6 +331,8 @@ function CorrelationDetection({ symbols, positions }) {
                     d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L4.082 16.5c-.77.833.192 2.5 1.732 2.5z"
                   />
                 </svg>
+              ) : errorCode === "SERVICE_STARTING" ? (
+                <span className="loading loading-spinner loading-sm shrink-0"></span>
               ) : (
                 <svg
                   xmlns="http://www.w3.org/2000/svg"
@@ -352,7 +354,7 @@ function CorrelationDetection({ symbols, positions }) {
               </div>
             </div>
             <button className="btn btn-xs btn-ghost" onClick={detect}>
-              Retry
+              {errorCode === "SERVICE_STARTING" ? "Retry Now" : "Retry"}
             </button>
           </div>
         )}
@@ -648,7 +650,7 @@ function PortfolioOptimizer({ positions, totalValue }) {
         {/* Error State (non-deployment errors only) */}
         {!loading && error && errorCode !== "ENDPOINT_NOT_DEPLOYED" && (
           <div
-            className={`alert ${errorCode === "NO_POSITIONS" ? "alert-warning" : "alert-error"} py-3`}
+            className={`alert ${errorCode === "NO_POSITIONS" || errorCode === "SERVICE_STARTING" ? "alert-warning" : "alert-error"} py-3`}
           >
             <div className="flex-1">
               {errorCode === "NO_POSITIONS" ? (
@@ -665,6 +667,8 @@ function PortfolioOptimizer({ positions, totalValue }) {
                     d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L4.082 16.5c-.77.833.192 2.5 1.732 2.5z"
                   />
                 </svg>
+              ) : errorCode === "SERVICE_STARTING" ? (
+                <span className="loading loading-spinner loading-sm shrink-0"></span>
               ) : (
                 <svg
                   xmlns="http://www.w3.org/2000/svg"
@@ -686,7 +690,7 @@ function PortfolioOptimizer({ positions, totalValue }) {
               </div>
             </div>
             <button className="btn btn-xs btn-ghost" onClick={optimize}>
-              Retry
+              {errorCode === "SERVICE_STARTING" ? "Retry Now" : "Retry"}
             </button>
           </div>
         )}
