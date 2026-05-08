@@ -30,8 +30,6 @@ export default function SimulatePage() {
     if (!symbol) return
     setFetchingPrices(true)
     setPriceError(null)
-    setPrices([])
-    setCurrentPrice(null)
 
     try {
       const res = await fetch(`/api/prices?symbol=${encodeURIComponent(symbol)}&period=1y`)

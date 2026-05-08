@@ -1,12 +1,14 @@
 'use client'
 
+const APP_VERSION = "v3.1"
+
 export default function Footer() {
   return (
     <footer className="footer footer-center p-4 bg-base-200 text-base-content mt-auto">
       <div className="flex flex-col gap-2 items-center w-full">
         <div className="flex flex-wrap items-center justify-center gap-2">
           <span className="text-sm font-semibold text-base-content/70">
-            Noble Trader v2.0
+            Noble Trader {APP_VERSION}
           </span>
           <span className="badge badge-warning badge-sm">Paper Trading Only</span>
         </div>

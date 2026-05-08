@@ -1,10 +1,28 @@
 import { NextResponse } from "next/server";
 import { getCached, setCache } from "@/lib/cache";
-
-// Cache latest prices for 15 seconds to reduce Yahoo API calls during polling
-const PRICE_CACHE_TTL = 15000;
+import { checkRateLimit, getClientIp } from "@/lib/rate-limiter";
+import { CACHE_TTL, RATE_LIMIT } from "@/lib/config";
 
 export async function GET(request) {
+  // Rate limit: 30 requests per minute per IP
+  const ip = getClientIp(request);
+  const rateCheck = checkRateLimit(
+    `price:${ip}`,
+    RATE_LIMIT.PRICE.max,
+    RATE_LIMIT.PRICE.windowMs,
+  );
+  if (!rateCheck.allowed) {
+    return NextResponse.json(
+      { error: "Rate limited. Try again in a moment." },
+      {
+        status: 429,
+        headers: {
+          "Retry-After": String(Math.ceil((rateCheck.resetAt - Date.now()) / 1000)),
+        },
+      },
+    );
+  }
+
   try {
     const { searchParams } = new URL(request.url);
     const symbol = searchParams.get("symbol");
@@ -34,7 +52,7 @@ export async function GET(request) {
     if (!price) throw new Error("No price data available");
 
     const responseData = { symbol, price, timestamp: Date.now() };
-    setCache(cacheKey, responseData, PRICE_CACHE_TTL);
+    setCache(cacheKey, responseData, CACHE_TTL.PRICE_LATEST);
 
     return NextResponse.json(responseData);
   } catch (err) {

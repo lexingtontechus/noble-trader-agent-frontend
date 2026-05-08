@@ -1,6 +1,4 @@
-const FASTAPI_BASE =
-  process.env.NEXT_PUBLIC_FASTAPI_BASE_URL ||
-  "https://noble-trader-fastapi-backend.onrender.com";
+import { FASTAPI_BASE } from "@/lib/config";
 
 // ── Auth token cache ────────────────────────────────────────────────────────
 let _cachedToken = null;
@@ -109,19 +107,6 @@ export async function detectRegime(prices, symbol = "UNKNOWN") {
   return res.json();
 }
 
-/**
- * Lightweight regime detection — calls the unprotected /regime/detect endpoint.
- * Alias for detectRegime, kept for semantic clarity in fallback paths.
- */
-export async function detectRegimeOnly(prices, symbol = "UNKNOWN") {
-  const res = await fetchWithDedup(`${FASTAPI_BASE}/regime/detect`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ prices, symbol }),
-  });
-  return res.json();
-}
-
 export async function sizeKelly(prices, symbol = "UNKNOWN", options = {}) {
   const body = {
     prices,
@@ -157,20 +142,6 @@ export async function analyseRisk(prices, symbol = "UNKNOWN", options = {}) {
     body: JSON.stringify(body),
   });
   return res.json();
-}
-
-export async function checkHealth() {
-  const start = Date.now();
-  try {
-    const res = await fetch(`${FASTAPI_BASE}/health`, {
-      signal: AbortSignal.timeout(10000),
-    });
-    const latency = Date.now() - start;
-    if (res.ok) return { status: "online", latency_ms: latency };
-    return { status: "degraded", latency_ms: latency };
-  } catch {
-    return { status: "offline", latency_ms: Date.now() - start };
-  }
 }
 
 /**

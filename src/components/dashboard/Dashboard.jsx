@@ -8,6 +8,7 @@ import { useStream } from "@/context/StreamContext";
 import StreamStatusPanel from "@/components/streaming/StreamStatusPanel";
 import AlertHistory from "@/components/streaming/AlertHistory";
 import { notifySuccess, notifyError } from "@/lib/notifications";
+import LiveBadge from "@/components/streaming/LiveBadge";
 
 const DEFAULT_TICKERS = [
   { symbol: "GC=F", displayName: "Gold" },
@@ -37,10 +38,10 @@ export default function Dashboard() {
   const [showComparison, setShowComparison] = useState(false);
   const intervalRef = useRef(null);
   const periodDebounceRef = useRef(null);
+  const initialLoadDone = useRef(false);
   const {
     subscriptions,
     subscribeAll,
-    unsubscribeAll,
     activeStreamCount,
     anyConnected,
   } = useStream();
@@ -103,14 +104,15 @@ export default function Dashboard() {
     };
   }, [autoRefresh, fetchAllTickers]);
 
-  // Notify on successful fetch completion
+  // Notify on initial load only (not on every auto-refresh)
   useEffect(() => {
     const allDone = DEFAULT_TICKERS.every(
       (t) => !loading[t.symbol] && (tickerData[t.symbol] || errors[t.symbol]),
     );
     const anySucceeded = DEFAULT_TICKERS.some((t) => tickerData[t.symbol]);
-    if (allDone && anySucceeded && lastUpdated) {
-      notifySuccess("Dashboard refreshed");
+    if (allDone && anySucceeded && !initialLoadDone.current) {
+      initialLoadDone.current = true;
+      notifySuccess("Dashboard loaded", 3000);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [loading, tickerData, errors]);
@@ -148,109 +150,50 @@ export default function Dashboard() {
   const anyLoading = Object.values(loading).some(Boolean);
   const allLoaded = DEFAULT_TICKERS.every((t) => tickerData[t.symbol]);
   const hasSubscriptions = subscriptions.size > 0;
-  const allDefaultLive = DEFAULT_TICKERS.every((t) =>
-    subscriptions.has(t.symbol),
-  );
 
   return (
     <div className="space-y-6">
       {/* Streaming Control Bar — prominent at top */}
       <div className="card bg-base-200 shadow-xl border border-base-300">
         <div className="card-body p-3">
-          <div className="flex flex-wrap items-center justify-between gap-3">
-            {/* Left: Live status indicator */}
-            <div className="flex items-center gap-3">
-              <div className="flex items-center gap-2">
-                {anyConnected ? (
-                  <span className="badge badge-success gap-1">
-                    <span className="relative flex h-2 w-2">
-                      <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-success opacity-75"></span>
-                      <span className="relative inline-flex rounded-full h-2 w-2 bg-success"></span>
-                    </span>
-                    LIVE
-                  </span>
-                ) : (
-                  <span className="badge badge-ghost gap-1">
-                    <span className="h-2 w-2 rounded-full bg-base-content/30"></span>
-                    OFFLINE
-                  </span>
-                )}
-                <span className="text-xs text-base-content/60">
-                  {activeStreamCount} stream{activeStreamCount !== 1 ? "s" : ""}{" "}
-                  active
-                </span>
-              </div>
-            </div>
-
-            {/* Right: Go Live All / Stop All */}
-            <div className="flex items-center gap-2">
-              {!hasSubscriptions ? (
-                <button
-                  className="btn btn-sm btn-primary gap-1 shadow-md"
-                  onClick={() =>
-                    subscribeAll(DEFAULT_TICKERS.map((t) => t.symbol))
-                  }
-                >
-                  <svg
-                    xmlns="http://www.w3.org/2000/svg"
-                    className="h-4 w-4"
-                    fill="none"
-                    viewBox="0 0 24 24"
-                    stroke="currentColor"
-                  >
-                    <path
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      strokeWidth="2"
-                      d="M13 10V3L4 14h7v7l9-11h-7z"
-                    />
-                  </svg>
-                  📡 Go Live — All Tickers
-                </button>
-              ) : (
-                <>
-                  {!allDefaultLive && (
-                    <button
-                      className="btn btn-sm btn-primary btn-outline gap-1"
-                      onClick={() =>
-                        subscribeAll(DEFAULT_TICKERS.map((t) => t.symbol))
-                      }
-                    >
-                      📡 Go Live All
-                    </button>
-                  )}
-                  <button
-                    className="btn btn-sm btn-error gap-1 shadow-md"
-                    onClick={unsubscribeAll}
-                  >
-                    <svg
-                      xmlns="http://www.w3.org/2000/svg"
-                      className="h-4 w-4"
-                      fill="none"
-                      viewBox="0 0 24 24"
-                      stroke="currentColor"
-                    >
-                      <path
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                        strokeWidth="2"
-                        d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
-                      />
-                      <path
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                        strokeWidth="2"
-                        d="M9 10a1 1 0 011-1h4a1 1 0 011 1v4a1 1 0 01-1 1h-4a1 1 0 01-1-1v-4z"
-                      />
-                    </svg>
-                    ⏹ Stop All
-                  </button>
-                </>
-              )}
-            </div>
+          <div className="flex items-center gap-3">
+            <LiveBadge connected={anyConnected} />
+            {!anyConnected && (
+              <span className="text-xs text-base-content/60">
+                OFFLINE
+              </span>
+            )}
+            <span className="text-xs text-base-content/60">
+              {activeStreamCount} stream{activeStreamCount !== 1 ? "s" : ""}{" "}
+              active
+            </span>
+            {!hasSubscriptions && (
+              <button
+                className="btn btn-sm btn-primary gap-1 shadow-md"
+                onClick={() =>
+                  subscribeAll(DEFAULT_TICKERS.map((t) => t.symbol))
+                }
+              >
+                📡 Go Live — All Tickers
+              </button>
+            )}
           </div>
         </div>
       </div>
+
+      {/* Global Error Banner — when ALL tickers fail */}
+      {Object.values(errors).filter(Boolean).length === DEFAULT_TICKERS.length && (
+        <div className="alert alert-error">
+          <svg xmlns="http://www.w3.org/2000/svg" className="stroke-current shrink-0 h-6 w-6" fill="none" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M10 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2m7-2a9 9 0 11-18 0 9 9 0 0118 0z" />
+          </svg>
+          <div>
+            <div className="font-medium">Backend appears offline</div>
+            <div className="text-xs opacity-70">All ticker fetches failed. The analysis backend may be experiencing issues.</div>
+          </div>
+          <button className="btn btn-sm btn-ghost" onClick={fetchAllTickers}>Retry All</button>
+        </div>
+      )}
 
       {/* Controls Row */}
       <div className="flex flex-wrap items-center justify-between gap-4">

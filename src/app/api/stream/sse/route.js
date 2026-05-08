@@ -17,9 +17,10 @@
  * BFF-proxied SSE, which avoids CORS while still providing real-time updates.
  */
 
-const FASTAPI_BASE =
-  process.env.NEXT_PUBLIC_FASTAPI_BASE_URL ||
-  "https://noble-trader-fastapi-backend.onrender.com";
+import { FASTAPI_BASE } from "@/lib/config";
+
+/** Maximum duration for an SSE proxy connection (10 minutes) */
+const SSE_MAX_DURATION_MS = 10 * 60 * 1000;
 
 export async function GET(request) {
   const { searchParams } = new URL(request.url);
@@ -52,6 +53,16 @@ export async function GET(request) {
     const writer = writable.getWriter();
     const encoder = new TextEncoder();
 
+    // Connection timeout — close after 10 minutes so the client can reconnect
+    let timeoutId = setTimeout(async () => {
+      try {
+        await writer.close();
+      } catch {
+        // Writer may already be closed
+      }
+      console.log(`[SSE Proxy] Connection timeout for ${symbol}, closing`);
+    }, SSE_MAX_DURATION_MS);
+
     // Stream the upstream response to our client
     (async () => {
       try {
@@ -68,7 +79,12 @@ export async function GET(request) {
       } catch (err) {
         console.error(`[SSE Proxy] Stream error for ${symbol}:`, err.message);
       } finally {
-        await writer.close();
+        clearTimeout(timeoutId);
+        try {
+          await writer.close();
+        } catch {
+          // Writer may already be closed by timeout
+        }
       }
     })();
 

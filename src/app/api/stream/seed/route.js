@@ -1,13 +1,7 @@
 import { NextResponse } from "next/server";
 import { getFastAPIAuthHeaders } from "@/lib/fastapi-auth";
 import { getCached, setCache } from "@/lib/cache";
-
-const FASTAPI_BASE =
-  process.env.NEXT_PUBLIC_FASTAPI_BASE_URL ||
-  "https://noble-trader-fastapi-backend.onrender.com";
-
-// Cache seed results for 5 minutes — avoids re-fetching 6mo Yahoo data for the same symbol
-const SEED_CACHE_TTL = 5 * 60 * 1000;
+import { FASTAPI_BASE, CACHE_TTL } from "@/lib/config";
 
 export async function POST(request) {
   try {
@@ -62,7 +56,7 @@ export async function POST(request) {
     }
 
     const seedData = await seedRes.json();
-    setCache(cacheKey, seedData, SEED_CACHE_TTL);
+    setCache(cacheKey, seedData, CACHE_TTL.SEED);
     return NextResponse.json(seedData);
   } catch (err) {
     return NextResponse.json({ error: err.message }, { status: 500 });

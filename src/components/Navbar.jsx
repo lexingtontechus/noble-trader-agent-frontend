@@ -29,9 +29,9 @@ export default function Navbar({ activeView, setActiveView }) {
 
   useEffect(() => {
     let cancelled = false;
+    let interval = null;
 
     async function checkHealth() {
-      if (typeof document !== "undefined" && document.hidden) return;
       try {
         const res = await fetch("/api/health");
         if (!res.ok) throw new Error("unhealthy");
@@ -43,17 +43,37 @@ export default function Navbar({ activeView, setActiveView }) {
       }
     }
 
+    function startInterval() {
+      stopInterval();
+      interval = setInterval(checkHealth, 30000);
+    }
+
+    function stopInterval() {
+      if (interval) {
+        clearInterval(interval);
+        interval = null;
+      }
+    }
+
+    // Initial check + start interval
     checkHealth();
-    const interval = setInterval(checkHealth, 30000);
+    startInterval();
 
     const handleVisibility = () => {
-      if (!document.hidden) checkHealth();
+      if (document.hidden) {
+        // Stop health check interval when tab is hidden
+        stopInterval();
+      } else {
+        // Immediate check + restart interval when tab becomes visible
+        checkHealth();
+        startInterval();
+      }
     };
     document.addEventListener("visibilitychange", handleVisibility);
 
     return () => {
       cancelled = true;
-      clearInterval(interval);
+      stopInterval();
       document.removeEventListener("visibilitychange", handleVisibility);
     };
   }, []);
@@ -166,7 +186,7 @@ export default function Navbar({ activeView, setActiveView }) {
         role="navigation"
         aria-label="Mobile navigation"
       >
-        <div className="flex items-stretch justify-around safe-area-pb">
+        <div className="flex items-stretch justify-around" style={{ paddingBottom: 'env(safe-area-inset-bottom, 0px)' }}>
           {NAV_ITEMS.map((item) => (
             <button
               key={item.key}

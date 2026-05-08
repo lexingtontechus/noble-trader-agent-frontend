@@ -11,7 +11,7 @@ const TYPE_CONFIG = {
 }
 
 function ToastItem({ notification, onDismiss }) {
-  const { id, type, message, duration } = notification
+  const { id, type, message, duration, title, action } = notification
   const config = TYPE_CONFIG[type] || TYPE_CONFIG.info
   const [visible, setVisible] = useState(false)
   const [exiting, setExiting] = useState(false)
@@ -79,7 +79,18 @@ function ToastItem({ notification, onDismiss }) {
           />
         )}
         <span className="text-base shrink-0">{config.icon}</span>
-        <span className="text-sm font-medium break-words min-w-0 flex-1">{message}</span>
+        <div className="flex-1 min-w-0">
+          {title && <div className="text-sm font-bold break-words">{title}</div>}
+          <div className={`text-sm font-medium break-words ${title ? 'text-xs opacity-80' : ''}`}>{message}</div>
+          {action && (
+            <button
+              className="btn btn-xs btn-ghost mt-1 p-0 h-auto min-h-0 text-primary hover:underline"
+              onClick={action.onClick}
+            >
+              {action.label}
+            </button>
+          )}
+        </div>
         <button
           className="btn btn-ghost btn-xs shrink-0 ml-1"
           onClick={handleDismiss}
@@ -110,7 +121,7 @@ export default function NotificationToast() {
 
   return (
     <div
-      className="fixed bottom-4 right-4 z-[9999] flex flex-col gap-2 pointer-events-none sm:w-96 w-[calc(100%-2rem)]"
+      className="fixed bottom-20 sm:bottom-4 right-4 z-[9999] flex flex-col gap-2 pointer-events-none sm:w-96 w-[calc(100%-2rem)]"
       aria-live="polite"
       aria-label="Notifications"
     >

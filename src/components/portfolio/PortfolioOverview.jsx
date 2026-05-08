@@ -828,11 +828,7 @@ function PortfolioOptimizer({ positions, totalValue }) {
  * PortfolioOverview — main portfolio page component
  * Shows summary metrics + Correlation Detection + Portfolio Optimizer
  */
-export default function PortfolioOverview({ positions = [], account = null }) {
-  const [autoRefresh, setAutoRefresh] = useState(false);
-  const [lastUpdated, setLastUpdated] = useState(null);
-  const intervalRef = useRef(null);
-
+export default function PortfolioOverview({ positions = [], account = null, lastUpdated = null }) {
   // Extract symbol list from positions
   const symbols = positions.map((p) => p.symbol).filter(Boolean);
 
@@ -865,31 +861,6 @@ export default function PortfolioOverview({ positions = [], account = null }) {
       ? (concentrationRisk * 0.25 * 100).toFixed(1) // rough 95% VaR estimate
       : 0;
 
-  const handleAutoRefresh = useCallback((checked) => {
-    setAutoRefresh(checked);
-    setLastUpdated(new Date());
-  }, []);
-
-  // Auto-refresh interval
-  useEffect(() => {
-    if (intervalRef.current) {
-      clearInterval(intervalRef.current);
-      intervalRef.current = null;
-    }
-
-    if (autoRefresh) {
-      intervalRef.current = setInterval(() => {
-        setLastUpdated(new Date());
-      }, 30000);
-    }
-
-    return () => {
-      if (intervalRef.current) {
-        clearInterval(intervalRef.current);
-      }
-    };
-  }, [autoRefresh]);
-
   return (
     <div className="space-y-6">
       {/* Page Header */}
@@ -900,22 +871,11 @@ export default function PortfolioOverview({ positions = [], account = null }) {
           </h1>
           <span className="badge badge-primary badge-sm">v3.0</span>
         </div>
-        <div className="flex items-center gap-3">
-          <label className="flex items-center gap-2 cursor-pointer">
-            <span className="text-xs text-base-content/60">Auto 30s</span>
-            <input
-              type="checkbox"
-              className="toggle toggle-primary toggle-sm"
-              checked={autoRefresh}
-              onChange={(e) => handleAutoRefresh(e.target.checked)}
-            />
-          </label>
-          {lastUpdated && (
-            <span className="text-xs text-base-content/40">
-              {lastUpdated.toLocaleTimeString()}
-            </span>
-          )}
-        </div>
+        {lastUpdated && (
+          <span className="text-xs text-base-content/40">
+            {lastUpdated.toLocaleTimeString()}
+          </span>
+        )}
       </div>
 
       {/* Summary Metrics Row */}

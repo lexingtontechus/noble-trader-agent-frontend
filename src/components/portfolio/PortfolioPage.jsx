@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback } from 'react'
 import PortfolioOverview from './PortfolioOverview'
+import { notifyError } from '@/lib/notifications'
 
 export default function PortfolioPage() {
   const [positions, setPositions] = useState([])
@@ -22,6 +23,7 @@ export default function PortfolioPage() {
       }
     } catch (err) {
       console.error('Failed to fetch positions:', err)
+      notifyError('Failed to fetch positions')
       setPositions([])
     }
   }, [])
@@ -37,6 +39,7 @@ export default function PortfolioPage() {
       }
     } catch (err) {
       console.error('Failed to fetch account:', err)
+      notifyError('Failed to fetch account data')
     }
   }, [])
 
