@@ -45,3 +45,27 @@ Stage Summary:
 - Two-layer defense: frontend conversion in OrderModal + backend conversion in BFF route
 - User now sees conversion notice in OrderModal and SearchResults showing the mapping
 - Non-tradable assets (futures, indices) are blocked before order submission with clear warnings
+
+---
+Task ID: 2
+Agent: main
+Task: Update OrderModal with asset-class-conditional order types and time-in-force per Alpaca API spec
+
+Work Log:
+- Analyzed screenshot showing "invalid crypto time_in_force" error
+- Identified root cause: crypto orders only support gtc/ioc, but modal defaulted to "day"
+- Created ORDER_TYPES and TIME_IN_FORCE config maps per Alpaca API spec:
+  - Equity: market/limit/stop/stop_limit/trailing_stop, day/gtc/opg/cls/ioc/fok
+  - Crypto: market/limit/stop_limit, gtc/ioc
+  - Forex: market/limit, gtc/ioc/day
+- Added stop_price input for stop/stop_limit orders
+- Added trail_price/trail_percent toggle for trailing_stop orders
+- Auto-resets orderType and TIF when asset class changes (e.g. equity → crypto)
+- Updated alpaca-client.js to pass stop_price, trail_price, trail_percent
+- Updated BFF route with server-side validation of order type & TIF per asset class
+- Build succeeds, pushed as commit 8eaa0a5
+
+Stage Summary:
+- Fixed "invalid crypto time_in_force" error by restricting TIF options per asset class
+- Full Alpaca API compliance for all supported order types and time-in-force values
+- Three-layer validation: frontend dropdown filtering → frontend review → backend validation
