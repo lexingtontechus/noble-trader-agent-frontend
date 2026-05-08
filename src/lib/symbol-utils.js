@@ -13,8 +13,8 @@
  * BTC-USD                →  BTC/USD             →  Crypto
  * ETH-USD                →  ETH/USD             →  Crypto
  * ANY-USD                →  ANY/USD             →  Crypto
- * EURUSD=X               →  EURUSD              →  Forex
- * GBPUSD=X               →  GBPUSD              →  Forex
+ * EURUSD=X               →  N/A (not tradable)  →  Forex
+ * GBPUSD=X               →  N/A (not tradable)  →  Forex
  * GC=F (Gold future)     →  N/A (not tradable)  →  Future
  * ^GSPC (S&P 500 index)  →  N/A (use SPY ETF)   →  Index
  * AAPL                   →  AAPL                →  Stock
@@ -39,11 +39,11 @@ export function yahooToAlpacaSymbol(yahooSymbol) {
     return `${cryptoMatch[1]}/${cryptoMatch[2]}`;
   }
 
-  // 2. Forex: "EURUSD=X" → "EURUSD"
-  //    Yahoo appends "=X" to forex pairs
-  //    Alpaca uses the bare pair code
+  // 2. Forex: "EURUSD=X" → NOT tradable on Alpaca
+  //    Alpaca does NOT support forex trading.
+  //    Only US equities and crypto are supported.
   if (sym.endsWith('=X')) {
-    return sym.replace(/=X$/, '');
+    return null;
   }
 
   // 3. Futures: "GC=F", "ES=F", "CL=F" → not tradable on Alpaca
@@ -77,15 +77,10 @@ export function getAlpacaTradeabilityReason(yahooSymbol) {
     return 'Indices are not directly tradeable — use the corresponding ETF (e.g. SPY for S&P 500)';
   }
 
-  // Forex check — while we CAN convert the symbol, Alpaca paper
-  // trading may not support all forex pairs
+  // Forex check — Alpaca does NOT support forex trading
   if (sym.endsWith('=X')) {
     const converted = sym.replace(/=X$/, '');
-    // Alpaca paper trading supports major forex pairs
-    const supportedForex = ['EURUSD', 'GBPUSD', 'USDJPY', 'AUDUSD', 'USDCAD', 'USDCHF', 'NZDUSD'];
-    if (!supportedForex.includes(converted)) {
-      return `Forex pair ${converted} may not be available on Alpaca paper trading`;
-    }
+    return `Forex pair ${converted} is not available on Alpaca — Alpaca only supports US equities and crypto trading`;
   }
 
   return null;

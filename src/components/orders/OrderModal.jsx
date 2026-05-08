@@ -27,10 +27,6 @@ const ORDER_TYPES = {
     { value: "limit",      label: "Limit" },
     { value: "stop_limit", label: "Stop Limit" },
   ],
-  forex: [
-    { value: "market", label: "Market" },
-    { value: "limit",  label: "Limit" },
-  ],
 };
 
 const TIME_IN_FORCE = {
@@ -46,23 +42,17 @@ const TIME_IN_FORCE = {
     { value: "gtc", label: "GTC (Good Till Cancelled)" },
     { value: "ioc", label: "IOC (Immediate or Cancel)" },
   ],
-  forex: [
-    { value: "gtc", label: "GTC (Good Till Cancelled)" },
-    { value: "ioc", label: "IOC (Immediate or Cancel)" },
-    { value: "day", label: "Day" },
-  ],
 };
 
 /**
  * Map our getAssetClass() result to the Alpaca trading category.
  * "stock" and "unknown" → equity rules
  * "crypto"              → crypto rules
- * "forex"               → forex rules
- * Futures / indices are blocked entirely.
+ * Forex / futures / indices are blocked entirely (not supported by Alpaca).
  */
 function getAlpacaAssetCategory(assetClass) {
   if (assetClass === "crypto") return "crypto";
-  if (assetClass === "forex")  return "forex";
+  // Forex is NOT supported by Alpaca — will be caught by isAlpacaTradable()
   return "equity"; // stock, unknown → equity
 }
 
@@ -289,11 +279,9 @@ export default function OrderModal({ symbol, onClose, onSuccess }) {
           <div className="flex items-center gap-2 mb-4">
             <span className={`badge badge-sm ${
               category === "crypto" ? "badge-primary" :
-              category === "forex"  ? "badge-secondary" :
               "badge-ghost"
             }`}>
               {category === "crypto" ? "₿ Crypto" :
-               category === "forex"  ? "💱 Forex" :
                "📈 Equity"}
             </span>
             {symbolConverted && (
@@ -393,7 +381,7 @@ export default function OrderModal({ symbol, onClose, onSuccess }) {
                 <label className="label">
                   <span className="label-text font-medium">Order Type</span>
                   <span className="label-text-alt text-base-content/40 text-xs">
-                    {category === "crypto" ? "Crypto" : category === "forex" ? "Forex" : "Equity"} options
+                    {category === "crypto" ? "Crypto" : "Equity"} options
                   </span>
                 </label>
                 <select
@@ -493,7 +481,7 @@ export default function OrderModal({ symbol, onClose, onSuccess }) {
                 <label className="label">
                   <span className="label-text font-medium">Time in Force</span>
                   <span className="label-text-alt text-base-content/40 text-xs">
-                    {category === "crypto" ? "Crypto" : category === "forex" ? "Forex" : "Equity"} options
+                    {category === "crypto" ? "Crypto" : "Equity"} options
                   </span>
                 </label>
                 <select

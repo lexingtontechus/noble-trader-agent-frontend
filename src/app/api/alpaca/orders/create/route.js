@@ -9,18 +9,16 @@ import { yahooToAlpacaSymbol, getAssetClass } from "@/lib/symbol-utils";
 const VALID_TYPES = {
   equity: ["market", "limit", "stop", "stop_limit", "trailing_stop"],
   crypto: ["market", "limit", "stop_limit"],
-  forex:  ["market", "limit"],
 };
 
 const VALID_TIF = {
   equity: ["day", "gtc", "opg", "cls", "ioc", "fok"],
   crypto: ["gtc", "ioc"],
-  forex:  ["gtc", "ioc", "day"],
 };
 
 function getCategory(assetClass) {
   if (assetClass === "crypto") return "crypto";
-  if (assetClass === "forex")  return "forex";
+  // Forex is NOT supported by Alpaca — blocked by yahooToAlpacaSymbol() returning null
   return "equity";
 }
 
