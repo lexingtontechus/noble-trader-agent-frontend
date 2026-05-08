@@ -3,6 +3,44 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 
 /**
+ * Regime colour & label maps (shared across correlation components)
+ */
+const REGIME_COLORS = {
+  low_corr: "badge-success",
+  mid_corr: "badge-warning",
+  high_corr: "badge-error",
+  crisis: "badge-error",
+};
+
+const REGIME_LABELS = {
+  low_corr: "Low Correlation",
+  mid_corr: "Mid Correlation",
+  high_corr: "High Correlation",
+  crisis: "Crisis Mode",
+};
+
+function regimeBadgeClass(regime) {
+  return REGIME_COLORS[regime] || "badge-ghost";
+}
+
+function regimeDisplayLabel(regime) {
+  return REGIME_LABELS[regime] || regime;
+}
+
+function getHeatColor(value) {
+  const abs = Math.abs(value);
+  if (abs > 0.7) return "bg-error/60";
+  if (abs > 0.4) return "bg-warning/60";
+  return "bg-success/40";
+}
+
+function getRhoColor(value) {
+  if (value > 0.7) return "text-error";
+  if (value > 0.4) return "text-warning";
+  return "text-success";
+}
+
+/**
  * StatusBadge — small pill indicator for feature availability
  */
 function StatusBadge({ status }) {
@@ -132,7 +170,7 @@ function ComingSoonCard({ title, description, icon, onRetry }) {
 /**
  * CorrelationDetection — correlation analysis section
  */
-function CorrelationDetection({ symbols, positions }) {
+function CorrelationDetection({ symbols, positions, onCorrelationData }) {
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
@@ -185,6 +223,11 @@ function CorrelationDetection({ symbols, positions }) {
 
       setData(result);
       setEndpointAvailable(true);
+
+      // Propagate correlation data to parent so the top-level metric card updates
+      if (onCorrelationData) {
+        onCorrelationData(result);
+      }
     } catch (err) {
       setError(err.message || "Network error");
       setErrorCode("NETWORK_ERROR");
@@ -192,7 +235,7 @@ function CorrelationDetection({ symbols, positions }) {
     } finally {
       setLoading(false);
     }
-  }, [symbols, endpointAvailable]);
+  }, [symbols, endpointAvailable, onCorrelationData]);
 
   // Auto-detect when we have enough symbols (only once)
   useEffect(() => {
@@ -366,16 +409,37 @@ function CorrelationDetection({ symbols, positions }) {
             {data.regime_label && (
               <div className="flex items-center gap-2 mb-2">
                 <span className="text-xs text-base-content/50">Regime:</span>
-                <span className="badge badge-sm badge-primary">
-                  {data.regime_label}
+                <span className={`badge badge-sm ${regimeBadgeClass(data.regime_label)}`}>
+                  {regimeDisplayLabel(data.regime_label)}
                 </span>
+                {data.confidence != null && (
+                  <span className="text-xs text-base-content/40">
+                    ({((data.confidence || 0) * 100).toFixed(0)}% confidence)
+                  </span>
+                )}
               </div>
             )}
+
+            {/* Mean |ρ| and Blended Risk Multiplier */}
+            <div className="grid grid-cols-2 gap-3">
+              <div className="bg-base-300/50 rounded-lg p-2">
+                <div className="text-xs text-base-content/40">Mean |ρ|</div>
+                <div className={`font-mono font-bold text-lg ${getRhoColor(data.mean_abs_correlation || 0)}`}>
+                  {(data.mean_abs_correlation || 0).toFixed(3)}
+                </div>
+              </div>
+              <div className="bg-base-300/50 rounded-lg p-2">
+                <div className="text-xs text-base-content/40">Blended Risk</div>
+                <div className="font-mono font-bold text-lg">
+                  {(data.blended_risk_multiplier || 1).toFixed(2)}x
+                </div>
+              </div>
+            </div>
 
             {/* Correlation Heatmap Table */}
             {data.correlation_matrix && (
               <div className="overflow-x-auto">
-                <table className="table table-zebra table-sm text-xs">
+                <table className="table table-sm text-xs">
                   <thead>
                     <tr>
                       <th></th>
@@ -394,23 +458,18 @@ function CorrelationDetection({ symbols, positions }) {
                           const val = data.correlation_matrix?.[i]?.[j];
                           const numVal =
                             typeof val === "number" ? val : parseFloat(val);
-                          const bgColor = isNaN(numVal)
-                            ? ""
-                            : numVal > 0.7
-                              ? "bg-success/30"
-                              : numVal > 0.3
-                                ? "bg-success/15"
-                                : numVal < -0.7
-                                  ? "bg-error/30"
-                                  : numVal < -0.3
-                                    ? "bg-error/15"
-                                    : "bg-base-300/30";
                           return (
                             <td
                               key={colSym}
-                              className={`text-center font-mono ${bgColor}`}
+                              className="text-center p-1"
                             >
-                              {isNaN(numVal) ? "—" : numVal.toFixed(2)}
+                              <div
+                                className={`${isNaN(numVal) ? "" : getHeatColor(numVal)} rounded px-2 py-1`}
+                              >
+                                <span className="font-mono text-xs">
+                                  {isNaN(numVal) ? "—" : numVal.toFixed(2)}
+                                </span>
+                              </div>
                             </td>
                           );
                         })}
@@ -836,6 +895,9 @@ export default function PortfolioOverview({ positions = [], account = null, last
   // Extract symbol list from positions
   const symbols = positions.map((p) => p.symbol).filter(Boolean);
 
+  // Correlation data state — lifted from child so the top metric card can show it
+  const [corrData, setCorrData] = useState(null);
+
   // Calculate portfolio metrics
   const totalValue = positions.reduce(
     (sum, p) => sum + (parseFloat(p.market_value) || 0),
@@ -864,6 +926,14 @@ export default function PortfolioOverview({ positions = [], account = null, last
     positions.length > 0
       ? (concentrationRisk * 0.25 * 100).toFixed(1) // rough 95% VaR estimate
       : 0;
+
+  // Derive correlation regime display for the metric card
+  const corrRegimeValue = corrData?.regime_label
+    ? regimeDisplayLabel(corrData.regime_label)
+    : "—";
+  const corrRegimeSubtext = corrData?.regime_label
+    ? `Risk ${(corrData.blended_risk_multiplier || 1).toFixed(2)}x`
+    : "Requires correlation data";
 
   return (
     <div className="space-y-6">
@@ -907,8 +977,8 @@ export default function PortfolioOverview({ positions = [], account = null, last
         />
         <MetricCard
           label="Corr Regime"
-          value="—"
-          subtext="Requires correlation data"
+          value={corrRegimeValue}
+          subtext={corrRegimeSubtext}
           icon="🔗"
         />
         <MetricCard
@@ -931,7 +1001,11 @@ export default function PortfolioOverview({ positions = [], account = null, last
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        <CorrelationDetection symbols={symbols} positions={positions} />
+        <CorrelationDetection
+          symbols={symbols}
+          positions={positions}
+          onCorrelationData={setCorrData}
+        />
         <PortfolioOptimizer positions={positions} totalValue={totalValue} />
       </div>
     </div>
