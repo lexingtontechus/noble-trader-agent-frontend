@@ -1,22 +1,28 @@
 import { auth } from "@clerk/nextjs/server";
+import { cookies, headers } from "next/headers";
 
 /**
  * Gets the Authorization header for FastAPI backend calls.
- * Tries Clerk JWT token first, falls back to X-API-Key env var.
+ *
+ * Tries multiple methods in order:
+ * 1. Clerk auth().getToken() — standard method, works when Clerk is properly configured
+ * 2. Read __session cookie directly — works in keyless/development mode
+ * 3. X-API-Key env var — fallback for service-to-service auth
+ *
  * Returns a headers object ready to spread into fetch options.
  */
 export async function getFastAPIAuthHeaders() {
   const headers = {};
 
+  // ── Method 1: Clerk auth().getToken() ──────────────────────────────────────
   try {
-    // Get Clerk JWT token from the current session
     const authResult = await auth();
 
     if (authResult?.getToken) {
       // Try default token first
       let token = await authResult.getToken();
 
-      // If default token fails, try with 'server' template (common Clerk JWT template for backend)
+      // If default token fails, try with 'server' template
       if (!token) {
         try {
           token = await authResult.getToken({ template: "server" });
@@ -31,27 +37,60 @@ export async function getFastAPIAuthHeaders() {
       }
     }
 
-    // Log auth state for debugging
-    if (!authResult?.userId) {
-      console.warn("[fastapi-auth] No authenticated user found in session");
-    } else {
-      console.warn(
-        "[fastapi-auth] User found but no JWT token available:",
+    // If we have a userId but no token, log for debugging
+    if (authResult?.userId) {
+      console.debug(
+        "[fastapi-auth] User authenticated but no JWT token available:",
         authResult.userId,
       );
     }
   } catch (e) {
-    // Clerk auth may not be available in all contexts
-    console.warn(
-      "[fastapi-auth] Clerk token fetch failed, falling back to API key:",
+    console.debug(
+      "[fastapi-auth] Clerk auth().getToken() failed:",
       e.message,
     );
   }
 
-  // Fallback: use X-API-Key from env if Clerk token is unavailable
+  // ── Method 2: Read __session cookie directly ──────────────────────────────
+  // In keyless/development mode, Clerk stores the session token in a cookie.
+  // The auth() → getToken() path may not work without CLERK_SECRET_KEY,
+  // but the browser DOES send a valid JWT in the __session cookie.
+  try {
+    const cookieStore = await cookies();
+    const sessionCookie = cookieStore.get("__session");
+
+    if (sessionCookie?.value) {
+      // The __session cookie contains the Clerk session JWT
+      headers["Authorization"] = `Bearer ${sessionCookie.value}`;
+      return headers;
+    }
+  } catch (e) {
+    // cookies() may not be available in all contexts
+    console.debug("[fastapi-auth] Cookie extraction failed:", e.message);
+  }
+
+  // ── Method 3: Read Authorization header from incoming request ─────────────
+  // If the client already sends a Bearer token, forward it
+  try {
+    const headersList = await headers();
+    const authHeader = headersList.get("authorization");
+    if (authHeader?.startsWith("Bearer ")) {
+      headers["Authorization"] = authHeader;
+      return headers;
+    }
+  } catch (e) {
+    // headers() may not be available in all contexts
+    console.debug("[fastapi-auth] Header extraction failed:", e.message);
+  }
+
+  // ── Method 4: X-API-Key fallback ──────────────────────────────────────────
   const apiKey = process.env.FASTAPI_API_KEY;
   if (apiKey) {
     headers["X-API-Key"] = apiKey;
+  }
+
+  if (Object.keys(headers).length === 0) {
+    console.warn("[fastapi-auth] No auth method available — request will likely fail with 401");
   }
 
   return headers;
@@ -62,9 +101,14 @@ export async function getFastAPIAuthHeaders() {
  * Only use in diagnostics — not for production API calls.
  */
 export async function getAuthDebugInfo() {
+  const info = {
+    methods: {},
+  };
+
+  // Method 1: Clerk auth()
   try {
     const authResult = await auth();
-    const info = {
+    info.methods.clerkAuth = {
       hasAuth: !!authResult,
       userId: authResult?.userId || null,
       sessionId: authResult?.sessionId || null,
@@ -74,39 +118,51 @@ export async function getAuthDebugInfo() {
     if (authResult?.getToken) {
       try {
         const token = await authResult.getToken();
-        info.tokenAvailable = !!token;
-        info.tokenPreview = token ? token.substring(0, 40) + "..." : null;
+        info.methods.clerkAuth.tokenAvailable = !!token;
+        info.methods.clerkAuth.tokenPreview = token
+          ? token.substring(0, 40) + "..."
+          : null;
 
         if (token) {
-          // Parse JWT payload (without verification) for display
           const parts = token.split(".");
           if (parts.length === 3) {
             try {
               const payload = JSON.parse(
                 Buffer.from(parts[1], "base64url").toString(),
               );
-              info.issuer = payload.iss || null;
-              info.subject = payload.sub || null;
-              info.audience = payload.aud || null;
-              info.azp = payload.azp || null;
-              info.issuedAt = payload.iat
-                ? new Date(payload.iat * 1000).toISOString()
-                : null;
-              info.expiresAt = payload.exp
-                ? new Date(payload.exp * 1000).toISOString()
-                : null;
+              info.methods.clerkAuth.issuer = payload.iss || null;
+              info.methods.clerkAuth.subject = payload.sub || null;
             } catch {
-              info.payloadParseError = true;
+              info.methods.clerkAuth.payloadParseError = true;
             }
           }
         }
       } catch (e) {
-        info.tokenError = e.message;
+        info.methods.clerkAuth.tokenError = e.message;
       }
     }
-
-    return info;
   } catch (e) {
-    return { error: e.message };
+    info.methods.clerkAuth = { error: e.message };
   }
+
+  // Method 2: Cookie
+  try {
+    const cookieStore = await cookies();
+    const sessionCookie = cookieStore.get("__session");
+    info.methods.cookie = {
+      available: !!sessionCookie?.value,
+      preview: sessionCookie?.value
+        ? sessionCookie.value.substring(0, 40) + "..."
+        : null,
+    };
+  } catch (e) {
+    info.methods.cookie = { error: e.message };
+  }
+
+  // Method 3: X-API-Key
+  info.methods.apiKey = {
+    configured: !!process.env.FASTAPI_API_KEY,
+  };
+
+  return info;
 }

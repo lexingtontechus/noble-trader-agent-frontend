@@ -1,6 +1,7 @@
 import { FASTAPI_BASE } from "@/lib/config";
+import { getFastAPIAuthHeaders } from "@/lib/fastapi-auth";
 
-// ── Auth token cache ────────────────────────────────────────────────────────
+// ── Auth token cache (legacy, used by getFastApiToken) ──────────────────────
 let _cachedToken = null;
 let _tokenExpiry = 0;
 
@@ -244,14 +245,13 @@ export async function simulateRegime(symbol, prices, options = {}) {
   };
   if (options.current_price != null) body.current_price = options.current_price;
 
-  const auth = await getFastApiToken();
+  const authHeaders = await getFastAPIAuthHeaders();
   const res = await fetchWithRetry(
     `${FASTAPI_BASE}/simulate/${encodeURIComponent(symbol)}`,
     {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: { ...authHeaders, "Content-Type": "application/json" },
       body: JSON.stringify(body),
-      auth: auth || undefined,
       timeout: SIMULATE_TIMEOUT,
     },
   );
@@ -273,10 +273,10 @@ export async function getPortfolio(options = {}) {
   const qs = params.toString();
   const url = `${FASTAPI_BASE}/portfolio${qs ? `?${qs}` : ""}`;
 
-  const auth = await getFastApiToken();
+  const authHeaders = await getFastAPIAuthHeaders();
   const res = await fetchWithRetry(url, {
     method: "GET",
-    auth: auth || undefined,
+    headers: { ...authHeaders },
   });
   return res.json();
 }
@@ -286,10 +286,10 @@ export async function getPortfolio(options = {}) {
  * GET /portfolio/symbols
  */
 export async function getPortfolioSymbols() {
-  const auth = await getFastApiToken();
+  const authHeaders = await getFastAPIAuthHeaders();
   const res = await fetchWithRetry(`${FASTAPI_BASE}/portfolio/symbols`, {
     method: "GET",
-    auth: auth || undefined,
+    headers: { ...authHeaders },
   });
   return res.json();
 }
@@ -331,6 +331,7 @@ export function getAlertsSSEUrl() {
  * POST /correlation/detect
  *
  * Backend requires: symbols + returns_matrix (n_bars × n_assets 2D array of log-returns)
+ * Uses Clerk JWT auth via getFastAPIAuthHeaders().
  *
  * @param {string[]} symbols - List of ticker symbols
  * @param {number[][]} returnsMatrix - (n_bars × n_assets) matrix of log-returns
@@ -346,12 +347,11 @@ export async function detectCorrelation(symbols, returnsMatrix, options = {}) {
     n_hmm_states: options.n_hmm_states ?? 4,
   };
 
-  const auth = await getFastApiToken();
+  const authHeaders = await getFastAPIAuthHeaders();
   const res = await fetchWithRetry(`${FASTAPI_BASE}/correlation/detect`, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: { ...authHeaders, "Content-Type": "application/json" },
     body: JSON.stringify(body),
-    auth: auth || undefined,
   });
   return res.json();
 }
@@ -361,6 +361,7 @@ export async function detectCorrelation(symbols, returnsMatrix, options = {}) {
  * POST /optimise/full
  *
  * Backend requires: symbols + returns_matrix (n_bars × n_assets 2D array of log-returns)
+ * Uses Clerk JWT auth via getFastAPIAuthHeaders().
  *
  * @param {string[]} symbols - List of ticker symbols
  * @param {number[][]} returnsMatrix - (n_bars × n_assets) matrix of log-returns
@@ -379,12 +380,11 @@ export async function optimisePortfolio(symbols, returnsMatrix, options = {}) {
     corr_ewma: options.corr_ewma ?? 20,
   };
 
-  const auth = await getFastApiToken();
+  const authHeaders = await getFastAPIAuthHeaders();
   const res = await fetchWithRetry(`${FASTAPI_BASE}/optimise/full`, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: { ...authHeaders, "Content-Type": "application/json" },
     body: JSON.stringify(body),
-    auth: auth || undefined,
     timeout: SIMULATE_TIMEOUT,
   });
   return res.json();
