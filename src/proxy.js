@@ -1,15 +1,18 @@
-import { clerkMiddleware, createRouteMatcher } from "@clerk/nextjs/server";
+import { clerkMiddleware } from "@clerk/nextjs/server";
 
-const isPublicRoute = createRouteMatcher([
-  "/",
-  "/sign-in(.*)",
-  "/sign-up(.*)",
-  "/clerk-sync-keyless(.*)",
-  "/api/(.*)",  // All API routes are public — BFF handles auth to FastAPI
-]);
-
+/**
+ * Proxy (middleware) for Next.js 16.
+ *
+ * All API routes are public — the BFF pattern means each route handler
+ * does its own auth checks (e.g. getAlpacaKeys() which calls Clerk's auth()).
+ * Non-API routes require Clerk authentication.
+ */
 export default clerkMiddleware(async (auth, request) => {
-  if (!isPublicRoute(request)) {
+  // Check if the request is for an API route
+  const url = new URL(request.url);
+  const isApi = url.pathname.startsWith("/api/");
+
+  if (!isApi) {
     await auth.protect();
   }
 });

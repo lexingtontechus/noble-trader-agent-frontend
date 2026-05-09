@@ -1,30 +1,36 @@
 ---
-Task ID: 1
-Agent: Main Agent
-Task: Add FastAPI MCP support to the noble-trader-fastapi-backend repo
+Task ID: 1-6
+Agent: Main
+Task: Build complete trading workflow system with analyze → approve/block → execute → Telegram report → schedule pipeline
 
 Work Log:
-- Fetched FastAPI MCP quickstart docs from https://fastapi-mcp.tadata.com/getting-started/quickstart
-- Read the backend repo structure: main.py (FastAPI app factory), routers, requirements.txt
-- Created Python venv at /home/z/noble-trader-fastapi-backend/.venv
-- Installed fastapi-mcp v0.4.0 and all backend dependencies
-- Modified main.py to integrate FastApiMCP:
-  - Added graceful import (try/except) so app works without fastapi-mcp installed
-  - Created FastApiMCP instance with name "Noble Trader MCP" and detailed description
-  - Called mcp.mount_http() to mount at /mcp endpoint
-  - Updated root endpoint to include "mcp" field and "mcp_server" in endpoints dict
-- Added fastapi-mcp>=0.4.0 to requirements.txt
-- Tested MCP integration locally:
-  - Health endpoint: ✅ returns ok
-  - Root endpoint: ✅ shows "mcp": "/mcp"
-  - MCP Initialize: ✅ protocol 2024-11-05, session management works
-  - MCP Tools List: ✅ 30 tools auto-discovered from all FastAPI endpoints
-  - MCP Tool Call: ✅ session-based tool invocation works
-- Committed and pushed to GitHub: commit 4d8b7ea
+- Saved Telegram bot token (8743310734:AAHwjr-PGXjBuNokpDPjSHdg9glsfPMg46g) to .env.local
+- Updated Prisma schema with AnalysisRun, TradeRecommendation, ScheduledOrder, TelegramNotification models
+- Pushed schema to SQLite database via `npx prisma db push`
+- Built 11 API routes:
+  - POST /api/trading/analyze - Full analysis pipeline (positions → regime → correlation → optimizer → recommendations)
+  - GET /api/trading/recommendations - Get trade recommendations
+  - POST /api/trading/approve - Approve/block individual trades
+  - POST /api/trading/approve-all - Bulk approve
+  - POST /api/trading/execute - Execute approved trades via Alpaca
+  - GET /api/trading/status - Check order fill status
+  - POST /api/telegram/report - Send formatted summary to Telegram
+  - GET /api/telegram/chat-id - Get Telegram chat ID
+  - POST/GET /api/trading/schedule - Create/list scheduled orders
+  - POST /api/trading/schedule/execute - Process due scheduled orders
+- Built TradingWorkflow.jsx frontend component with 5 phases:
+  - Phase 1: Analyze (button → animated loading → results)
+  - Phase 2: Review (approve/block individual trades)
+  - Phase 3: Execute (real-time progress per trade)
+  - Phase 4: Telegram Report (chat ID input → send)
+  - Phase 5: Schedule Deferred Orders (date/time picker)
+- Integrated TradingWorkflow into PortfolioPage.jsx below PortfolioOverview
+- Verified dev server compiles and serves pages correctly
 
 Stage Summary:
-- FastAPI MCP fully integrated and working at /mcp endpoint
-- 30 endpoints exposed as MCP tools (regime detection, sizing, risk, simulation, correlation, optimisation, etc.)
-- Graceful degradation: app runs fine without fastapi-mcp installed
-- SSE transport for real-time MCP client connections
-- MCP client config: {"mcpServers": {"noble-trader": {"url": "http://localhost:8000/mcp"}}}
+- Full trading workflow system built end-to-end
+- Frontend: /src/components/trading/TradingWorkflow.jsx
+- Backend API routes: /src/app/api/trading/*, /src/app/api/telegram/*
+- Database schema: AnalysisRun, TradeRecommendation, ScheduledOrder, TelegramNotification
+- All routes protected by Clerk auth (expected 307 for unauthenticated requests)
+- Supabase cron plan documented below

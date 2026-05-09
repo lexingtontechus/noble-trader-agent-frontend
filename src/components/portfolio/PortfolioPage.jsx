@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback } from 'react'
 import PortfolioOverview from './PortfolioOverview'
+import TradingWorkflow from '@/components/trading/TradingWorkflow'
 import { notifyError } from '@/lib/notifications'
 
 export default function PortfolioPage() {
@@ -127,9 +128,15 @@ export default function PortfolioPage() {
   }
 
   return (
-    <PortfolioOverview
-      positions={positions}
-      account={account}
-    />
+    <div className="space-y-8">
+      <PortfolioOverview
+        positions={positions}
+        account={account}
+      />
+      <div className="divider text-base-content/40 uppercase tracking-wider text-sm font-semibold">
+        Trading Workflow
+      </div>
+      <TradingWorkflow />
+    </div>
   )
 }

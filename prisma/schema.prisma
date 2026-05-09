@@ -1,7 +1,7 @@
 // This is your Prisma schema file,
 // learn more about it in the docs: https://pris.ly/d/prisma-schema
 
-// Looking for ways to speed up your queries, or scale easily with your serverless or edge functions?
+// Looking for ways to speed up your queries, or scale easily with serverless or edge functions?
 // Try Prisma Accelerate: https://pris.ly/cli/accelerate-init
 
 generator client {
@@ -29,4 +29,84 @@ model Post {
   authorId  String
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+}
+
+/// A single analysis run — one button press from the user.
+model AnalysisRun {
+  id          String   @id @default(cuid())
+  userId      String   @default("default")
+  status      String   @default("pending") // pending | running | completed | failed
+  /// JSON blob — summary of the analysis results
+  results     String?  // JSON stringified
+  /// Snapshot of positions at analysis time
+  positions   String?  // JSON stringified
+  /// Correlation detection results
+  correlation String?  // JSON stringified
+  /// Optimizer results
+  optimizer   String?  // JSON stringified
+  /// Regime detection per-asset results
+  regimes     String?  // JSON stringified
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  trades TradeRecommendation[]
+}
+
+/// Individual trade recommendation produced by an analysis run.
+model TradeRecommendation {
+  id           String       @id @default(cuid())
+  analysisId   String
+  analysis     AnalysisRun  @relation(fields: [analysisId], references: [id], onDelete: Cascade)
+  symbol       String
+  side         String       // buy | sell
+  orderType    String       // market | limit
+  qty          Float
+  limitPrice   Float?
+  timeInForce  String       @default("day") // day | gtc
+  priority     Int          @default(0)     // 0=highest
+  reason       String?
+  status       String       @default("pending") // pending | approved | blocked | executing | filled | failed | cancelled
+  /// Alpaca order ID after execution
+  alpacaOrderId String?
+  /// Error message if order failed
+  errorMessage  String?
+  createdAt    DateTime     @default(now())
+  updatedAt    DateTime     @updatedAt
+}
+
+/// Orders that need to be scheduled (e.g. after market open, after sells clear)
+model ScheduledOrder {
+  id              String   @id @default(cuid())
+  userId          String   @default("default")
+  symbol          String
+  side            String   // buy | sell
+  orderType       String   // market | limit
+  qty             Float
+  limitPrice      Float?
+  timeInForce     String   @default("gtc")
+  reason          String?
+  status          String   @default("queued") // queued | scheduled | executing | filled | failed | cancelled
+  /// Cron expression or ISO timestamp for when to execute
+  scheduleAt      DateTime?
+  /// Dependencies — wait for these sell order IDs to fill first
+  dependsOnOrders String?  // JSON array of Alpaca order IDs
+  /// Alpaca order ID after execution
+  alpacaOrderId   String?
+  errorMessage    String?
+  attempts        Int      @default(0)
+  maxAttempts     Int      @default(5)
+  lastAttemptAt   DateTime?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+}
+
+/// Telegram notification log
+model TelegramNotification {
+  id         String   @id @default(cuid())
+  chatId     String
+  message    String
+  messageType String @default("trade_report") // trade_report | execution_summary | schedule_reminder
+  success    Boolean
+  error      String?
+  createdAt  DateTime @default(now())
 }

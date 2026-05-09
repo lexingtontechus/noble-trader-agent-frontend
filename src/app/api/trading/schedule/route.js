@@ -1,0 +1,84 @@
+import { getAlpacaKeys } from "@/lib/clerk-metadata";
+import { createOrder, getOrders } from "@/lib/alpaca-client";
+import { yahooToAlpacaSymbol } from "@/lib/symbol-utils";
+import { db } from "@/lib/db";
+
+/**
+ * POST /api/trading/schedule
+ * Create a scheduled order for later execution.
+ * Body: { symbol, side, orderType, qty, limitPrice?, timeInForce, scheduleAt?, dependsOnOrders?[] }
+ */
+export async function POST(request) {
+  try {
+    const body = await request.json();
+    const {
+      symbol,
+      side,
+      orderType = "limit",
+      qty,
+      limitPrice,
+      timeInForce = "gtc",
+      scheduleAt,
+      dependsOnOrders,
+      reason,
+    } = body;
+
+    if (!symbol || !side || !qty) {
+      return Response.json(
+        { error: "symbol, side, and qty are required" },
+        { status: 400 }
+      );
+    }
+
+    const scheduledOrder = await db.scheduledOrder.create({
+      data: {
+        userId: "default",
+        symbol,
+        side,
+        orderType,
+        qty: parseFloat(qty),
+        limitPrice: limitPrice ? parseFloat(limitPrice) : null,
+        timeInForce,
+        reason: reason || "Scheduled order",
+        status: "queued",
+        scheduleAt: scheduleAt ? new Date(scheduleAt) : null,
+        dependsOnOrders: dependsOnOrders ? JSON.stringify(dependsOnOrders) : null,
+      },
+    });
+
+    return Response.json(scheduledOrder);
+  } catch (error) {
+    console.error("Create scheduled order error:", error);
+    return Response.json(
+      { error: `Failed to create scheduled order: ${error.message}` },
+      { status: 500 }
+    );
+  }
+}
+
+/**
+ * GET /api/trading/schedule
+ * Get all scheduled orders, optionally filtered by status.
+ */
+export async function GET(request) {
+  try {
+    const { searchParams } = new URL(request.url);
+    const status = searchParams.get("status");
+
+    const where = {};
+    if (status) where.status = status;
+
+    const orders = await db.scheduledOrder.findMany({
+      where,
+      orderBy: { createdAt: "desc" },
+    });
+
+    return Response.json(orders);
+  } catch (error) {
+    console.error("Get scheduled orders error:", error);
+    return Response.json(
+      { error: `Failed to get scheduled orders: ${error.message}` },
+      { status: 500 }
+    );
+  }
+}
