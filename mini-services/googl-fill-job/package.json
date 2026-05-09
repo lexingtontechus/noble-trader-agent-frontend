@@ -1,0 +1,6 @@
+{
+  "name": "googl-fill-job",
+  "scripts": {
+    "dev": "bun --hot index.ts"
+  }
+}
