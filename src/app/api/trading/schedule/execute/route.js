@@ -35,22 +35,20 @@ function verifyCronSecret(request) {
   return headerSecret === CRON_SECRET || querySecret === CRON_SECRET;
 }
 
-/**
- * GET /api/trading/schedule/execute
- * Health check endpoint. If CRON_SECRET is provided, returns queue status.
- * Can be used by Supabase pg_cron to check the health of the cron endpoint.
- *
- * Supabase pg_cron setup:
- *   SELECT cron.schedule(
- *     'check-scheduled-orders',
- *     '*/5 * * * 1-5',  -- Every 5 min on weekdays
- *     $$
- *     SELECT net.http_get(
- *       url := 'https://your-app.vercel.app/api/trading/schedule/execute?secret=YOUR_CRON_SECRET'
- *     );
- *     $$
- *   );
- */
+// GET /api/trading/schedule/execute
+// Health check endpoint. If CRON_SECRET is provided, returns queue status.
+// Can be used by Supabase pg_cron to check the health of the cron endpoint.
+//
+// Supabase pg_cron setup:
+//   SELECT cron.schedule(
+//     'check-scheduled-orders',
+//     '*/5 * * * 1-5',  -- Every 5 min on weekdays
+//     $$
+//     SELECT net.http_get(
+//       url := 'https://noble-trader-agent-frontend.vercel.app/api/trading/schedule/execute?secret=' || process.env.CRON_SECRET
+//     );
+//     $$
+//   );
 export async function GET(request) {
   // If CRON_SECRET is provided, verify it and return queue status
   const hasCronHeader = request.headers.get("x-cron-secret") || new URL(request.url).searchParams.get("secret");
@@ -77,31 +75,29 @@ export async function GET(request) {
   });
 }
 
-/**
- * POST /api/trading/schedule/execute
- * Process scheduled orders that are due and whose dependencies are met.
- *
- * Supports two auth methods:
- * 1. Clerk auth (from frontend) — standard flow
- * 2. CRON_SECRET auth (from Supabase pg_cron) — for scheduled/cron jobs
- *    Pass via `x-cron-secret` header or `?secret=` query param
- *
- * Supabase pg_cron setup:
- *   SELECT cron.schedule(
- *     'execute-scheduled-orders',
- *     '*/5 * * * 1-5',  -- Every 5 min on weekdays (Mon-Fri)
- *     $$
- *     SELECT net.http_post(
- *       url := 'https://your-app.vercel.app/api/trading/schedule/execute?secret=YOUR_CRON_SECRET',
- *       headers := jsonb_build_object(
- *         'Content-Type', 'application/json',
- *         'x-cron-secret', 'YOUR_CRON_SECRET'
- *       ),
- *       body := '{}'::jsonb
- *     );
- *     $$
- *   );
- */
+// POST /api/trading/schedule/execute
+// Process scheduled orders that are due and whose dependencies are met.
+//
+// Supports two auth methods:
+// 1. Clerk auth (from frontend) — standard flow
+// 2. CRON_SECRET auth (from Supabase pg_cron) — for scheduled/cron jobs
+//    Pass via `x-cron-secret` header or `?secret=` query param
+//
+// Supabase pg_cron setup:
+//   SELECT cron.schedule(
+//     'execute-scheduled-orders',
+//     '*/5 * * * 1-5',  -- Every 5 min on weekdays (Mon-Fri)
+//     $$
+//     SELECT net.http_post(
+//       url := 'https://noble-trader-agent-frontend.vercel.app/api/trading/schedule/execute?secret=' || process.env.CRON_SECRET,
+//       headers := jsonb_build_object(
+//         'Content-Type', 'application/json',
+//         'x-cron-secret', process.env.CRON_SECRET
+//       ),
+//       body := '{}'::jsonb
+//     );
+//     $$
+//   );
 export async function POST(request) {
   const isCronRequest = verifyCronSecret(request);
 
