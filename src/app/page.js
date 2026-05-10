@@ -17,6 +17,30 @@ import NotificationToast from "@/components/shared/NotificationToast";
 export default function Home() {
   const [activeView, setActiveView] = useState("dashboard");
 
+  // Global error handler to catch toLowerCase/toUpperCase is not a function errors
+  useEffect(() => {
+    const handler = (event) => {
+      const msg = event.error?.message || '';
+      if (msg.includes('toLowerCase') || msg.includes('toUpperCase')) {
+        console.error('[CASE-CONVERSION ERROR]', event.error.message, event.error.stack);
+        // Prevent the error from crashing the page
+        event.preventDefault();
+      }
+    };
+    const rejectionHandler = (event) => {
+      const msg = event.reason?.message || '';
+      if (msg.includes('toLowerCase') || msg.includes('toUpperCase')) {
+        console.error('[CASE-CONVERSION REJECTION]', event.reason.message, event.reason.stack);
+      }
+    };
+    window.addEventListener('error', handler);
+    window.addEventListener('unhandledrejection', rejectionHandler);
+    return () => {
+      window.removeEventListener('error', handler);
+      window.removeEventListener('unhandledrejection', rejectionHandler);
+    };
+  }, []);
+
   // Keyboard shortcuts
   useEffect(() => {
     const handleKeyDown = (e) => {

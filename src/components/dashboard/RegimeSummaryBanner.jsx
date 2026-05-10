@@ -2,7 +2,7 @@
 
 function getRegimeBadgeClass(regimeLabel) {
   if (!regimeLabel || typeof regimeLabel !== 'string') return "badge-ghost";
-  const lower = regimeLabel.toLowerCase();
+  const lower = String(regimeLabel).toLowerCase();
   if (lower.includes("bull")) return "badge-success";
   if (lower.includes("bear")) return "badge-error";
   if (lower.includes("neutral")) return "badge-warning";

@@ -213,8 +213,8 @@ export default function OrderModal({ symbol, onClose, onSuccess }) {
         throw new Error(data.error || "Order failed");
       }
 
-      setToast(`${side.toUpperCase()} ${qty} ${displaySymbol} order submitted!`);
-      notifySuccess(`${side.toUpperCase()} ${qty} ${displaySymbol} order submitted!`);
+      setToast(`${String(side).toUpperCase()} ${qty} ${displaySymbol} order submitted!`);
+      notifySuccess(`${String(side).toUpperCase()} ${qty} ${displaySymbol} order submitted!`);
       setTimeout(() => {
         setToast("");
         onSuccess();
@@ -567,7 +567,7 @@ export default function OrderModal({ symbol, onClose, onSuccess }) {
                     <span
                       className={`font-bold ${side === "buy" ? "text-success" : "text-error"}`}
                     >
-                      {side.toUpperCase()}
+                      {String(side).toUpperCase()}
                     </span>
                   </div>
                   <div className="flex justify-between text-sm">
@@ -649,7 +649,7 @@ export default function OrderModal({ symbol, onClose, onSuccess }) {
                       Submitting...
                     </>
                   ) : (
-                    `Confirm ${side.toUpperCase()}`
+                    `Confirm ${String(side).toUpperCase()}`
                   )}
                 </button>
               </div>

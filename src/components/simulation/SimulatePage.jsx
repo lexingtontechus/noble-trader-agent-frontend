@@ -61,7 +61,7 @@ export default function SimulatePage() {
 
   const handleCustomSubmit = (e) => {
     e.preventDefault()
-    const sym = customSymbol.trim().toUpperCase()
+    const sym = String(customSymbol).trim().toUpperCase()
     if (sym) {
       setSelectedSymbol('')
       fetchPrices(sym)
@@ -92,7 +92,7 @@ export default function SimulatePage() {
             ))}
           </div>
           <form onSubmit={handleCustomSubmit} className="flex gap-2">
-            <input type="text" placeholder="Enter symbol (e.g. MSFT)" className="input input-sm input-bordered flex-1 font-mono" value={customSymbol} onChange={(e) => setCustomSymbol(e.target.value.toUpperCase())} />
+            <input type="text" placeholder="Enter symbol (e.g. MSFT)" className="input input-sm input-bordered flex-1 font-mono" value={customSymbol} onChange={(e) => setCustomSymbol(String(e.target.value).toUpperCase())} />
             <button type="submit" className="btn btn-sm btn-primary" disabled={!customSymbol.trim()}>Load</button>
           </form>
           {activeSymbol && (

@@ -23,7 +23,7 @@ function CustomTooltip({ active, payload, label, strokeColor }) {
 }
 
 function getRegimeColor(regimeLabel) {
-  const label = (typeof regimeLabel === 'string' ? regimeLabel : '').toLowerCase()
+  const label = String(typeof regimeLabel === 'string' ? regimeLabel : '').toLowerCase()
   if (label.includes('bull')) return { stroke: '#22c55e', fill: 'rgba(34, 197, 94, 0.15)' }
   if (label.includes('bear')) return { stroke: '#ef4444', fill: 'rgba(239, 68, 68, 0.15)' }
   return { stroke: '#f59e0b', fill: 'rgba(245, 158, 11, 0.15)' }

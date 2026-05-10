@@ -75,7 +75,7 @@ export default function SearchPage() {
   }, []);
 
   const doSearch = useCallback(async (symbol, p) => {
-    const trimmed = symbol.trim().toUpperCase();
+    const trimmed = String(symbol).trim().toUpperCase();
     if (!trimmed) return;
 
     setLoading(true);

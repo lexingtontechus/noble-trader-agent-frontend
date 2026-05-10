@@ -3,7 +3,7 @@
 export default function RegimeCard({ data }) {
   if (!data) return null
 
-  const label = (typeof data.regime_label === 'string' ? data.regime_label : 'unknown').toLowerCase()
+  const label = String(typeof data.regime_label === 'string' ? data.regime_label : 'unknown').toLowerCase()
   const badgeClass = label.includes('bull')
     ? 'badge-success'
     : label.includes('bear')
