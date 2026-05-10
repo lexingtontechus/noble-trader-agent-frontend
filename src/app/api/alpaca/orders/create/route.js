@@ -2,10 +2,20 @@ import { createOrder } from "@/lib/alpaca-client";
 import { getAlpacaKeys } from "@/lib/clerk-metadata";
 import { yahooToAlpacaSymbol, getAssetClass, isAlpacaTradable, getAlpacaTradeabilityReason } from "@/lib/symbol-utils";
 
-/**
- * Alpaca order-type & time-in-force validation per asset class.
- * Ref: https://docs.alpaca.markets/reference/postorder
- */
+const ALPACA_API_KEY = process.env.ALPACA_API_KEY;
+const ALPACA_SECRET_KEY = process.env.ALPACA_SECRET_KEY;
+
+async function resolveAlpacaKeys() {
+  try {
+    const keys = await getAlpacaKeys();
+    if (keys?.apiKey && keys?.secretKey) return keys;
+  } catch { /* Clerk not available */ }
+  if (ALPACA_API_KEY && ALPACA_SECRET_KEY) {
+    return { apiKey: ALPACA_API_KEY, secretKey: ALPACA_SECRET_KEY };
+  }
+  return null;
+}
+
 const VALID_TYPES = {
   equity: ["market", "limit", "stop", "stop_limit", "trailing_stop"],
   crypto: ["market", "limit", "stop_limit"],
@@ -18,13 +28,12 @@ const VALID_TIF = {
 
 function getCategory(assetClass) {
   if (assetClass === "crypto") return "crypto";
-  // Forex is NOT supported by Alpaca — blocked by yahooToAlpacaSymbol() returning null
   return "equity";
 }
 
 export async function POST(request) {
   try {
-    const keys = await getAlpacaKeys();
+    const keys = await resolveAlpacaKeys();
     if (!keys?.apiKey || !keys?.secretKey) {
       return Response.json({ error: "Alpaca API keys not configured" }, { status: 403 });
     }
@@ -39,29 +48,20 @@ export async function POST(request) {
       return Response.json({ error: "side must be 'buy' or 'sell'" }, { status: 400 });
     }
 
-    // Block non-tradable assets (forex, futures, indices)
     if (!isAlpacaTradable(symbol)) {
       const reason = getAlpacaTradeabilityReason(symbol) || `Symbol "${symbol}" is not tradeable on Alpaca`;
-      return Response.json(
-        { error: reason },
-        { status: 400 }
-      );
+      return Response.json({ error: reason }, { status: 400 });
     }
 
-    // Convert Yahoo Finance symbols to Alpaca format
     const alpacaSymbol = yahooToAlpacaSymbol(symbol);
     if (alpacaSymbol === null) {
-      return Response.json(
-        { error: `Symbol "${symbol}" is not tradeable on Alpaca` },
-        { status: 400 }
-      );
+      return Response.json({ error: `Symbol "${symbol}" is not tradeable on Alpaca` }, { status: 400 });
     }
 
     if (alpacaSymbol !== symbol) {
       console.log(`[OrderCreate] Symbol converted: ${symbol} → ${alpacaSymbol}`);
     }
 
-    // Validate order type & time_in_force against asset class rules
     const assetClass = getAssetClass(symbol);
     const category = getCategory(assetClass);
     const allowedTypes = VALID_TYPES[category];
@@ -71,37 +71,20 @@ export async function POST(request) {
     const tif = time_in_force || (category === "crypto" ? "gtc" : "day");
 
     if (!allowedTypes.includes(orderType)) {
-      return Response.json(
-        { error: `Order type "${orderType}" is not supported for ${category} assets. Allowed: ${allowedTypes.join(", ")}` },
-        { status: 400 }
-      );
+      return Response.json({ error: `Order type "${orderType}" not supported for ${category}. Allowed: ${allowedTypes.join(", ")}` }, { status: 400 });
     }
-
     if (!allowedTIF.includes(tif)) {
-      return Response.json(
-        { error: `Time-in-force "${tif}" is not supported for ${category} assets. Allowed: ${allowedTIF.join(", ")}` },
-        { status: 400 }
-      );
+      return Response.json({ error: `TIF "${tif}" not supported for ${category}. Allowed: ${allowedTIF.join(", ")}` }, { status: 400 });
     }
 
-    // Validate required price fields per order type
     if ((orderType === "limit" || orderType === "stop_limit") && !limit_price) {
-      return Response.json(
-        { error: `limit_price is required for ${orderType} orders` },
-        { status: 400 }
-      );
+      return Response.json({ error: `limit_price required for ${orderType} orders` }, { status: 400 });
     }
     if ((orderType === "stop" || orderType === "stop_limit") && !stop_price) {
-      return Response.json(
-        { error: `stop_price is required for ${orderType} orders` },
-        { status: 400 }
-      );
+      return Response.json({ error: `stop_price required for ${orderType} orders` }, { status: 400 });
     }
     if (orderType === "trailing_stop" && !trail_price && !trail_percent) {
-      return Response.json(
-        { error: "trail_price or trail_percent is required for trailing_stop orders" },
-        { status: 400 }
-      );
+      return Response.json({ error: "trail_price or trail_percent required for trailing_stop orders" }, { status: 400 });
     }
 
     const order = await createOrder(keys.apiKey, keys.secretKey, {
@@ -118,9 +101,6 @@ export async function POST(request) {
 
     return Response.json(order);
   } catch (error) {
-    return Response.json(
-      { error: `Order failed: ${error.message}` },
-      { status: 500 }
-    );
+    return Response.json({ error: `Order failed: ${error.message}` }, { status: 500 });
   }
 }

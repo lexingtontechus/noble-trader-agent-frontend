@@ -1,9 +1,23 @@
 import { getOrders } from "@/lib/alpaca-client";
 import { getAlpacaKeys } from "@/lib/clerk-metadata";
 
-export async function GET(request) {
+const ALPACA_API_KEY = process.env.ALPACA_API_KEY;
+const ALPACA_SECRET_KEY = process.env.ALPACA_SECRET_KEY;
+
+async function resolveAlpacaKeys() {
   try {
     const keys = await getAlpacaKeys();
+    if (keys?.apiKey && keys?.secretKey) return keys;
+  } catch { /* Clerk not available */ }
+  if (ALPACA_API_KEY && ALPACA_SECRET_KEY) {
+    return { apiKey: ALPACA_API_KEY, secretKey: ALPACA_SECRET_KEY };
+  }
+  return null;
+}
+
+export async function GET(request) {
+  try {
+    const keys = await resolveAlpacaKeys();
     if (!keys?.apiKey || !keys?.secretKey) {
       return Response.json({ error: "Alpaca API keys not configured" }, { status: 403 });
     }
@@ -11,7 +25,6 @@ export async function GET(request) {
     const { searchParams } = new URL(request.url);
     const period = searchParams.get("period") || "3m";
 
-    // Calculate the "after" date based on period
     const now = new Date();
     const after = new Date();
     if (period === "1m") after.setMonth(now.getMonth() - 1);

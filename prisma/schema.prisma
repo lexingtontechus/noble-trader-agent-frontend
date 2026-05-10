@@ -1,6 +1,6 @@
 // Prisma schema for Supabase PostgreSQL.
-// Uses a dedicated "trading" schema to avoid conflicting with existing
-// tables in the "public" schema (trade_history, market_data, etc.)
+// Uses the default "public" schema with prefixed table names (ta_*)
+// to avoid conflicts with existing Supabase tables.
 
 generator client {
   provider = "prisma-client-js"
@@ -10,7 +10,6 @@ datasource db {
   provider  = "postgresql"
   url       = env("DATABASE_URL")
   directUrl = env("DIRECT_URL")
-  schemas   = ["trading"]
 }
 
 /// A single analysis run — one button press from the user.
@@ -28,7 +27,7 @@ model AnalysisRun {
 
   trades TradeRecommendation[]
 
-  @@schema("trading")
+  @@map("ta_analysis_run")
 }
 
 /// Individual trade recommendation produced by an analysis run.
@@ -50,7 +49,7 @@ model TradeRecommendation {
   createdAt     DateTime     @default(now())
   updatedAt     DateTime     @updatedAt
 
-  @@schema("trading")
+  @@map("ta_trade_recommendation")
 }
 
 /// Orders that need to be scheduled (e.g. after market open, after sells clear)
@@ -75,7 +74,7 @@ model ScheduledOrder {
   createdAt       DateTime  @default(now())
   updatedAt       DateTime  @updatedAt
 
-  @@schema("trading")
+  @@map("ta_scheduled_order")
 }
 
 /// Telegram notification log
@@ -88,5 +87,5 @@ model TelegramNotification {
   error       String?
   createdAt   DateTime @default(now())
 
-  @@schema("trading")
+  @@map("ta_telegram_notification")
 }
