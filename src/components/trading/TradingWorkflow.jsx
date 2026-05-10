@@ -1,6 +1,78 @@
 'use client'
 
-import { useState, useCallback, useEffect, useRef } from 'react'
+import { useState, useCallback, useEffect, useRef, Component } from 'react'
+
+/* ─── Safe String Helpers ─── */
+
+function safeLower(val) {
+  if (val == null) return ''
+  return String(val).toLowerCase()
+}
+
+function safeUpper(val) {
+  if (val == null) return ''
+  return String(val).toUpperCase()
+}
+
+/* ─── Normalize trade data from DB (ensures all fields are proper types) ─── */
+
+function normalizeTrade(t) {
+  if (!t) return t
+  return {
+    ...t,
+    side: String(t.side || t.action || 'buy'),
+    action: String(t.action || t.side || 'buy'),
+    orderType: String(t.orderType || t.order_type || t.type || 'market'),
+    order_type: String(t.order_type || t.orderType || t.type || 'market'),
+    type: String(t.type || t.orderType || t.order_type || 'market'),
+    status: String(t.status || 'pending'),
+    priority: t.priority,  // keep as-is (number or string), getPriorityStyle handles both
+    symbol: String(t.symbol || t.ticker || '???'),
+    ticker: String(t.ticker || t.symbol || '???'),
+    reason: t.reason ? String(t.reason) : null,
+    qty: t.qty ?? t.quantity ?? 0,
+    quantity: t.quantity ?? t.qty ?? 0,
+    limitPrice: t.limitPrice ?? t.limit_price ?? null,
+    limit_price: t.limit_price ?? t.limitPrice ?? null,
+    estimatedValue: t.estimatedValue ?? t.estimated_value ?? null,
+    estimated_value: t.estimated_value ?? t.estimatedValue ?? null,
+    timeInForce: String(t.timeInForce ?? t.time_in_force ?? 'day'),
+  }
+}
+
+/* ─── Error Boundary ─── */
+
+class TradingErrorBoundary extends Component {
+  constructor(props) {
+    super(props)
+    this.state = { hasError: false, error: null }
+  }
+  static getDerivedStateFromError(error) {
+    return { hasError: true, error }
+  }
+  componentDidCatch(error, info) {
+    console.error('[TradingWorkflow ErrorBoundary]', error, info)
+  }
+  render() {
+    if (this.state.hasError) {
+      return (
+        <div className="alert alert-error">
+          <svg xmlns="http://www.w3.org/2000/svg" className="stroke-current shrink-0 h-5 w-5" fill="none" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M10 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2m7-2a9 9 0 11-18 0 9 9 0 0118 0z" />
+          </svg>
+          <div>
+            <h3 className="font-bold">Rendering Error</h3>
+            <div className="text-xs mt-1">{this.state.error?.message || 'Unknown error'}</div>
+            <button className="btn btn-sm btn-ghost mt-2" onClick={() => this.setState({ hasError: false, error: null })}>
+              Try Again
+            </button>
+          </div>
+        </div>
+      )
+    }
+    return this.props.children
+  }
+}
 
 /* ─── Inline SVG Icon Components ─── */
 
@@ -145,11 +217,9 @@ function getPriorityStyle(priority) {
     if (priority <= 60) return PRIORITY_STYLES.medium
     return PRIORITY_STYLES.low
   }
-  // Only call .toLowerCase() if priority is actually a string
-  if (typeof priority === 'string') {
-    return PRIORITY_STYLES[priority.toLowerCase()] || PRIORITY_STYLES.low
-  }
-  return PRIORITY_STYLES.low
+  // Safe lowercase — handles any non-string value gracefully
+  const key = safeLower(priority)
+  return PRIORITY_STYLES[key] || PRIORITY_STYLES.low
 }
 
 /* ─── Small Sub-Components ─── */
@@ -456,14 +526,14 @@ function AnalysisSummary({ data }) {
 /* ─── Trade Recommendation Card ─── */
 
 function TradeCard({ trade, onApprove, onBlock, approved }) {
-  const isSell = (trade.side || trade.action || '').toUpperCase() === 'SELL'
+  const isSell = safeUpper(trade.side || trade.action) === 'SELL'
   const sideColor = isSell ? 'border-error/40' : 'border-success/40'
   const sideBg = isSell ? 'bg-error/5' : 'bg-success/5'
   const sideBadge = isSell ? 'badge-error' : 'badge-success'
-  const sideLabel = (trade.side || trade.action || 'BUY').toUpperCase()
+  const sideLabel = safeUpper(trade.side || trade.action || 'BUY')
   const priorityStyle = getPriorityStyle(trade.priority)
   // Handle both camelCase (from Prisma/DB) and snake_case (from API)
-  const orderType = trade.orderType || trade.order_type || trade.type || 'market'
+  const orderType = String(trade.orderType || trade.order_type || trade.type || 'market')
   const limitPrice = trade.limitPrice || trade.limit_price
   const estValue = trade.estimatedValue || trade.estimated_value
 
@@ -550,7 +620,7 @@ function TradeCard({ trade, onApprove, onBlock, approved }) {
 /* ─── Execution Progress Card ─── */
 
 function ExecutionProgressCard({ trade, status }) {
-  const isSell = (trade.side || trade.action || '').toUpperCase() === 'SELL'
+  const isSell = safeUpper(trade.side || trade.action) === 'SELL'
   const sideBadge = isSell ? 'badge-error' : 'badge-success'
 
   const statusConfig = {
@@ -566,7 +636,7 @@ function ExecutionProgressCard({ trade, status }) {
     <div className="flex items-center gap-3 bg-base-300/30 rounded-lg px-4 py-3">
       <div className="flex items-center gap-2 flex-1 min-w-0">
         <span className="font-mono font-medium text-sm truncate">{trade.symbol || trade.ticker}</span>
-        <span className={`badge badge-sm ${sideBadge}`}>{(trade.side || trade.action || 'BUY').toUpperCase()}</span>
+        <span className={`badge badge-sm ${sideBadge}`}>{safeUpper(trade.side || trade.action || 'BUY')}</span>
         <span className="text-xs text-base-content/40 font-mono">{trade.qty || trade.quantity}</span>
       </div>
       <div className="flex items-center gap-1.5">
@@ -587,8 +657,8 @@ function ScheduledOrderCard({ order, onRemove }) {
       <div className="flex-1 min-w-0">
         <div className="flex items-center gap-2">
           <span className="font-mono font-medium text-sm">{order.symbol || order.ticker}</span>
-          <span className={`badge badge-sm ${(order.side || '').toUpperCase() === 'SELL' ? 'badge-error' : 'badge-success'}`}>
-            {(order.side || order.action || 'BUY').toUpperCase()}
+          <span className={`badge badge-sm ${safeUpper(order.side) === 'SELL' ? 'badge-error' : 'badge-success'}`}>
+            {safeUpper(order.side || order.action || 'BUY')}
           </span>
           <span className="text-xs text-base-content/40 font-mono">x{order.qty || order.quantity}</span>
         </div>
@@ -611,7 +681,15 @@ function ScheduledOrderCard({ order, onRemove }) {
    Main Component: TradingWorkflow
    ═══════════════════════════════════════════════════ */
 
-export default function TradingWorkflow() {
+export default function TradingWorkflowWithErrorBoundary() {
+  return (
+    <TradingErrorBoundary>
+      <TradingWorkflowInner />
+    </TradingErrorBoundary>
+  )
+}
+
+function TradingWorkflowInner() {
   // Core phase state
   const [phase, setPhase] = useState('idle') // idle | analyzing | review | executing | done
   const [analysisData, setAnalysisData] = useState(null)
@@ -660,7 +738,8 @@ export default function TradingWorkflow() {
             if (statusRes.ok) {
               const statusData = await statusRes.json()
               if (statusData.trades && statusData.trades.length > 0) {
-                const trades = statusData.trades
+                // Normalize trades to ensure all fields are proper types
+                const trades = statusData.trades.map(normalizeTrade)
                 // Set the trades as recommendations with their current approval status
                 setRecommendations(trades)
                 // Set approvals based on existing status
@@ -750,7 +829,7 @@ export default function TradingWorkflow() {
       }
 
       setAnalysisData(result)
-      const recs = result.recommendations || result.trades || []
+      const recs = (result.recommendations || result.trades || []).map(normalizeTrade)
       setRecommendations(recs)
       // Initialize all approvals as null (pending)
       const initApprovals = {}
@@ -1367,8 +1446,8 @@ export default function TradingWorkflow() {
                         <div className="flex-1 min-w-0">
                           <div className="flex items-center gap-2">
                             <span className="font-mono font-medium text-sm">{order.symbol || order.ticker}</span>
-                            <span className={`badge badge-sm ${(order.side || '').toUpperCase() === 'SELL' ? 'badge-error' : 'badge-success'}`}>
-                              {(order.side || order.action || 'BUY').toUpperCase()}
+                            <span className={`badge badge-sm ${safeUpper(order.side) === 'SELL' ? 'badge-error' : 'badge-success'}`}>
+                              {safeUpper(order.side || order.action || 'BUY')}
                             </span>
                             <span className="text-xs text-base-content/40 font-mono">x{order.qty || order.quantity}</span>
                           </div>
@@ -1442,11 +1521,11 @@ export default function TradingWorkflow() {
                 .filter(r => approvals[r.id || r.symbol] === true)
                 .map((trade, i) => {
                   const id = trade.id || trade.symbol
-                  const isSell = (trade.side || trade.action || '').toUpperCase() === 'SELL'
+                  const isSell = safeUpper(trade.side || trade.action) === 'SELL'
                   return (
                     <div key={id || i} className="flex items-center gap-2 py-1 text-sm">
                       <span className={`badge badge-xs ${isSell ? 'badge-error' : 'badge-success'}`}>
-                        {(trade.side || trade.action || 'BUY').toUpperCase()}
+                        {safeUpper(trade.side || trade.action || 'BUY')}
                       </span>
                       <span className="font-mono">{trade.symbol || trade.ticker}</span>
                       <span className="text-base-content/40">x{trade.qty || trade.quantity}</span>
