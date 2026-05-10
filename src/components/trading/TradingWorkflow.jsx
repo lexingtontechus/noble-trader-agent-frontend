@@ -145,7 +145,11 @@ function getPriorityStyle(priority) {
     if (priority <= 60) return PRIORITY_STYLES.medium
     return PRIORITY_STYLES.low
   }
-  return PRIORITY_STYLES[priority?.toLowerCase()] || PRIORITY_STYLES.low
+  // Only call .toLowerCase() if priority is actually a string
+  if (typeof priority === 'string') {
+    return PRIORITY_STYLES[priority.toLowerCase()] || PRIORITY_STYLES.low
+  }
+  return PRIORITY_STYLES.low
 }
 
 /* ─── Small Sub-Components ─── */

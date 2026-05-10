@@ -26,8 +26,8 @@ function extractSymbols(orders = []) {
 
     const qty = parseFloat(order.qty || order.filled_qty || 0)
     const price = parseFloat(order.filled_avg_price || 0)
-    const side = (order.side || '').toLowerCase()
-    const status = (order.status || '').toLowerCase()
+    const side = (typeof order.side === 'string' ? order.side : '').toLowerCase()
+    const status = (typeof order.status === 'string' ? order.status : '').toLowerCase()
 
     // Only count filled/partially filled orders
     if (['filled', 'partially_filled'].includes(status) && qty > 0) {

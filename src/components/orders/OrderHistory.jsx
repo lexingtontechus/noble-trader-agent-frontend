@@ -27,7 +27,7 @@ export default function OrderHistory({ orders, loading, error, onRetry }) {
   };
 
   const sideBadge = (side) => {
-    if (!side) return null;
+    if (!side || typeof side !== 'string') return null;
     const cls = side.toLowerCase() === 'buy' ? 'badge-success' : 'badge-error';
     return <span className={`badge badge-sm ${cls}`}>{side.toUpperCase()}</span>;
   };

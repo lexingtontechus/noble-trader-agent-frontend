@@ -1,7 +1,7 @@
 "use client";
 
 function getRegimeBadgeClass(regimeLabel) {
-  if (!regimeLabel) return "badge-ghost";
+  if (!regimeLabel || typeof regimeLabel !== 'string') return "badge-ghost";
   const lower = regimeLabel.toLowerCase();
   if (lower.includes("bull")) return "badge-success";
   if (lower.includes("bear")) return "badge-error";
