@@ -17,20 +17,13 @@ export async function POST(request) {
       );
     }
 
-    let result = { count: 0 };
-    try {
-      if (db?.tradeRecommendation) {
-        result = await db.tradeRecommendation.updateMany({
-          where: {
-            analysisId,
-            status: "pending",
-          },
-          data: { status: "approved" },
-        });
-      }
-    } catch (dbErr) {
-      console.error("DB approve all failed:", dbErr.message);
-    }
+    const result = await db.tradeRecommendation.updateMany({
+      where: {
+        analysisId,
+        status: "pending",
+      },
+      data: { status: "approved" },
+    });
 
     return Response.json({
       approved: result.count,

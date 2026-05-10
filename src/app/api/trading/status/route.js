@@ -13,36 +13,21 @@ export async function GET(request) {
 
     let targetAnalysisId = analysisId;
     if (!targetAnalysisId) {
-      try {
-        if (db?.analysisRun) {
-          const latest = await db.analysisRun.findFirst({
-            where: { status: "completed" },
-            orderBy: { createdAt: "desc" },
-          });
-          targetAnalysisId = latest?.id;
-        }
-      } catch (dbErr) {
-        console.error("DB find analysis failed:", dbErr.message);
-      }
+      const latest = await db.analysisRun.findFirst({
+        where: { status: "completed" },
+        orderBy: { createdAt: "desc" },
+      });
+      targetAnalysisId = latest?.id;
     }
 
     if (!targetAnalysisId) {
       return Response.json({ trades: [], analysisId: null });
     }
 
-    let trades = [];
-    if (targetAnalysisId) {
-      try {
-        if (db?.tradeRecommendation) {
-          trades = await db.tradeRecommendation.findMany({
-            where: { analysisId: targetAnalysisId },
-            orderBy: { priority: "asc" },
-          });
-        }
-      } catch (dbErr) {
-        console.error("DB find trades failed:", dbErr.message);
-      }
-    }
+    const trades = await db.tradeRecommendation.findMany({
+      where: { analysisId: targetAnalysisId },
+      orderBy: { priority: "asc" },
+    });
 
     // Try to update fill statuses from Alpaca
     try {
@@ -64,16 +49,10 @@ export async function GET(request) {
             else if (alpacaOrder.status === "new" || alpacaOrder.status === "accepted") newStatus = "executing";
 
             if (newStatus !== trade.status) {
-              try {
-                if (db?.tradeRecommendation) {
-                  await db.tradeRecommendation.update({
-                    where: { id: trade.id },
-                    data: { status: newStatus },
-                  });
-                }
-              } catch (dbErr) {
-                console.error("DB update trade status failed:", dbErr.message);
-              }
+              await db.tradeRecommendation.update({
+                where: { id: trade.id },
+                data: { status: newStatus },
+              });
               trade.status = newStatus;
             }
           }

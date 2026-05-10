@@ -24,16 +24,9 @@ export async function POST(request) {
       );
     }
 
-    let trade = null;
-    try {
-      if (db?.tradeRecommendation) {
-        trade = await db.tradeRecommendation.findUnique({
-          where: { id: tradeId },
-        });
-      }
-    } catch (dbErr) {
-      console.error("DB find trade failed:", dbErr.message);
-    }
+    const trade = await db.tradeRecommendation.findUnique({
+      where: { id: tradeId },
+    });
 
     if (!trade) {
       return Response.json(
@@ -42,19 +35,12 @@ export async function POST(request) {
       );
     }
 
-    let updated = null;
-    try {
-      if (db?.tradeRecommendation) {
-        updated = await db.tradeRecommendation.update({
-          where: { id: tradeId },
-          data: { status: action === "approve" ? "approved" : "blocked" },
-        });
-      }
-    } catch (dbErr) {
-      console.error("DB update trade failed:", dbErr.message);
-    }
+    const updated = await db.tradeRecommendation.update({
+      where: { id: tradeId },
+      data: { status: action === "approve" ? "approved" : "blocked" },
+    });
 
-    return Response.json(updated || { id: tradeId, status: action === "approve" ? "approved" : "blocked" });
+    return Response.json(updated);
   } catch (error) {
     console.error("Approve trade error:", error);
     return Response.json(

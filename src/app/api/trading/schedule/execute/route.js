@@ -43,7 +43,6 @@ async function sendTelegramMessage(chatId, text) {
 
 /**
  * Check if the request has a valid CRON_SECRET.
- * Used by Supabase pg_cron or other schedulers to authenticate.
  * The secret can be passed via `x-cron-secret` header or `?secret=` query param.
  */
 function verifyCronSecret(request) {
@@ -56,33 +55,13 @@ function verifyCronSecret(request) {
 
 // GET /api/trading/schedule/execute
 // Health check endpoint. If CRON_SECRET is provided, returns queue status.
-// Can be used by Supabase pg_cron to check the health of the cron endpoint.
-//
-// Supabase pg_cron setup:
-//   SELECT cron.schedule(
-//     'check-scheduled-orders',
-//     '*/5 * * * 1-5',  -- Every 5 min on weekdays
-//     $$
-//     SELECT net.http_get(
-//       url := 'https://noble-trader-agent-frontend.vercel.app/api/trading/schedule/execute?secret=' || process.env.CRON_SECRET
-//     );
-//     $$
-//   );
 export async function GET(request) {
-  // If CRON_SECRET is provided, verify it and return queue status
   const hasCronHeader = request.headers.get("x-cron-secret") || new URL(request.url).searchParams.get("secret");
   if (hasCronHeader) {
     if (!verifyCronSecret(request)) {
       return Response.json({ error: "Unauthorized — invalid cron secret", code: "UNAUTHORIZED" }, { status: 401 });
     }
-    let queuedCount = 0;
-    try {
-      if (db?.scheduledOrder) {
-        queuedCount = await db.scheduledOrder.count({ where: { status: "queued" } });
-      }
-    } catch (dbErr) {
-      console.error("DB count failed:", dbErr.message);
-    }
+    const queuedCount = await db.scheduledOrder.count({ where: { status: "queued" } });
     return Response.json({
       status: "ok",
       cron_endpoint: true,
@@ -103,27 +82,6 @@ export async function GET(request) {
 
 // POST /api/trading/schedule/execute
 // Process scheduled orders that are due and whose dependencies are met.
-//
-// Supports two auth methods:
-// 1. Clerk auth (from frontend) — standard flow
-// 2. CRON_SECRET auth (from Supabase pg_cron) — for scheduled/cron jobs
-//    Pass via `x-cron-secret` header or `?secret=` query param
-//
-// Supabase pg_cron setup:
-//   SELECT cron.schedule(
-//     'execute-scheduled-orders',
-//     '*/5 * * * 1-5',  -- Every 5 min on weekdays (Mon-Fri)
-//     $$
-//     SELECT net.http_post(
-//       url := 'https://noble-trader-agent-frontend.vercel.app/api/trading/schedule/execute?secret=' || process.env.CRON_SECRET,
-//       headers := jsonb_build_object(
-//         'Content-Type', 'application/json',
-//         'x-cron-secret', process.env.CRON_SECRET
-//       ),
-//       body := '{}'::jsonb
-//     );
-//     $$
-//   );
 export async function POST(request) {
   const isCronRequest = verifyCronSecret(request);
 
@@ -132,26 +90,15 @@ export async function POST(request) {
     if (!keys?.apiKey || !keys?.secretKey) {
       return Response.json(
         { error: "Alpaca API keys not configured", code: "NO_KEYS" },
-        { status: isCronRequest ? 200 : 403 } // Return 200 for cron so it doesn't retry
+        { status: isCronRequest ? 200 : 403 }
       );
     }
 
-    // Get all queued scheduled orders (graceful fallback if DB unavailable)
-    let scheduledOrders = [];
-    try {
-      if (db?.scheduledOrder) {
-        scheduledOrders = await db.scheduledOrder.findMany({
-          where: { status: "queued" },
-          orderBy: { createdAt: "asc" },
-        });
-      }
-    } catch (dbErr) {
-      console.error("DB read failed:", dbErr.message);
-      return Response.json(
-        { error: `Database unavailable: ${dbErr.message}`, code: "DB_ERROR" },
-        { status: 503 }
-      );
-    }
+    // Get all queued scheduled orders
+    const scheduledOrders = await db.scheduledOrder.findMany({
+      where: { status: "queued" },
+      orderBy: { createdAt: "asc" },
+    });
 
     // Sort: sells first, then buys (frees up buying power)
     const sells = scheduledOrders.filter(o => o.side === "sell");
@@ -205,7 +152,7 @@ export async function POST(request) {
             });
             continue;
           }
-        } catch (e) {
+        } catch {
           // Invalid JSON, skip dependency check
         }
       }
@@ -243,22 +190,16 @@ export async function POST(request) {
 
         const order = await createOrder(keys.apiKey, keys.secretKey, orderPayload);
 
-        // Update scheduled order status (non-fatal if DB update fails)
-        try {
-          if (db?.scheduledOrder) {
-            await db.scheduledOrder.update({
-              where: { id: scheduled.id },
-              data: {
-                status: "executing",
-                alpacaOrderId: order.id,
-                lastAttemptAt: new Date(),
-                attempts: { increment: 1 },
-              },
-            });
-          }
-        } catch (dbUpdateErr) {
-          console.error("DB update failed (non-fatal):", dbUpdateErr.message);
-        }
+        // Update scheduled order status
+        await db.scheduledOrder.update({
+          where: { id: scheduled.id },
+          data: {
+            status: "executing",
+            alpacaOrderId: order.id,
+            lastAttemptAt: new Date(),
+            attempts: { increment: 1 },
+          },
+        });
 
         executedOrders.push({
           symbol: scheduled.symbol,
@@ -276,22 +217,15 @@ export async function POST(request) {
         });
       } catch (err) {
         const newAttempts = scheduled.attempts + 1;
-        // Update attempt count (non-fatal if DB update fails)
-        try {
-          if (db?.scheduledOrder) {
-            await db.scheduledOrder.update({
-              where: { id: scheduled.id },
-              data: {
-                lastAttemptAt: new Date(),
-                attempts: { increment: 1 },
-                errorMessage: err.message,
-                status: newAttempts >= scheduled.maxAttempts ? "failed" : "queued",
-              },
-            });
-          }
-        } catch (dbUpdateErr) {
-          console.error("DB update failed (non-fatal):", dbUpdateErr.message);
-        }
+        await db.scheduledOrder.update({
+          where: { id: scheduled.id },
+          data: {
+            lastAttemptAt: new Date(),
+            attempts: { increment: 1 },
+            errorMessage: err.message,
+            status: newAttempts >= scheduled.maxAttempts ? "failed" : "queued",
+          },
+        });
 
         results.push({
           id: scheduled.id,
@@ -311,17 +245,10 @@ export async function POST(request) {
     let telegramSent = false;
     if (isCronRequest && executedOrders.length > 0 && TELEGRAM_BOT_TOKEN) {
       try {
-        let lastNotif = null;
-        try {
-          if (db?.telegramNotification) {
-            lastNotif = await db.telegramNotification.findFirst({
-              where: { success: true },
-              orderBy: { createdAt: "desc" },
-            });
-          }
-        } catch (dbErr) {
-          console.error("DB read for Telegram chat ID failed:", dbErr.message);
-        }
+        const lastNotif = await db.telegramNotification.findFirst({
+          where: { success: true },
+          orderBy: { createdAt: "desc" },
+        });
 
         if (lastNotif?.chatId) {
           const lines = [
@@ -338,20 +265,14 @@ export async function POST(request) {
 
           await sendTelegramMessage(lastNotif.chatId, lines.join("\n"));
 
-          try {
-            if (db?.telegramNotification) {
-              await db.telegramNotification.create({
-                data: {
-                  chatId: lastNotif.chatId,
-                  message: `Cron: ${executed} orders executed`,
-                  messageType: "schedule_reminder",
-                  success: true,
-                },
-              });
-            }
-          } catch (dbErr) {
-            console.error("DB write for Telegram notification failed:", dbErr.message);
-          }
+          await db.telegramNotification.create({
+            data: {
+              chatId: lastNotif.chatId,
+              message: `Cron: ${executed} orders executed`,
+              messageType: "schedule_reminder",
+              success: true,
+            },
+          });
           telegramSent = true;
         }
       } catch (telErr) {

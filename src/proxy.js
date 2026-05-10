@@ -1,36 +1,25 @@
-import { clerkMiddleware } from "@clerk/nextjs/server";
+import { clerkMiddleware, createRouteMatcher } from "@clerk/nextjs/server";
 
 /**
- * Proxy (middleware) for Next.js 16.
+ * Proxy (middleware) for Next.js 16 + Clerk.
  *
- * - All /api/ routes are PUBLIC — each route handler does its own auth
- *   (e.g. getAlpacaKeys() calls Clerk's auth(), or CRON_SECRET for cron jobs).
- * - Non-API routes require Clerk authentication.
- *
- * In development mode, Clerk blocks non-browser requests (e.g. curl, cron)
- * unless routes are explicitly marked as public.
+ * API routes are excluded from the matcher so Clerk never touches them.
+ * Each API route handler does its own auth (CRON_SECRET, Clerk auth(), etc.).
+ * Only non-API routes go through Clerk's auth protection.
  */
-export default clerkMiddleware(
-  async (auth, request) => {
-    const url = new URL(request.url);
-    const isApi = url.pathname.startsWith("/api/");
 
-    if (!isApi) {
-      // Non-API routes require Clerk auth
-      await auth.protect();
-    }
-    // API routes are public — each handler does its own auth
-  },
-  {
-    // Explicitly mark all API routes as public so Clerk doesn't
-    // block curl/cron requests in development mode
-    publicRoutes: ["/api/(.*)"],
+const isPublicRoute = createRouteMatcher(["/api/(.*)"]);
+
+export default clerkMiddleware(async (auth, request) => {
+  if (!isPublicRoute(request)) {
+    await auth.protect();
   }
-);
+});
 
 export const config = {
+  // Only match non-API, non-static routes — Clerk processes these
+  // API routes are NOT matched, so they bypass Clerk entirely
   matcher: [
-    "/((?!_next|[^?]*\\.(?:html?|css|js(?!on)|jpe?g|webp|png|gif|svg|ttf|woff2?|ico|csv|docx?|xlsx?|zip|webmanifest)).*)",
-    "/(api|trpc)(.*)",
+    "/((?!api|trpc|_next|[^?]*\\.(?:html?|css|js(?!on)|jpe?g|webp|png|gif|svg|ttf|woff2?|ico|csv|docx?|xlsx?|zip|webmanifest)).*)",
   ],
 };

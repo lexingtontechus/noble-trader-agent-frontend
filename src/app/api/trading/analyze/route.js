@@ -227,50 +227,40 @@ export async function POST(request) {
       }
     }
 
-    // 8. Save analysis to database (graceful fallback if DB unavailable)
-    let analysisRunId = `analysis-${Date.now()}`;
-    try {
-      if (db?.analysisRun) {
-        const analysisRun = await db.analysisRun.create({
-          data: {
-            userId: "default",
-            status: "completed",
-            results: JSON.stringify({
-              totalValue,
-              positionCount: positions.length,
-              recommendationCount: recommendations.length,
-            }),
-            positions: JSON.stringify(positions),
-            correlation: JSON.stringify(correlationResult),
-            optimizer: JSON.stringify(optimizerResult),
-            regimes: JSON.stringify(regimeResults),
-          },
-        });
-        analysisRunId = analysisRun.id;
+    // 8. Save analysis to database
+    const analysisRun = await db.analysisRun.create({
+      data: {
+        userId: "default",
+        status: "completed",
+        results: JSON.stringify({
+          totalValue,
+          positionCount: positions.length,
+          recommendationCount: recommendations.length,
+        }),
+        positions: JSON.stringify(positions),
+        correlation: JSON.stringify(correlationResult),
+        optimizer: JSON.stringify(optimizerResult),
+        regimes: JSON.stringify(regimeResults),
+      },
+    });
+    const analysisRunId = analysisRun.id;
 
-        // Save trade recommendations
-        if (db?.tradeRecommendation) {
-          for (const rec of recommendations) {
-            await db.tradeRecommendation.create({
-              data: {
-                analysisId: analysisRun.id,
-                symbol: rec.symbol,
-                side: rec.side,
-                orderType: rec.order_type,
-                qty: rec.qty,
-                limitPrice: rec.limit_price,
-                timeInForce: rec.time_in_force,
-                priority: rec.priority,
-                reason: rec.reason,
-                status: "pending",
-              },
-            });
-          }
-        }
-      }
-    } catch (dbErr) {
-      console.error("DB save failed (non-fatal):", dbErr.message);
-      // Analysis still returns — just without DB persistence
+    // Save trade recommendations
+    for (const rec of recommendations) {
+      await db.tradeRecommendation.create({
+        data: {
+          analysisId: analysisRun.id,
+          symbol: rec.symbol,
+          side: rec.side,
+          orderType: rec.order_type,
+          qty: rec.qty,
+          limitPrice: rec.limit_price,
+          timeInForce: rec.time_in_force,
+          priority: rec.priority,
+          reason: rec.reason,
+          status: "pending",
+        },
+      });
     }
 
     // 9. Build response
