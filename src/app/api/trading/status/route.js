@@ -13,21 +13,36 @@ export async function GET(request) {
 
     let targetAnalysisId = analysisId;
     if (!targetAnalysisId) {
-      const latest = await db.analysisRun.findFirst({
-        where: { status: "completed" },
-        orderBy: { createdAt: "desc" },
-      });
-      targetAnalysisId = latest?.id;
+      try {
+        if (db?.analysisRun) {
+          const latest = await db.analysisRun.findFirst({
+            where: { status: "completed" },
+            orderBy: { createdAt: "desc" },
+          });
+          targetAnalysisId = latest?.id;
+        }
+      } catch (dbErr) {
+        console.error("DB find analysis failed:", dbErr.message);
+      }
     }
 
     if (!targetAnalysisId) {
       return Response.json({ trades: [], analysisId: null });
     }
 
-    const trades = await db.tradeRecommendation.findMany({
-      where: { analysisId: targetAnalysisId },
-      orderBy: { priority: "asc" },
-    });
+    let trades = [];
+    if (targetAnalysisId) {
+      try {
+        if (db?.tradeRecommendation) {
+          trades = await db.tradeRecommendation.findMany({
+            where: { analysisId: targetAnalysisId },
+            orderBy: { priority: "asc" },
+          });
+        }
+      } catch (dbErr) {
+        console.error("DB find trades failed:", dbErr.message);
+      }
+    }
 
     // Try to update fill statuses from Alpaca
     try {
@@ -49,10 +64,16 @@ export async function GET(request) {
             else if (alpacaOrder.status === "new" || alpacaOrder.status === "accepted") newStatus = "executing";
 
             if (newStatus !== trade.status) {
-              await db.tradeRecommendation.update({
-                where: { id: trade.id },
-                data: { status: newStatus },
-              });
+              try {
+                if (db?.tradeRecommendation) {
+                  await db.tradeRecommendation.update({
+                    where: { id: trade.id },
+                    data: { status: newStatus },
+                  });
+                }
+              } catch (dbErr) {
+                console.error("DB update trade status failed:", dbErr.message);
+              }
               trade.status = newStatus;
             }
           }

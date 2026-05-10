@@ -138,6 +138,13 @@ const PRIORITY_STYLES = {
 }
 
 function getPriorityStyle(priority) {
+  // Priority can be a number (0, 50...) from the backend or a string ('critical', 'high'...)
+  if (typeof priority === 'number') {
+    if (priority <= 5) return PRIORITY_STYLES.critical
+    if (priority <= 20) return PRIORITY_STYLES.high
+    if (priority <= 60) return PRIORITY_STYLES.medium
+    return PRIORITY_STYLES.low
+  }
   return PRIORITY_STYLES[priority?.toLowerCase()] || PRIORITY_STYLES.low
 }
 

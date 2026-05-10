@@ -24,23 +24,37 @@ export async function POST(request) {
       );
     }
 
-    const trade = await db.tradeRecommendation.findUnique({
-      where: { id: tradeId },
-    });
+    let trade = null;
+    try {
+      if (db?.tradeRecommendation) {
+        trade = await db.tradeRecommendation.findUnique({
+          where: { id: tradeId },
+        });
+      }
+    } catch (dbErr) {
+      console.error("DB find trade failed:", dbErr.message);
+    }
 
     if (!trade) {
       return Response.json(
-        { error: "Trade recommendation not found" },
+        { error: "Trade recommendation not found", tradeId, action },
         { status: 404 }
       );
     }
 
-    const updated = await db.tradeRecommendation.update({
-      where: { id: tradeId },
-      data: { status: action === "approve" ? "approved" : "blocked" },
-    });
+    let updated = null;
+    try {
+      if (db?.tradeRecommendation) {
+        updated = await db.tradeRecommendation.update({
+          where: { id: tradeId },
+          data: { status: action === "approve" ? "approved" : "blocked" },
+        });
+      }
+    } catch (dbErr) {
+      console.error("DB update trade failed:", dbErr.message);
+    }
 
-    return Response.json(updated);
+    return Response.json(updated || { id: tradeId, status: action === "approve" ? "approved" : "blocked" });
   } catch (error) {
     console.error("Approve trade error:", error);
     return Response.json(

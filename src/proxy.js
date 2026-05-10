@@ -3,19 +3,30 @@ import { clerkMiddleware } from "@clerk/nextjs/server";
 /**
  * Proxy (middleware) for Next.js 16.
  *
- * All API routes are public — the BFF pattern means each route handler
- * does its own auth checks (e.g. getAlpacaKeys() which calls Clerk's auth()).
- * Non-API routes require Clerk authentication.
+ * - All /api/ routes are PUBLIC — each route handler does its own auth
+ *   (e.g. getAlpacaKeys() calls Clerk's auth(), or CRON_SECRET for cron jobs).
+ * - Non-API routes require Clerk authentication.
+ *
+ * In development mode, Clerk blocks non-browser requests (e.g. curl, cron)
+ * unless routes are explicitly marked as public.
  */
-export default clerkMiddleware(async (auth, request) => {
-  // Check if the request is for an API route
-  const url = new URL(request.url);
-  const isApi = url.pathname.startsWith("/api/");
+export default clerkMiddleware(
+  async (auth, request) => {
+    const url = new URL(request.url);
+    const isApi = url.pathname.startsWith("/api/");
 
-  if (!isApi) {
-    await auth.protect();
+    if (!isApi) {
+      // Non-API routes require Clerk auth
+      await auth.protect();
+    }
+    // API routes are public — each handler does its own auth
+  },
+  {
+    // Explicitly mark all API routes as public so Clerk doesn't
+    // block curl/cron requests in development mode
+    publicRoutes: ["/api/(.*)"],
   }
-});
+);
 
 export const config = {
   matcher: [

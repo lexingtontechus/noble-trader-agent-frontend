@@ -11,24 +11,37 @@ export async function GET(request) {
     const { searchParams } = new URL(request.url);
     const analysisId = searchParams.get("analysisId");
 
-    let analysis;
-    if (analysisId) {
-      analysis = await db.analysisRun.findUnique({ where: { id: analysisId } });
-    } else {
-      analysis = await db.analysisRun.findFirst({
-        where: { status: "completed" },
-        orderBy: { createdAt: "desc" },
-      });
+    let analysis = null;
+    try {
+      if (db?.analysisRun) {
+        if (analysisId) {
+          analysis = await db.analysisRun.findUnique({ where: { id: analysisId } });
+        } else {
+          analysis = await db.analysisRun.findFirst({
+            where: { status: "completed" },
+            orderBy: { createdAt: "desc" },
+          });
+        }
+      }
+    } catch (dbErr) {
+      console.error("DB find analysis failed:", dbErr.message);
     }
 
     if (!analysis) {
       return Response.json({ recommendations: [], analysisId: null });
     }
 
-    const trades = await db.tradeRecommendation.findMany({
-      where: { analysisId: analysis.id },
-      orderBy: { priority: "asc" },
-    });
+    let trades = [];
+    try {
+      if (db?.tradeRecommendation) {
+        trades = await db.tradeRecommendation.findMany({
+          where: { analysisId: analysis.id },
+          orderBy: { priority: "asc" },
+        });
+      }
+    } catch (dbErr) {
+      console.error("DB find trades failed:", dbErr.message);
+    }
 
     return Response.json({
       analysisId: analysis.id,
