@@ -265,11 +265,28 @@ function AnalysisSummary({ data }) {
   const optimizationMetrics = data?.optimization_metrics || data?.metrics || {}
   const strategyExplanation = data?.strategy_explanation || data?.strategy || null
 
+  // If loaded from DB, we might not have all analysis details
+  const isFromDb = data?.fromDb === true
+
   const allocationEntries = Object.entries(allocation)
   const barColors = ['bg-primary', 'bg-success', 'bg-warning', 'bg-info', 'bg-secondary', 'bg-accent', 'bg-error']
 
   return (
     <div className="space-y-6">
+      {/* From DB notice */}
+      {isFromDb && (
+        <div className="alert alert-info">
+          <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="shrink-0">
+            <circle cx="12" cy="12" r="10" /><path d="M12 16v-4" /><path d="M12 8h.01" />
+          </svg>
+          <div>
+            <div className="font-semibold text-sm">Previous Analysis Loaded</div>
+            <div className="text-xs opacity-80 mt-1">
+              Showing trade recommendations from your last analysis. Click &quot;Analyze Portfolio&quot; to run a fresh analysis.
+            </div>
+          </div>
+        </div>
+      )}
       {/* Portfolio Allocation */}
       {allocationEntries.length > 0 && (
         <div className="card bg-base-200 shadow-lg">
@@ -441,6 +458,10 @@ function TradeCard({ trade, onApprove, onBlock, approved }) {
   const sideBadge = isSell ? 'badge-error' : 'badge-success'
   const sideLabel = (trade.side || trade.action || 'BUY').toUpperCase()
   const priorityStyle = getPriorityStyle(trade.priority)
+  // Handle both camelCase (from Prisma/DB) and snake_case (from API)
+  const orderType = trade.orderType || trade.order_type || trade.type || 'market'
+  const limitPrice = trade.limitPrice || trade.limit_price
+  const estValue = trade.estimatedValue || trade.estimated_value
 
   return (
     <div className={`card bg-base-200 shadow-md border-l-4 ${sideColor} ${sideBg} transition-all`}>
@@ -477,18 +498,18 @@ function TradeCard({ trade, onApprove, onBlock, approved }) {
           </div>
           <div>
             <div className="text-xs text-base-content/40">Order Type</div>
-            <div className="font-mono font-medium">{trade.order_type || trade.type || 'market'}</div>
+            <div className="font-mono font-medium">{orderType}</div>
           </div>
           <div>
             <div className="text-xs text-base-content/40">Limit Price</div>
             <div className="font-mono font-medium">
-              {trade.limit_price ? `$${Number(trade.limit_price).toFixed(2)}` : 'Market'}
+              {limitPrice ? `$${Number(limitPrice).toFixed(2)}` : 'Market'}
             </div>
           </div>
           <div>
             <div className="text-xs text-base-content/40">Est. Value</div>
             <div className="font-mono font-medium">
-              {trade.estimated_value ? `$${Number(trade.estimated_value).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : '---'}
+              {estValue ? `$${Number(estValue).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : '---'}
             </div>
           </div>
         </div>
@@ -619,6 +640,50 @@ export default function TradingWorkflow() {
   // Ref for simulating analysis steps
   const stepTimerRef = useRef(null)
 
+  // Load latest analysis from DB on mount
+  const [loadingLatest, setLoadingLatest] = useState(true)
+
+  useEffect(() => {
+    async function loadLatest() {
+      try {
+        const res = await fetch('/api/trading/recommendations')
+        if (res.ok) {
+          const data = await res.json()
+          if (data.recommendations && data.recommendations.length > 0) {
+            // We have saved recommendations — reconstruct the analysis data
+            // Fetch the status endpoint which has more context
+            const statusRes = await fetch('/api/trading/status')
+            if (statusRes.ok) {
+              const statusData = await statusRes.json()
+              if (statusData.trades && statusData.trades.length > 0) {
+                const trades = statusData.trades
+                // Set the trades as recommendations with their current approval status
+                setRecommendations(trades)
+                // Set approvals based on existing status
+                const initApprovals = {}
+                trades.forEach(t => {
+                  const id = t.id
+                  if (t.status === 'approved') initApprovals[id] = true
+                  else if (t.status === 'blocked') initApprovals[id] = false
+                  else initApprovals[id] = null
+                })
+                setApprovals(initApprovals)
+                // Mark that we have existing data to review
+                setAnalysisData({ fromDb: true, analysisId: statusData.analysisId })
+                setPhase('review')
+              }
+            }
+          }
+        }
+      } catch {
+        // Silently fail — user can still run fresh analysis
+      } finally {
+        setLoadingLatest(false)
+      }
+    }
+    loadLatest()
+  }, [])
+
   /* ─── Computed Values ─── */
 
   const approvedCount = Object.values(approvals).filter(v => v === true).length
@@ -702,11 +767,23 @@ export default function TradingWorkflow() {
   // Approve a single trade
   const handleApprove = useCallback((tradeId) => {
     setApprovals(prev => ({ ...prev, [tradeId]: true }))
+    // Also persist to backend (fire and forget)
+    fetch('/api/trading/approve', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ tradeId, action: 'approve' }),
+    }).catch(() => {})
   }, [])
 
   // Block a single trade
   const handleBlock = useCallback((tradeId) => {
     setApprovals(prev => ({ ...prev, [tradeId]: false }))
+    // Also persist to backend (fire and forget)
+    fetch('/api/trading/approve', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ tradeId, action: 'block' }),
+    }).catch(() => {})
   }, [])
 
   // Approve all
@@ -716,7 +793,15 @@ export default function TradingWorkflow() {
       Object.keys(next).forEach(k => { next[k] = true })
       return next
     })
-  }, [])
+    // Persist to backend (fire and forget)
+    if (analysisData?.analysisId) {
+      fetch('/api/trading/approve-all', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ analysisId: analysisData.analysisId }),
+      }).catch(() => {})
+    }
+  }, [analysisData])
 
   // Block all
   const handleBlockAll = useCallback(() => {
@@ -930,7 +1015,16 @@ export default function TradingWorkflow() {
       {/* ═══════════════════════════════════════════
           Phase 1: IDLE — Big Analyze Button
           ═══════════════════════════════════════════ */}
-      {phase === 'idle' && (
+      {phase === 'idle' && loadingLatest && (
+        <div className="card bg-base-200 shadow-lg">
+          <div className="card-body items-center text-center py-12">
+            <span className="loading loading-spinner loading-lg text-primary"></span>
+            <p className="text-sm text-base-content/60 mt-3">Loading latest analysis...</p>
+          </div>
+        </div>
+      )}
+
+      {phase === 'idle' && !loadingLatest && (
         <div className="card bg-base-200 shadow-lg">
           <div className="card-body items-center text-center py-12">
             <div className="w-20 h-20 rounded-2xl bg-primary/10 flex items-center justify-center mb-6">

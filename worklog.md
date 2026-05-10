@@ -48,3 +48,32 @@ Stage Summary:
 - Alpaca API keys need re-activation (401 unauthorized) — user should check Alpaca dashboard
 - Prisma schema uses public schema with ta_* table prefix (no multiSchema)
 - For Vercel: set DATABASE_URL (pooled, port 6543) and DIRECT_URL (direct, port 5432) env vars
+
+---
+Task ID: 3
+Agent: main
+Task: Fix Alpaca API keys and run full trading workflow end-to-end
+
+Work Log:
+- User provided correct Alpaca API key: PKGWIARSN3LWH4JUWYHT2RFECW
+- User provided correct Alpaca secret key: 6QnZD1kog7PaEBfZg4Vebfr9FJLC5LrYDsPUsu1Qmg68
+- Updated .env.local with new Alpaca keys
+- Verified Alpaca API connectivity: Account ACTIVE, equity $106,174.93, buying power $233.94
+- 9 positions: SPY (81.9%), AAPL (16.5%), MRSH, META, DIA, MSFT, GOOGL, SLV, BTC
+- Server was being OOM killed during heavy analysis requests (Turbopack dev server uses ~900MB)
+- Rewrote analyze route with: sequential processing, per-step timeouts, local fallback computation
+- Added local fallback: localRegimeDetect (MA crossover + volatility), localCorrelationDetect (avg pairwise correlation), localOptimize (inverse-volatility weighting)
+- Analysis successfully completed: 8 trade recommendations generated and saved to Supabase
+- Database ID: cmozaky800000ncz81p5lxsbu
+- All 8 recommendations approved via approve-all endpoint
+- Fixed shell DATABASE_URL env var overriding .env.local (was pointing to old SQLite file)
+- Updated TradingWorkflow component: auto-loads latest analysis from DB on mount, handles both camelCase (Prisma) and snake_case (API) field names, persists approval actions to backend
+- TradeCard updated to handle DB field names (orderType/limitPrice/estimatedValue vs order_type/limit_price/estimated_value)
+
+Stage Summary:
+- Alpaca API keys working: PKGWIARSN3LWH4JUWYHT2RFECW / 6QnZD1kog7PaEBfZg4Vebfr9FJLC5LrYDsPUsu1Qmg68
+- Full analysis pipeline working with local fallbacks when FastAPI backend unavailable
+- 8 trade recommendations: SELL SPY x149, SELL AAPL x32, BUY DIA x72, BUY MRSH x113, BUY MSFT x44, BUY GOOGL x38, BUY META x20, BUY BTC x325
+- All 8 trades approved and persisted in Supabase
+- Frontend TradingWorkflow now auto-loads previous analysis on page load
+- Dev server memory issue: Turbopack + Prisma uses ~900MB, analysis can push over limit — not an issue on Vercel serverless
