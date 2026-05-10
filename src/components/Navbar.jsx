@@ -7,6 +7,7 @@ import ThemeSwitcher from "@/components/shared/ThemeSwitcher";
 const NAV_ITEMS = [
   { key: "dashboard", label: "Dashboard", icon: "📊", shortLabel: "Home" },
   { key: "orders", label: "Orders", icon: "📋", shortLabel: "Orders" },
+  { key: "trade", label: "Trade", icon: "⚡", shortLabel: "Trade" },
   { key: "simulate", label: "Simulate", icon: "🎲", shortLabel: "Sim" },
   { key: "portfolio", label: "Portfolio", icon: "📈", shortLabel: "Port" },
   { key: "search", label: "Search", icon: "🔍", shortLabel: "Search" },

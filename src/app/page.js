@@ -6,6 +6,7 @@ import Navbar from "@/components/Navbar";
 import Footer from "@/components/Footer";
 import Dashboard from "@/components/dashboard/Dashboard";
 import OrdersPage from "@/components/orders/OrdersPage";
+import TradingWorkflow from "@/components/trading/TradingWorkflow";
 import SearchPage from "@/components/search/SearchPage";
 import SimulatePage from "@/components/simulation/SimulatePage";
 import PortfolioPage from "@/components/portfolio/PortfolioPage";
@@ -29,14 +30,17 @@ export default function Home() {
         setActiveView("orders");
       } else if ((e.metaKey || e.ctrlKey) && e.key === "3") {
         e.preventDefault();
-        setActiveView("simulate");
+        setActiveView("trade");
       } else if ((e.metaKey || e.ctrlKey) && e.key === "4") {
         e.preventDefault();
-        setActiveView("portfolio");
+        setActiveView("simulate");
       } else if ((e.metaKey || e.ctrlKey) && e.key === "5") {
         e.preventDefault();
-        setActiveView("search");
+        setActiveView("portfolio");
       } else if ((e.metaKey || e.ctrlKey) && e.key === "6") {
+        e.preventDefault();
+        setActiveView("search");
+      } else if ((e.metaKey || e.ctrlKey) && e.key === "7") {
         e.preventDefault();
         setActiveView("admin");
       }
@@ -56,6 +60,7 @@ export default function Home() {
               <div key={activeView} className="animate-fade-in-up">
                 {activeView === "dashboard" && <Dashboard />}
                 {activeView === "orders" && <OrdersPage />}
+                {activeView === "trade" && <TradingWorkflow />}
                 {activeView === "search" && <SearchPage />}
                 {activeView === "simulate" && <SimulatePage />}
                 {activeView === "portfolio" && <PortfolioPage />}
