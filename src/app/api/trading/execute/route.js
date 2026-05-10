@@ -3,6 +3,23 @@ import { createOrder, getOrders } from "@/lib/alpaca-client";
 import { yahooToAlpacaSymbol, getAssetClass } from "@/lib/symbol-utils";
 import { db } from "@/lib/db";
 
+// Fallback Alpaca keys from env vars
+const ALPACA_API_KEY = process.env.ALPACA_API_KEY;
+const ALPACA_SECRET_KEY = process.env.ALPACA_SECRET_KEY;
+
+async function resolveAlpacaKeys() {
+  try {
+    const keys = await getAlpacaKeys();
+    if (keys?.apiKey && keys?.secretKey) return keys;
+  } catch {
+    // Clerk not available
+  }
+  if (ALPACA_API_KEY && ALPACA_SECRET_KEY) {
+    return { apiKey: ALPACA_API_KEY, secretKey: ALPACA_SECRET_KEY };
+  }
+  return null;
+}
+
 /**
  * POST /api/trading/execute
  * Execute approved trades via Alpaca.
@@ -10,7 +27,7 @@ import { db } from "@/lib/db";
  */
 export async function POST(request) {
   try {
-    const keys = await getAlpacaKeys();
+    const keys = await resolveAlpacaKeys();
     if (!keys?.apiKey || !keys?.secretKey) {
       return Response.json(
         { error: "Alpaca API keys not configured", code: "NO_KEYS" },
@@ -70,27 +87,24 @@ export async function POST(request) {
         // Update DB if trade has a DB id
         if (trade.id && trade.id.includes("-")) {
           try {
-            const dbTrade = await db.tradeRecommendation.findFirst({
-              where: { analysisId: { contains: "default" } },
-              orderBy: { createdAt: "desc" },
-            });
-            // We match by symbol + side + status
-            const matchingTrade = await db.tradeRecommendation.findFirst({
-              where: {
-                symbol: trade.symbol,
-                side: trade.side,
-                status: "approved",
-              },
-              orderBy: { createdAt: "desc" },
-            });
-            if (matchingTrade) {
-              await db.tradeRecommendation.update({
-                where: { id: matchingTrade.id },
-                data: {
-                  status: "executing",
-                  alpacaOrderId: order.id,
+            if (db?.tradeRecommendation) {
+              const matchingTrade = await db.tradeRecommendation.findFirst({
+                where: {
+                  symbol: trade.symbol,
+                  side: trade.side,
+                  status: "approved",
                 },
+                orderBy: { createdAt: "desc" },
               });
+              if (matchingTrade) {
+                await db.tradeRecommendation.update({
+                  where: { id: matchingTrade.id },
+                  data: {
+                    status: "executing",
+                    alpacaOrderId: order.id,
+                  },
+                });
+              }
             }
           } catch (dbErr) {
             console.error("DB update failed for trade:", dbErr.message);
@@ -115,20 +129,22 @@ export async function POST(request) {
         // Mark as deferred if buying power issue
         if (isBuyingPower) {
           try {
-            await db.scheduledOrder.create({
-              data: {
-                userId: "default",
-                symbol: trade.symbol,
-                side: trade.side,
-                orderType: trade.order_type || "limit",
-                qty: trade.qty,
-                limitPrice: trade.limit_price,
-                timeInForce: trade.time_in_force || "gtc",
-                reason: `Deferred from analysis: insufficient buying power`,
-                status: "queued",
-                dependsOnOrders: JSON.stringify(filledOrders.map((o) => o.id)),
-              },
-            });
+            if (db?.scheduledOrder) {
+              await db.scheduledOrder.create({
+                data: {
+                  userId: "default",
+                  symbol: trade.symbol,
+                  side: trade.side,
+                  orderType: trade.order_type || "limit",
+                  qty: trade.qty,
+                  limitPrice: trade.limit_price,
+                  timeInForce: trade.time_in_force || "gtc",
+                  reason: `Deferred from analysis: insufficient buying power`,
+                  status: "queued",
+                  dependsOnOrders: JSON.stringify(filledOrders.map((o) => o.id)),
+                },
+              });
+            }
           } catch (dbErr) {
             console.error("Failed to create scheduled order:", dbErr.message);
           }

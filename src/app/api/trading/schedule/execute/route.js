@@ -6,6 +6,25 @@ import { db } from "@/lib/db";
 const CRON_SECRET = process.env.CRON_SECRET;
 const TELEGRAM_BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN;
 
+// Fallback Alpaca keys from env vars (used when Clerk auth is unavailable for cron)
+const ALPACA_API_KEY = process.env.ALPACA_API_KEY;
+const ALPACA_SECRET_KEY = process.env.ALPACA_SECRET_KEY;
+
+async function resolveAlpacaKeys() {
+  // Try Clerk auth first
+  try {
+    const keys = await getAlpacaKeys();
+    if (keys?.apiKey && keys?.secretKey) return keys;
+  } catch {
+    // Clerk not available — fall through to env vars
+  }
+  // Fallback to environment variables
+  if (ALPACA_API_KEY && ALPACA_SECRET_KEY) {
+    return { apiKey: ALPACA_API_KEY, secretKey: ALPACA_SECRET_KEY };
+  }
+  return null;
+}
+
 async function sendTelegramMessage(chatId, text) {
   if (!TELEGRAM_BOT_TOKEN) return null;
   const url = `https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage`;
@@ -56,7 +75,14 @@ export async function GET(request) {
     if (!verifyCronSecret(request)) {
       return Response.json({ error: "Unauthorized — invalid cron secret", code: "UNAUTHORIZED" }, { status: 401 });
     }
-    const queuedCount = await db.scheduledOrder.count({ where: { status: "queued" } });
+    let queuedCount = 0;
+    try {
+      if (db?.scheduledOrder) {
+        queuedCount = await db.scheduledOrder.count({ where: { status: "queued" } });
+      }
+    } catch (dbErr) {
+      console.error("DB count failed:", dbErr.message);
+    }
     return Response.json({
       status: "ok",
       cron_endpoint: true,
@@ -102,7 +128,7 @@ export async function POST(request) {
   const isCronRequest = verifyCronSecret(request);
 
   try {
-    const keys = await getAlpacaKeys();
+    const keys = await resolveAlpacaKeys();
     if (!keys?.apiKey || !keys?.secretKey) {
       return Response.json(
         { error: "Alpaca API keys not configured", code: "NO_KEYS" },
@@ -110,11 +136,22 @@ export async function POST(request) {
       );
     }
 
-    // Get all queued scheduled orders
-    const scheduledOrders = await db.scheduledOrder.findMany({
-      where: { status: "queued" },
-      orderBy: { createdAt: "asc" },
-    });
+    // Get all queued scheduled orders (graceful fallback if DB unavailable)
+    let scheduledOrders = [];
+    try {
+      if (db?.scheduledOrder) {
+        scheduledOrders = await db.scheduledOrder.findMany({
+          where: { status: "queued" },
+          orderBy: { createdAt: "asc" },
+        });
+      }
+    } catch (dbErr) {
+      console.error("DB read failed:", dbErr.message);
+      return Response.json(
+        { error: `Database unavailable: ${dbErr.message}`, code: "DB_ERROR" },
+        { status: 503 }
+      );
+    }
 
     // Sort: sells first, then buys (frees up buying power)
     const sells = scheduledOrders.filter(o => o.side === "sell");
@@ -206,16 +243,22 @@ export async function POST(request) {
 
         const order = await createOrder(keys.apiKey, keys.secretKey, orderPayload);
 
-        // Update scheduled order status
-        await db.scheduledOrder.update({
-          where: { id: scheduled.id },
-          data: {
-            status: "executing",
-            alpacaOrderId: order.id,
-            lastAttemptAt: new Date(),
-            attempts: { increment: 1 },
-          },
-        });
+        // Update scheduled order status (non-fatal if DB update fails)
+        try {
+          if (db?.scheduledOrder) {
+            await db.scheduledOrder.update({
+              where: { id: scheduled.id },
+              data: {
+                status: "executing",
+                alpacaOrderId: order.id,
+                lastAttemptAt: new Date(),
+                attempts: { increment: 1 },
+              },
+            });
+          }
+        } catch (dbUpdateErr) {
+          console.error("DB update failed (non-fatal):", dbUpdateErr.message);
+        }
 
         executedOrders.push({
           symbol: scheduled.symbol,
@@ -233,16 +276,22 @@ export async function POST(request) {
         });
       } catch (err) {
         const newAttempts = scheduled.attempts + 1;
-        // Update attempt count
-        await db.scheduledOrder.update({
-          where: { id: scheduled.id },
-          data: {
-            lastAttemptAt: new Date(),
-            attempts: { increment: 1 },
-            errorMessage: err.message,
-            status: newAttempts >= scheduled.maxAttempts ? "failed" : "queued",
-          },
-        });
+        // Update attempt count (non-fatal if DB update fails)
+        try {
+          if (db?.scheduledOrder) {
+            await db.scheduledOrder.update({
+              where: { id: scheduled.id },
+              data: {
+                lastAttemptAt: new Date(),
+                attempts: { increment: 1 },
+                errorMessage: err.message,
+                status: newAttempts >= scheduled.maxAttempts ? "failed" : "queued",
+              },
+            });
+          }
+        } catch (dbUpdateErr) {
+          console.error("DB update failed (non-fatal):", dbUpdateErr.message);
+        }
 
         results.push({
           id: scheduled.id,
@@ -262,10 +311,17 @@ export async function POST(request) {
     let telegramSent = false;
     if (isCronRequest && executedOrders.length > 0 && TELEGRAM_BOT_TOKEN) {
       try {
-        const lastNotif = await db.telegramNotification.findFirst({
-          where: { success: true },
-          orderBy: { createdAt: "desc" },
-        });
+        let lastNotif = null;
+        try {
+          if (db?.telegramNotification) {
+            lastNotif = await db.telegramNotification.findFirst({
+              where: { success: true },
+              orderBy: { createdAt: "desc" },
+            });
+          }
+        } catch (dbErr) {
+          console.error("DB read for Telegram chat ID failed:", dbErr.message);
+        }
 
         if (lastNotif?.chatId) {
           const lines = [
@@ -282,14 +338,20 @@ export async function POST(request) {
 
           await sendTelegramMessage(lastNotif.chatId, lines.join("\n"));
 
-          await db.telegramNotification.create({
-            data: {
-              chatId: lastNotif.chatId,
-              message: `Cron: ${executed} orders executed`,
-              messageType: "schedule_reminder",
-              success: true,
-            },
-          });
+          try {
+            if (db?.telegramNotification) {
+              await db.telegramNotification.create({
+                data: {
+                  chatId: lastNotif.chatId,
+                  message: `Cron: ${executed} orders executed`,
+                  messageType: "schedule_reminder",
+                  success: true,
+                },
+              });
+            }
+          } catch (dbErr) {
+            console.error("DB write for Telegram notification failed:", dbErr.message);
+          }
           telegramSent = true;
         }
       } catch (telErr) {

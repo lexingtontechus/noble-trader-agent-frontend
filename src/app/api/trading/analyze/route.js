@@ -5,6 +5,25 @@ import { fetchHistoricalPrices } from "@/lib/yahoo-prices";
 import { alpacaToYahooSymbol, yahooToAlpacaSymbol } from "@/lib/symbol-utils";
 import { db } from "@/lib/db";
 
+// Fallback Alpaca keys from env vars (used when Clerk auth is unavailable, e.g. cron jobs)
+const ALPACA_API_KEY = process.env.ALPACA_API_KEY;
+const ALPACA_SECRET_KEY = process.env.ALPACA_SECRET_KEY;
+
+async function resolveAlpacaKeys() {
+  // Try Clerk auth first
+  try {
+    const keys = await getAlpacaKeys();
+    if (keys?.apiKey && keys?.secretKey) return keys;
+  } catch {
+    // Clerk not available — fall through to env vars
+  }
+  // Fallback to environment variables
+  if (ALPACA_API_KEY && ALPACA_SECRET_KEY) {
+    return { apiKey: ALPACA_API_KEY, secretKey: ALPACA_SECRET_KEY };
+  }
+  return null;
+}
+
 /**
  * Convert an array of closing prices to log-returns.
  */
@@ -24,8 +43,8 @@ function toLogReturns(prices) {
  */
 export async function POST(request) {
   try {
-    // 1. Get Alpaca keys
-    const keys = await getAlpacaKeys();
+    // 1. Get Alpaca keys (Clerk auth or env var fallback)
+    const keys = await resolveAlpacaKeys();
     if (!keys?.apiKey || !keys?.secretKey) {
       return Response.json(
         { error: "Alpaca API keys not configured", code: "NO_KEYS" },
@@ -208,39 +227,50 @@ export async function POST(request) {
       }
     }
 
-    // 8. Save analysis to database
-    const analysisRun = await db.analysisRun.create({
-      data: {
-        userId: "default",
-        status: "completed",
-        results: JSON.stringify({
-          totalValue,
-          positionCount: positions.length,
-          recommendationCount: recommendations.length,
-        }),
-        positions: JSON.stringify(positions),
-        correlation: JSON.stringify(correlationResult),
-        optimizer: JSON.stringify(optimizerResult),
-        regimes: JSON.stringify(regimeResults),
-      },
-    });
+    // 8. Save analysis to database (graceful fallback if DB unavailable)
+    let analysisRunId = `analysis-${Date.now()}`;
+    try {
+      if (db?.analysisRun) {
+        const analysisRun = await db.analysisRun.create({
+          data: {
+            userId: "default",
+            status: "completed",
+            results: JSON.stringify({
+              totalValue,
+              positionCount: positions.length,
+              recommendationCount: recommendations.length,
+            }),
+            positions: JSON.stringify(positions),
+            correlation: JSON.stringify(correlationResult),
+            optimizer: JSON.stringify(optimizerResult),
+            regimes: JSON.stringify(regimeResults),
+          },
+        });
+        analysisRunId = analysisRun.id;
 
-    // Save trade recommendations
-    for (const rec of recommendations) {
-      await db.tradeRecommendation.create({
-        data: {
-          analysisId: analysisRun.id,
-          symbol: rec.symbol,
-          side: rec.side,
-          orderType: rec.order_type,
-          qty: rec.qty,
-          limitPrice: rec.limit_price,
-          timeInForce: rec.time_in_force,
-          priority: rec.priority,
-          reason: rec.reason,
-          status: "pending",
-        },
-      });
+        // Save trade recommendations
+        if (db?.tradeRecommendation) {
+          for (const rec of recommendations) {
+            await db.tradeRecommendation.create({
+              data: {
+                analysisId: analysisRun.id,
+                symbol: rec.symbol,
+                side: rec.side,
+                orderType: rec.order_type,
+                qty: rec.qty,
+                limitPrice: rec.limit_price,
+                timeInForce: rec.time_in_force,
+                priority: rec.priority,
+                reason: rec.reason,
+                status: "pending",
+              },
+            });
+          }
+        }
+      }
+    } catch (dbErr) {
+      console.error("DB save failed (non-fatal):", dbErr.message);
+      // Analysis still returns — just without DB persistence
     }
 
     // 9. Build response
@@ -254,7 +284,7 @@ export async function POST(request) {
     const corrConfidence = correlationResult?.corr_confidence || correlationResult?.confidence || 0;
 
     return Response.json({
-      id: analysisRun.id,
+      id: analysisRunId,
       // Portfolio allocation (current)
       portfolio_allocation: Object.fromEntries(
         positions.map((p) => [p.symbol, p.weight])
