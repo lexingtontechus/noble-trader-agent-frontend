@@ -30,8 +30,33 @@ async function resolveAlpacaKeys() {
   return null;
 }
 
+/**
+ * Resolve Telegram chat ID for sending notifications.
+ * Priority: TELEGRAM_CHAT_ID env var → last successful notification in DB.
+ */
+async function resolveChatId() {
+  // 1. Environment variable takes priority
+  if (TELEGRAM_CHAT_ID) return TELEGRAM_CHAT_ID;
+
+  // 2. Fall back to last successful notification in DB
+  try {
+    const lastNotif = await db.telegramNotification.findFirst({
+      where: { success: true },
+      orderBy: { createdAt: "desc" },
+    });
+    if (lastNotif?.chatId) return lastNotif.chatId;
+  } catch {}
+
+  return null;
+}
+
+/**
+ * Check if the request has a valid CRON_SECRET.
+ * The secret can be passed via `x-cron-secret` header or `?secret=` query param.
+ * Returns false if CRON_SECRET is configured but doesn't match (strict).
+ */
 function verifyCronSecret(request) {
-  if (!CRON_SECRET) return true; // If no secret configured, allow all (dev mode)
+  if (!CRON_SECRET) return false;
   const headerSecret = request.headers.get("x-cron-secret");
   const { searchParams } = new URL(request.url);
   const querySecret = searchParams.get("secret");
@@ -48,9 +73,14 @@ async function sendTelegramMessage(chatId, text) {
       body: JSON.stringify({ chat_id: chatId, text, parse_mode: "HTML", disable_web_page_preview: true }),
       signal: AbortSignal.timeout(15000),
     });
-    if (!res.ok) return null;
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      console.error("Telegram API error:", err.description || res.status);
+      return null;
+    }
     return res.json();
-  } catch {
+  } catch (err) {
+    console.error("Telegram send failed:", err.message);
     return null;
   }
 }
@@ -62,8 +92,7 @@ function formatTDAAlert(alerts, scanResults) {
   const lines = [];
   const criticalCount = alerts.filter(a => a.alertLevel === "critical").length;
   const highCount = alerts.filter(a => a.alertLevel === "high").length;
-  const mediumCount = alerts.filter(a => a.alertLevel === "medium").length;
-  
+
   if (criticalCount > 0) {
     lines.push("🚨 <b>TDA EARLY WARNING — CRITICAL</b> 🚨");
   } else if (highCount > 0) {
@@ -108,19 +137,19 @@ function localTDAScan(prices, symbol) {
   const longerMean = longer.reduce((a, b) => a + b, 0) / longer.length;
   const recentVol = Math.sqrt(recent.reduce((a, r) => a + (r - recentMean) ** 2, 0) / recent.length) * Math.sqrt(252);
   const longerVol = Math.sqrt(longer.reduce((a, r) => a + (r - longerMean) ** 2, 0) / longer.length) * Math.sqrt(252);
-  
+
   // Anomaly: vol regime shift
   const volRatio = recentVol / (longerVol || 0.01);
   const anomalyScore = Math.abs(volRatio - 1) * 2;
-  
+
   // Regime change probability: based on mean shift + vol shift
   const meanShift = Math.abs(recentMean - longerMean) / (longerVol / Math.sqrt(252) || 0.01);
   const regimeChangeProbability = Math.min((meanShift * 0.3 + Math.abs(volRatio - 1) * 0.5), 1.0);
-  
+
   // Simplified Betti numbers
   const betti0 = volRatio > 1.3 ? 2 : 1;
   const betti1 = volRatio > 1.5 ? 1 : 0;
-  
+
   const totalEntropy = Math.min(anomalyScore * 0.5, 1.0);
 
   return {
@@ -139,7 +168,7 @@ function localTDAScan(prices, symbol) {
 export async function GET(request) {
   const hasCronHeader = request.headers.get("x-cron-secret") || new URL(request.url).searchParams.get("secret");
   if (hasCronHeader && !verifyCronSecret(request)) {
-    return Response.json({ error: "Unauthorized — invalid cron secret" }, { status: 401 });
+    return Response.json({ error: "Unauthorized — invalid cron secret", code: "UNAUTHORIZED" }, { status: 401 });
   }
 
   try {
@@ -177,11 +206,11 @@ export async function GET(request) {
 
 /**
  * POST /api/tda/scan
- * Run TDA scan on symbols. Can be triggered manually or by cron.
- * 
+ * Run TDA scan on symbols. Can be triggered manually or by Supabase pg_cron.
+ *
  * Body: { symbols?: string[], sendTelegram?: boolean }
  * If no symbols provided, scans all current portfolio positions.
- * 
+ *
  * Cron trigger: POST with x-cron-secret header or ?secret= param
  */
 export async function POST(request) {
@@ -406,7 +435,7 @@ export async function POST(request) {
     // Send Telegram alerts if any were triggered
     let telegramSent = false;
     if (alerts.length > 0 && sendTelegram) {
-      const chatId = TELEGRAM_CHAT_ID;
+      const chatId = await resolveChatId();
       if (chatId && TELEGRAM_BOT_TOKEN) {
         try {
           const message = formatTDAAlert(alerts, scanResults);
@@ -419,7 +448,7 @@ export async function POST(request) {
                 try {
                   await db.earlyWarningAlert.update({
                     where: { id: alert.alertId },
-                    data: { telegramSent: true, telegramChatId: chatId },
+                    data: { telegramSent: true, telegramChatId: String(chatId) },
                   });
                 } catch {}
               }
@@ -436,7 +465,9 @@ export async function POST(request) {
               });
             } catch {}
           }
-        } catch {}
+        } catch (telErr) {
+          console.error("Telegram notification failed:", telErr.message);
+        }
       }
     }
 

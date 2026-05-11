@@ -1,30 +1,60 @@
 import { db } from "@/lib/db";
 
 const TELEGRAM_BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN;
+const TELEGRAM_CHAT_ID = process.env.TELEGRAM_CHAT_ID;
 
 /**
  * Send a message via Telegram Bot API.
  */
 async function sendTelegramMessage(chatId, text) {
+  if (!TELEGRAM_BOT_TOKEN || !chatId) return null;
   const url = `https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage`;
-  const res = await fetch(url, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      chat_id: chatId,
-      text,
-      parse_mode: "HTML",
-      disable_web_page_preview: true,
-    }),
-    signal: AbortSignal.timeout(15000),
-  });
+  try {
+    const res = await fetch(url, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        chat_id: chatId,
+        text,
+        parse_mode: "HTML",
+        disable_web_page_preview: true,
+      }),
+      signal: AbortSignal.timeout(15000),
+    });
 
-  if (!res.ok) {
-    const err = await res.json().catch(() => ({}));
-    throw new Error(err.description || `Telegram API error: ${res.status}`);
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      console.error("Telegram API error:", err.description || res.status);
+      return null;
+    }
+    return res.json();
+  } catch (err) {
+    console.error("Telegram send failed:", err.message);
+    return null;
   }
+}
 
-  return res.json();
+/**
+ * Resolve Telegram chat ID for sending notifications.
+ * Priority: TELEGRAM_CHAT_ID env var → request body → last successful notification in DB.
+ */
+async function resolveChatId(bodyChatId) {
+  // 1. Environment variable takes priority
+  if (TELEGRAM_CHAT_ID) return TELEGRAM_CHAT_ID;
+
+  // 2. Request body
+  if (bodyChatId) return bodyChatId;
+
+  // 3. Fall back to last successful notification in DB
+  try {
+    const lastNotif = await db.telegramNotification.findFirst({
+      where: { success: true },
+      orderBy: { createdAt: "desc" },
+    });
+    if (lastNotif?.chatId) return lastNotif.chatId;
+  } catch {}
+
+  return null;
 }
 
 /**
@@ -126,7 +156,7 @@ function formatTradeReport(analysis, execution) {
 /**
  * POST /api/telegram/report
  * Send a formatted trade summary report to Telegram.
- * Body: { chat_id, analysis, execution, analysisId? }
+ * Body: { chat_id?, analysis, execution, analysisId? }
  */
 export async function POST(request) {
   if (!TELEGRAM_BOT_TOKEN) {
@@ -138,11 +168,11 @@ export async function POST(request) {
 
   try {
     const body = await request.json();
-    const chatId = body.chat_id || body.chatId || process.env.TELEGRAM_CHAT_ID;
+    const chatId = await resolveChatId(body.chat_id || body.chatId);
 
     if (!chatId) {
       return Response.json(
-        { error: "Telegram chat ID required. Message the bot first to get your chat ID.", code: "NO_CHAT_ID" },
+        { error: "Telegram chat ID required. Set TELEGRAM_CHAT_ID env var or message the bot first to get your chat ID.", code: "NO_CHAT_ID" },
         { status: 400 }
       );
     }
@@ -155,6 +185,13 @@ export async function POST(request) {
 
     // Send via Telegram API
     const result = await sendTelegramMessage(chatId, message);
+
+    if (!result) {
+      return Response.json(
+        { error: "Telegram send failed", code: "SEND_FAILED" },
+        { status: 500 }
+      );
+    }
 
     // Log to database
     try {
