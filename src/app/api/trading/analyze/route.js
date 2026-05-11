@@ -1,6 +1,6 @@
 import { getAlpacaKeys } from "@/lib/clerk-metadata";
 import { getPositions, getAccount } from "@/lib/alpaca-client";
-import { detectRegime, detectCorrelation, optimisePortfolio } from "@/lib/fastapi-client";
+import { detectRegimeV2, strategySignal, analyzeRisk, detectCorrelation, optimisePortfolio } from "@/lib/fastapi-client";
 import { fetchHistoricalPrices } from "@/lib/yahoo-prices";
 import { alpacaToYahooSymbol, yahooToAlpacaSymbol } from "@/lib/symbol-utils";
 import { db } from "@/lib/db";
@@ -147,8 +147,47 @@ function localOptimize(symbols, logReturns) {
 }
 
 /**
+ * Phase 2: Local fallback for strategy signal.
+ * Based on regime context, return a simple long/short/flat signal.
+ */
+function localStrategySignal(prices, regime) {
+  if (prices.length < 50) return { signal: "flat", confidence: 0.3, kelly_fraction: 0, position_size: 0, source: "local" };
+  const returns = toLogReturns(prices.slice(-20));
+  const meanRet = returns.reduce((a, b) => a + b, 0) / returns.length;
+  const variance = returns.reduce((a, r) => a + (r - meanRet) ** 2, 0) / returns.length;
+  const vol = Math.sqrt(variance) * Math.sqrt(252);
+  let signal = "flat";
+  let confidence = 0.4;
+  if (regime === "bullish" || regime === "trending") { signal = "long"; confidence = 0.5 + Math.min(Math.abs(meanRet) * 10, 0.3); }
+  else if (regime === "bearish" || regime === "crisis") { signal = "short"; confidence = 0.5 + Math.min(Math.abs(meanRet) * 10, 0.3); }
+  else { signal = "flat"; confidence = 0.3; }
+  const kellyFraction = vol > 0 ? Math.min(Math.max(meanRet / (vol * vol / 252), 0), 0.25) : 0;
+  return { signal, confidence: Math.min(confidence, 0.9), kelly_fraction: kellyFraction, position_size: kellyFraction, source: "local" };
+}
+
+/**
+ * Phase 2: Local fallback for risk analysis.
+ * Compute basic VaR (5th percentile of returns), CVaR (mean of returns below VaR), risk_score.
+ */
+function localRiskAnalyze(prices) {
+  if (prices.length < 20) return { var_daily: 0, cvar_daily: 0, risk_score: 0.5, stress_tests: {}, risk_limit_breach: false, source: "local" };
+  const returns = toLogReturns(prices.slice(-60));
+  const sorted = [...returns].sort((a, b) => a - b);
+  const varIdx = Math.floor(sorted.length * 0.05);
+  const varDaily = sorted[varIdx] || 0;
+  const cvarReturns = sorted.slice(0, varIdx + 1);
+  const cvarDaily = cvarReturns.length > 0 ? cvarReturns.reduce((a, b) => a + b, 0) / cvarReturns.length : varDaily;
+  const variance = returns.reduce((a, r) => a + (r - returns.reduce((s, v) => s + v, 0) / returns.length) ** 2, 0) / returns.length;
+  const vol = Math.sqrt(variance) * Math.sqrt(252);
+  const riskScore = Math.min(vol / 0.4, 1.0);
+  return { var_daily: varDaily, cvar_daily: cvarDaily, risk_score: riskScore, stress_tests: {}, risk_limit_breach: riskScore > 0.8, source: "local" };
+}
+
+/**
  * POST /api/trading/analyze
  * Full analysis pipeline with local fallbacks for resilience.
+ *
+ * Phase 2 pipeline: detectRegimeV2 → strategySignal → analyzeRisk → detectCorrelation → optimisePortfolio
  */
 export async function POST(request) {
   try {
@@ -213,7 +252,7 @@ export async function POST(request) {
     // Use a capped length to reduce memory footprint
     const useLen = Math.min(minLen, 252); // max 1 year of daily bars
 
-    // 4. Regime detection — try FastAPI, fall back to local
+    // 4. Regime detection V2 — try FastAPI, fall back to local
     const regimeResults = {};
     let fastApiAvailable = false;
 
@@ -222,7 +261,7 @@ export async function POST(request) {
       const prices = allPrices[i].slice(-useLen);
       try {
         const result = await Promise.race([
-          detectRegime(prices, yahooSymbols[i]),
+          detectRegimeV2(prices, yahooSymbols[i]),
           new Promise((_, rej) => setTimeout(() => rej(new Error("timeout")), 15000)),
         ]);
         regimeResults[sym] = result;
@@ -233,12 +272,58 @@ export async function POST(request) {
         regimeResults[sym] = {
           regime: localRegime,
           current_regime: localRegime,
+          regime_label: localRegime,
           source: "local",
         };
       }
     }
 
-    // 5. Correlation detection — try FastAPI, fall back to local
+    // 5. Strategy signals — try FastAPI, fall back to local
+    const strategyResults = {};
+
+    for (let i = 0; i < symbols.length; i++) {
+      const sym = symbols[i];
+      const prices = allPrices[i].slice(-useLen);
+      const regime = regimeResults[sym]?.current_regime || regimeResults[sym]?.regime || "unknown";
+      if (fastApiAvailable) {
+        try {
+          const result = await Promise.race([
+            strategySignal(prices, yahooSymbols[i], { use_regime: true, kelly_fraction: 0.5, target_vol: 0.15 }),
+            new Promise((_, rej) => setTimeout(() => rej(new Error("timeout")), 20000)),
+          ]);
+          strategyResults[sym] = result;
+        } catch {
+          // Local fallback
+          strategyResults[sym] = localStrategySignal(prices, regime);
+        }
+      } else {
+        strategyResults[sym] = localStrategySignal(prices, regime);
+      }
+    }
+
+    // 6. Risk analysis — try FastAPI, fall back to local
+    const riskResults = {};
+
+    for (let i = 0; i < symbols.length; i++) {
+      const sym = symbols[i];
+      const prices = allPrices[i].slice(-useLen);
+      if (fastApiAvailable) {
+        try {
+          const result = await Promise.race([
+            analyzeRisk(prices, yahooSymbols[i], { use_regime: true, stress_scenarios: true }),
+            new Promise((_, rej) => setTimeout(() => rej(new Error("timeout")), 20000)),
+          ]);
+          riskResults[sym] = result;
+        } catch {
+          // Local fallback
+          riskResults[sym] = localRiskAnalyze(prices);
+        }
+      } else {
+        riskResults[sym] = localRiskAnalyze(prices);
+      }
+    }
+
+    // 7. Correlation detection — try FastAPI, fall back to local
     const logReturns = allPrices.map((prices) => toLogReturns(prices.slice(-useLen)));
 
     let correlationResult;
@@ -265,7 +350,7 @@ export async function POST(request) {
       correlationResult.source = "local";
     }
 
-    // 6. Optimization — try FastAPI, fall back to local
+    // 8. Optimization — try FastAPI, fall back to local
     let optimizerResult;
     if (fastApiAvailable) {
       try {
@@ -289,7 +374,7 @@ export async function POST(request) {
       optimizerResult.source = "local";
     }
 
-    // 7. Generate trade recommendations
+    // 9. Generate trade recommendations (enhanced with strategy signals + risk analysis)
     const recommendations = [];
     const REBALANCE_THRESHOLD = 0.05;
 
@@ -311,6 +396,10 @@ export async function POST(request) {
       const absDiff = Math.abs(diff);
       const dollarDiff = diff * totalValue;
       const price = positions[i].current_price;
+      const strategy = strategyResults[sym] || {};
+      const risk = riskResults[sym] || {};
+      const regime = regimeResults[sym]?.regime || regimeResults[sym]?.current_regime || "unknown";
+      const regimeLabel = regimeResults[sym]?.regime_label || regime;
       return {
         symbol: sym,
         current_weight: current,
@@ -319,22 +408,62 @@ export async function POST(request) {
         abs_weight_diff: absDiff,
         dollar_diff: dollarDiff,
         price,
-        regime: regimeResults[sym]?.regime || regimeResults[sym]?.current_regime || "unknown",
+        regime,
+        regimeLabel,
+        strategySignal: strategy.signal || "flat",
+        strategyConfidence: strategy.confidence || 0.3,
+        kellyFraction: strategy.kelly_fraction || 0,
+        kellySize: strategy.position_size || 0,
+        riskScore: risk.risk_score || 0.5,
+        varDaily: risk.var_daily || 0,
+        cvarDaily: risk.cvar_daily || 0,
+        riskLimitBreach: risk.risk_limit_breach || false,
       };
     });
 
-    weightAnalysis.sort((a, b) => Math.abs(b.dollar_diff) - Math.abs(a.dollar_diff));
+    // Adjust priority based on strategy alignment:
+    // - Strategy "long" + underweight → higher buy priority
+    // - Strategy "short" + overweight → higher sell priority
+    // - Strategy "flat" → skip unless weight diff is very large
+    weightAnalysis.sort((a, b) => {
+      // Primary sort: strategy-aligned trades first
+      const aAligned = (a.strategySignal === "long" && a.dollar_diff > 0) ||
+                       (a.strategySignal === "short" && a.dollar_diff < 0);
+      const bAligned = (b.strategySignal === "long" && b.dollar_diff > 0) ||
+                       (b.strategySignal === "short" && b.dollar_diff < 0);
+      if (aAligned && !bAligned) return -1;
+      if (!aAligned && bAligned) return 1;
+      // Secondary sort: by absolute dollar diff
+      return Math.abs(b.dollar_diff) - Math.abs(a.dollar_diff);
+    });
 
     let sellPriority = 0;
     let buyPriority = 50;
 
     for (const wa of weightAnalysis) {
+      // If strategy signal is "flat", skip unless the weight diff is very large (>15%)
+      if (wa.strategySignal === "flat" && wa.abs_weight_diff < 0.15) continue;
       if (wa.abs_weight_diff < REBALANCE_THRESHOLD) continue;
       if (wa.price <= 0) continue;
-      const qty = Math.floor(Math.abs(wa.dollar_diff) / wa.price);
+
+      // Adjust quantity using Kelly fraction if available
+      let qty = Math.floor(Math.abs(wa.dollar_diff) / wa.price);
+      if (wa.kellyFraction > 0 && wa.kellyFraction < 1) {
+        // Scale down position by Kelly fraction (conservative sizing)
+        const kellyAdjustedQty = Math.floor(qty * wa.kellyFraction);
+        if (kellyAdjustedQty > 0) qty = kellyAdjustedQty;
+      }
       if (qty <= 0) continue;
 
+      // Determine priority offset based on strategy confidence
+      const confidenceOffset = Math.round((1 - wa.strategyConfidence) * 20);
+
       if (wa.dollar_diff < 0) {
+        // Sell recommendation
+        const isAligned = wa.strategySignal === "short";
+        const priority = isAligned
+          ? sellPriority + confidenceOffset  // Strategy-aligned sells get lower priority number (higher priority)
+          : sellPriority + 20 + confidenceOffset; // Non-aligned sells get deprioritized
         recommendations.push({
           id: `sell-${wa.symbol}-${Date.now()}`,
           symbol: wa.symbol,
@@ -343,11 +472,26 @@ export async function POST(request) {
           qty,
           limit_price: null,
           time_in_force: "day",
-          priority: sellPriority++,
-          reason: `Overweight by ${(wa.abs_weight_diff * 100).toFixed(1)}%: current ${(wa.current_weight * 100).toFixed(1)}% → optimal ${(wa.optimal_weight * 100).toFixed(1)}% | Regime: ${wa.regime}`,
+          priority,
+          reason: `Overweight by ${(wa.abs_weight_diff * 100).toFixed(1)}%: current ${(wa.current_weight * 100).toFixed(1)}% → optimal ${(wa.optimal_weight * 100).toFixed(1)}% | Regime: ${wa.regime} | Signal: ${wa.strategySignal} (${(wa.strategyConfidence * 100).toFixed(0)}% conf) | VaR: ${(wa.varDaily * 100).toFixed(2)}% | Risk: ${(wa.riskScore * 100).toFixed(0)}%`,
           estimated_value: Math.abs(wa.dollar_diff),
+          regime: wa.regime,
+          regimeLabel: wa.regimeLabel,
+          strategySignal: wa.strategySignal,
+          strategyConfidence: wa.strategyConfidence,
+          kellyFraction: wa.kellyFraction,
+          kellySize: wa.kellySize * totalValue, // dollar size from Kelly
+          riskScore: wa.riskScore,
+          varDaily: wa.varDaily,
+          cvarDaily: wa.cvarDaily,
         });
+        sellPriority += 10;
       } else {
+        // Buy recommendation
+        const isAligned = wa.strategySignal === "long";
+        const priority = isAligned
+          ? buyPriority + confidenceOffset  // Strategy-aligned buys get lower priority number
+          : buyPriority + 20 + confidenceOffset; // Non-aligned buys get deprioritized
         const limitPrice = wa.price * 0.99;
         recommendations.push({
           id: `buy-${wa.symbol}-${Date.now()}`,
@@ -357,16 +501,49 @@ export async function POST(request) {
           qty,
           limit_price: Math.round(limitPrice * 100) / 100,
           time_in_force: "gtc",
-          priority: buyPriority++,
-          reason: `Underweight by ${(wa.abs_weight_diff * 100).toFixed(1)}%: current ${(wa.current_weight * 100).toFixed(1)}% → optimal ${(wa.optimal_weight * 100).toFixed(1)}% | Regime: ${wa.regime}`,
+          priority,
+          reason: `Underweight by ${(wa.abs_weight_diff * 100).toFixed(1)}%: current ${(wa.current_weight * 100).toFixed(1)}% → optimal ${(wa.optimal_weight * 100).toFixed(1)}% | Regime: ${wa.regime} | Signal: ${wa.strategySignal} (${(wa.strategyConfidence * 100).toFixed(0)}% conf) | Kelly: ${(wa.kellyFraction * 100).toFixed(1)}% | Risk: ${(wa.riskScore * 100).toFixed(0)}%`,
           estimated_value: Math.abs(wa.dollar_diff),
+          regime: wa.regime,
+          regimeLabel: wa.regimeLabel,
+          strategySignal: wa.strategySignal,
+          strategyConfidence: wa.strategyConfidence,
+          kellyFraction: wa.kellyFraction,
+          kellySize: wa.kellySize * totalValue,
+          riskScore: wa.riskScore,
+          varDaily: wa.varDaily,
+          cvarDaily: wa.cvarDaily,
         });
+        buyPriority += 10;
       }
     }
 
-    // 8. Save analysis to database
+    // 10. Save analysis to database (with Phase 2 data)
     let analysisRunId = null;
     try {
+      // Prepare Phase 2 JSON data for storage
+      const strategySignalsJson = JSON.stringify(
+        Object.fromEntries(
+          symbols.map((sym) => [sym, strategyResults[sym] || {}])
+        )
+      );
+      const riskAnalysisJson = JSON.stringify(
+        Object.fromEntries(
+          symbols.map((sym) => [sym, riskResults[sym] || {}])
+        )
+      );
+      const kellySizesJson = JSON.stringify(
+        Object.fromEntries(
+          symbols.map((sym) => [
+            sym,
+            {
+              kelly_fraction: strategyResults[sym]?.kelly_fraction || 0,
+              position_size: strategyResults[sym]?.position_size || 0,
+            },
+          ])
+        )
+      );
+
       const analysisRun = await db.analysisRun.create({
         data: {
           userId: "default",
@@ -381,6 +558,9 @@ export async function POST(request) {
           correlation: JSON.stringify(correlationResult),
           optimizer: JSON.stringify(optimizerResult),
           regimes: JSON.stringify(regimeResults),
+          strategySignals: strategySignalsJson,
+          riskAnalysis: riskAnalysisJson,
+          kellySizes: kellySizesJson,
         },
       });
       analysisRunId = analysisRun.id;
@@ -398,6 +578,15 @@ export async function POST(request) {
             priority: rec.priority,
             reason: rec.reason,
             status: "pending",
+            regime: rec.regime || null,
+            regimeLabel: rec.regimeLabel || null,
+            strategySignal: rec.strategySignal || null,
+            strategyConfidence: rec.strategyConfidence || null,
+            kellyFraction: rec.kellyFraction || null,
+            kellySize: rec.kellySize || null,
+            riskScore: rec.riskScore || null,
+            varDaily: rec.varDaily || null,
+            cvarDaily: rec.cvarDaily || null,
           },
         });
       }
@@ -405,15 +594,67 @@ export async function POST(request) {
       console.error("Database save failed (non-fatal):", dbErr.message);
     }
 
-    // 9. Build response
-    const regimeSummary = symbols.map((sym) => ({
-      symbol: sym,
-      regime: regimeResults[sym]?.current_regime || regimeResults[sym]?.regime || "unknown",
-      regime_label: regimeResults[sym]?.current_regime || regimeResults[sym]?.regime || "unknown",
-    }));
+    // 11. Build response (with Phase 2 data)
+    const regimeSummary = symbols.map((sym) => {
+      const regimeData = regimeResults[sym] || {};
+      return {
+        symbol: sym,
+        regime: regimeData.current_regime || regimeData.regime || "unknown",
+        regime_label: regimeData.regime_label || regimeData.current_regime || regimeData.regime || "unknown",
+        n_states: regimeData.n_states || null,
+        state_probabilities: regimeData.state_probabilities || null,
+      };
+    });
 
     const corrRegime = correlationResult?.corr_regime || correlationResult?.regime_label || "unknown";
     const corrConfidence = correlationResult?.corr_confidence || correlationResult?.confidence || 0;
+
+    // Build strategy signals summary
+    const strategySignalsResponse = Object.fromEntries(
+      symbols.map((sym) => [
+        sym,
+        {
+          signal: strategyResults[sym]?.signal || "flat",
+          confidence: strategyResults[sym]?.confidence || 0.3,
+          kelly_fraction: strategyResults[sym]?.kelly_fraction || 0,
+          position_size: strategyResults[sym]?.position_size || 0,
+          regime_context: strategyResults[sym]?.regime_context || null,
+          source: strategyResults[sym]?.source || "unknown",
+        },
+      ])
+    );
+
+    // Build risk analysis summary
+    const riskAnalysisResponse = Object.fromEntries(
+      symbols.map((sym) => [
+        sym,
+        {
+          var_daily: riskResults[sym]?.var_daily || 0,
+          cvar_daily: riskResults[sym]?.cvar_daily || 0,
+          risk_score: riskResults[sym]?.risk_score || 0.5,
+          risk_limit_breach: riskResults[sym]?.risk_limit_breach || false,
+          stress_tests: riskResults[sym]?.stress_tests || {},
+          source: riskResults[sym]?.source || "unknown",
+        },
+      ])
+    );
+
+    // Build Kelly sizing summary
+    const kellySizingResponse = Object.fromEntries(
+      symbols.map((sym) => [
+        sym,
+        {
+          kelly_fraction: strategyResults[sym]?.kelly_fraction || 0,
+          position_size: strategyResults[sym]?.position_size || 0,
+        },
+      ])
+    );
+
+    // Count strategy signal types for explanation
+    const longCount = symbols.filter((s) => strategyResults[s]?.signal === "long").length;
+    const shortCount = symbols.filter((s) => strategyResults[s]?.signal === "short").length;
+    const flatCount = symbols.filter((s) => strategyResults[s]?.signal === "flat").length;
+    const highRiskCount = symbols.filter((s) => (riskResults[s]?.risk_score || 0) > 0.7).length;
 
     return Response.json({
       id: analysisRunId,
@@ -435,8 +676,11 @@ export async function POST(request) {
         max_dd_before: optimisation.expected_max_drawdown || 0,
         max_dd_after: optimisation.expected_max_drawdown || 0,
       },
-      strategy_explanation: `Portfolio is in ${corrRegime} correlation regime with ${(corrConfidence * 100).toFixed(0)}% confidence. Rebalancing from concentrated positions to diversified optimal allocation. ${fastApiAvailable ? "HMM-based" : "Statistical"} regime detection used. Sells prioritized to free buying power before placing buy orders.`,
-      strategy: `${corrRegime} regime detected — reducing concentration risk by selling overweight positions first, then reallocating to underweight assets.`,
+      strategy_signals: strategySignalsResponse,
+      risk_analysis: riskAnalysisResponse,
+      kelly_sizing: kellySizingResponse,
+      strategy_explanation: `Portfolio is in ${corrRegime} correlation regime with ${(corrConfidence * 100).toFixed(0)}% confidence. Strategy signals: ${longCount} long, ${shortCount} short, ${flatCount} flat. ${highRiskCount > 0 ? `${highRiskCount} symbols have elevated risk (>70%).` : "All symbols within normal risk bounds."} ${fastApiAvailable ? "HMM-regime-aware" : "Statistical"} strategy signals and Kelly position sizing used. Sells prioritized to free buying power before placing buy orders.`,
+      strategy: `${corrRegime} regime detected — ${longCount > shortCount ? "bullish bias" : shortCount > longCount ? "bearish bias" : "neutral stance"} with Kelly-adjusted position sizing. Reducing concentration risk by selling overweight positions first, then reallocating to underweight assets.`,
       recommendations,
       trades: recommendations,
       account: {
