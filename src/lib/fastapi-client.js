@@ -473,3 +473,201 @@ export async function buildObservation(prices, high, low, symbol = "UNKNOWN", op
   }
   return res.json();
 }
+
+// ── Phase 1: New v4 endpoints ──────────────────────────────────────────────────
+
+/**
+ * Enhanced regime detection with configurable 2-4 states.
+ * POST /regime/detect-v2
+ *
+ * @param {number[]} prices - Close price series (min 81 bars)
+ * @param {string} symbol - Ticker symbol
+ * @param {object} options - Optional params (n_states, n_iter)
+ * @returns {Promise<object>} RegimeV2Response
+ */
+export async function detectRegimeV2(prices, symbol = "UNKNOWN", options = {}) {
+  const body = {
+    prices,
+    symbol,
+    n_states: options.n_states ?? 4,
+    n_iter: options.n_iter ?? 100,
+  };
+
+  const res = await fetchWithDedup(`${FASTAPI_BASE}/regime/detect-v2`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+  return res.json();
+}
+
+/**
+ * Strategy signal with regime context and position sizing.
+ * POST /strategy/signal
+ *
+ * @param {number[]} prices - Close price series (min 81 bars)
+ * @param {string} symbol - Ticker symbol
+ * @param {object} options - Optional params (kelly_fraction, target_vol, use_regime, base_risk_limit, n_hmm_states)
+ * @returns {Promise<object>} StrategySignalResponse
+ */
+export async function strategySignal(prices, symbol = "UNKNOWN", options = {}) {
+  const body = {
+    prices,
+    symbol,
+    kelly_fraction: options.kelly_fraction ?? 0.5,
+    target_vol: options.target_vol ?? 0.15,
+    use_regime: options.use_regime ?? true,
+    base_risk_limit: options.base_risk_limit ?? 0.02,
+    n_hmm_states: options.n_hmm_states ?? 4,
+  };
+
+  const authHeaders = await getFastAPIAuthHeaders();
+  const res = await fetchWithRetry(`${FASTAPI_BASE}/strategy/signal`, {
+    method: "POST",
+    headers: { ...authHeaders, "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+    timeout: SIMULATE_TIMEOUT,
+    retries: 5,
+  });
+  return res.json();
+}
+
+/**
+ * Enhanced risk analysis with stress tests.
+ * POST /risk/analyze
+ *
+ * @param {number[]} prices - Close price series (min 81 bars)
+ * @param {string} symbol - Ticker symbol
+ * @param {object} options - Optional params
+ * @returns {Promise<object>} RiskAnalyzeResponse
+ */
+export async function analyzeRisk(prices, symbol = "UNKNOWN", options = {}) {
+  const body = {
+    prices,
+    symbol,
+    kelly_fraction: options.kelly_fraction ?? 0.5,
+    target_vol: options.target_vol ?? 0.15,
+    use_regime: options.use_regime ?? true,
+    base_risk_limit: options.base_risk_limit ?? 0.02,
+    n_hmm_states: options.n_hmm_states ?? 4,
+    stress_scenarios: options.stress_scenarios ?? true,
+  };
+  if (options.returns) body.returns = options.returns;
+
+  const authHeaders = await getFastAPIAuthHeaders();
+  const res = await fetchWithRetry(`${FASTAPI_BASE}/risk/analyze`, {
+    method: "POST",
+    headers: { ...authHeaders, "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+    timeout: SIMULATE_TIMEOUT,
+    retries: 5,
+  });
+  return res.json();
+}
+
+/**
+ * Run walk-forward backtest with regime-aware strategy (30+ metrics).
+ * POST /backtest/run
+ *
+ * @param {number[]} prices - Close price series (min 250+ bars)
+ * @param {string} symbol - Ticker symbol
+ * @param {object} options - Optional params (window, refit_every, kelly_fraction, etc.)
+ * @returns {Promise<object>} BacktestResponse
+ */
+export async function runBacktest(prices, symbol = "UNKNOWN", options = {}) {
+  const body = {
+    prices,
+    symbol,
+    window: options.window ?? 200,
+    refit_every: options.refit_every ?? 50,
+    n_hmm_states: options.n_hmm_states ?? 4,
+    kelly_fraction: options.kelly_fraction ?? 0.5,
+    target_vol: options.target_vol ?? 0.15,
+    base_risk_limit: options.base_risk_limit ?? 0.02,
+    initial_equity: options.initial_equity ?? 100000,
+    commission_bps: options.commission_bps ?? 5.0,
+    slippage_bps: options.slippage_bps ?? 2.0,
+    max_position_pct: options.max_position_pct ?? 0.25,
+    risk_check: options.risk_check ?? true,
+    regime_gate: options.regime_gate ?? true,
+  };
+
+  const authHeaders = await getFastAPIAuthHeaders();
+  const res = await fetchWithRetry(`${FASTAPI_BASE}/backtest/run`, {
+    method: "POST",
+    headers: { ...authHeaders, "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+    timeout: 120000, // 2 min for heavy computation
+    retries: 3,
+  });
+  return res.json();
+}
+
+/**
+ * Extract TDA features from price series (persistent homology).
+ * POST /tda/features
+ *
+ * @param {number[]} prices - Close price series (min 81 bars)
+ * @param {string} symbol - Ticker symbol
+ * @param {object} options - Optional params (embedding_dim, embedding_delay, etc.)
+ * @returns {Promise<object>} TDAResponse
+ */
+export async function extractTDAFeatures(prices, symbol = "UNKNOWN", options = {}) {
+  const body = {
+    prices,
+    symbol,
+    embedding_dim: options.embedding_dim ?? 3,
+    embedding_delay: options.embedding_delay ?? 1,
+    max_filtration: options.max_filtration ?? 2.0,
+    n_filtration_steps: options.n_filtration_steps ?? 20,
+    anomaly_threshold: options.anomaly_threshold ?? 1.5,
+  };
+  if (options.baseline_prices) body.baseline_prices = options.baseline_prices;
+
+  const authHeaders = await getFastAPIAuthHeaders();
+  const res = await fetchWithRetry(`${FASTAPI_BASE}/tda/features`, {
+    method: "POST",
+    headers: { ...authHeaders, "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+    timeout: SIMULATE_TIMEOUT,
+    retries: 5,
+  });
+  return res.json();
+}
+
+/**
+ * Build enhanced 24+ feature observation vector with optional TDA features.
+ * POST /observation/build-v2
+ *
+ * @param {number[]} prices - Close price series (min 81 bars)
+ * @param {number[]} high - High price series
+ * @param {number[]} low - Low price series
+ * @param {string} symbol - Ticker symbol
+ * @param {object} options - Optional params (include_tda, window, etc.)
+ * @returns {Promise<object>} ObservationV2Response
+ */
+export async function buildObservationV2(prices, high, low, symbol = "UNKNOWN", options = {}) {
+  const body = {
+    prices,
+    high,
+    low,
+    symbol,
+    window: options.window ?? 200,
+    refit_every: options.refit_every ?? 50,
+    n_hmm_states: options.n_hmm_states ?? 4,
+    recommended_f: options.recommended_f ?? 0.0,
+    include_tda: options.include_tda ?? false,
+    embedding_dim: options.embedding_dim ?? 3,
+    embedding_delay: options.embedding_delay ?? 1,
+  };
+
+  const authHeaders = await getFastAPIAuthHeaders();
+  const res = await fetchWithRetry(`${FASTAPI_BASE}/observation/build-v2`, {
+    method: "POST",
+    headers: { ...authHeaders, "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+    timeout: 120000, // 2 min for TDA computation
+    retries: 5,
+  });
+  return res.json();
+}
