@@ -11,8 +11,17 @@ const isPublicRoute = createRouteMatcher([
   "/api/alpaca/(.*)",
   "/api/portfolio/(.*)",
   "/api/telegram/(.*)",
+  "/api/tda/(.*)",
   "/api/simulate(.*)",
   "/api/cron/(.*)",
+  "/api/clerk/(.*)",
+  "/api/commentary(.*)",
+  "/api/correlation/(.*)",
+  "/api/googl-fill(.*)",
+  "/api/observation/(.*)",
+  "/api/optimise/(.*)",
+  "/api/prices(.*)",
+  "/api/stream/(.*)",
   "/index.html",
 ]);
 
