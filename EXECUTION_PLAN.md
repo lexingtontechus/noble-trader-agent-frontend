@@ -138,33 +138,69 @@ Use Topological Data Analysis for market regime change detection and early warni
 ---
 
 ## Phase 5: Strategy Evolution
-**Status**: 🔲 Not Started
+**Status**: 🟡 Implementation Complete — Pending Supabase Migration & Deploy
 
 ### Goal
 Use Optuna HPO to evolve strategy parameters based on live performance. Leverage Supabase for persistent storage of strategy performance data, evolution metrics, and A/B test results.
 
 ### Architecture
 - **Supabase PostgreSQL** — persistent store for strategy variants, performance metrics, and evolution state
-- **FastAPI backend** — Optuna optimization runs
-- **pg_cron** — periodic re-optimization schedule
+- **FastAPI backend** — Optuna optimization runs via `/backtest/run`
+- **pg_cron** — periodic re-optimization schedule (rotation check every 6h, optimization daily)
 - **Next.js API routes** — BFF layer using `@/lib/supabase/db`
+- **Strategy Evolution Engine** — `src/lib/strategy-evolution.js` (variant lifecycle, A/B testing, rotation)
 
-### Database Schema (Supabase tables to add)
-| Table | Purpose |
-|-------|---------|
-| `ta_strategy_variant` | Store strategy parameter sets (HMM states, kelly fraction, risk limits, etc.) |
-| `ta_strategy_performance` | Track live/backtest performance per variant |
-| `ta_ab_test` | A/B test assignments and results |
-| `ta_evolution_log` | History of strategy parameter changes and reasons |
+### Database Schema (Supabase tables — migration SQL ready)
+| Table | Purpose | Migration File |
+|-------|---------|---------------|
+| `ta_strategy_variant` | Store strategy parameter sets (HMM states, kelly fraction, risk limits, etc.) | `supabase/migrations/00000000000002_strategy_evolution.sql` |
+| `ta_strategy_performance` | Track live/backtest performance per variant | Same as above |
+| `ta_ab_test` | A/B test assignments and results | Same as above |
+| `ta_evolution_log` | History of strategy parameter changes and reasons | Same as above |
+
+### API Routes Created
+| Route | Method | Description |
+|-------|--------|-------------|
+| `/api/evolution/summary` | GET | Evolution state summary for UI |
+| `/api/evolution/variants` | GET/POST | List/create strategy variants |
+| `/api/evolution/performance` | GET | Get performance records |
+| `/api/evolution/feedback` | POST | Record execution feedback |
+| `/api/evolution/ab-test` | GET/POST/DELETE | Manage A/B tests |
+| `/api/evolution/optimize` | POST | Run Optuna-style optimization |
+| `/api/evolution/rotate` | POST | Check rotation / force-activate variant |
+
+### Key Files Created/Modified
+| File | Change |
+|------|--------|
+| `src/lib/strategy-evolution.js` | NEW — core evolution engine (variant mgmt, performance tracking, A/B, rotation, Optuna) |
+| `src/lib/supabase/db.js` | UPDATED — added strategyVariant, strategyPerformance, abTest, evolutionLog model proxies |
+| `src/components/evolution/EvolutionPanel.jsx` | NEW — UI component for strategy evolution metrics |
+| `src/components/trading/TradingWorkflow.jsx` | UPDATED — integrated EvolutionPanel below analysis summary |
+| `src/components/dashboard/Dashboard.jsx` | UPDATED — added EvolutionPanel card |
+| `src/app/api/trading/analyze/route.js` | UPDATED — uses active variant params instead of hardcoded values |
+| `src/app/api/trading/execute/route.js` | UPDATED — records execution feedback for evolution |
+| `supabase/migrations/00000000000002_strategy_evolution.sql` | NEW — migration SQL for 4 new tables + seed data |
+| `supabase/migrations/00000000000003_evolution_cron.sql` | NEW — pg_cron for rotation + optimization |
+
+### Cron Jobs (pg_cron)
+| Job | Schedule | Endpoint |
+|-----|----------|----------|
+| `noble-strategy-rotate` | Every 6 hours | POST `/api/evolution/rotate` (auto: true) |
+| `noble-strategy-optimize` | Daily 10pm UTC, Mon-Fri | POST `/api/evolution/optimize` (SPY, 5 trials) |
 
 ### Tasks
-- [ ] Create Supabase migration SQL for strategy evolution tables
-- [ ] Create feedback loop: execution results → optimizer
-- [ ] Implement periodic re-optimization schedule (pg_cron)
-- [ ] Add strategy performance tracking (read/write via Supabase)
-- [ ] Create A/B testing framework for strategy variants
-- [ ] Add evolution metrics to UI
-- [ ] Implement automatic strategy rotation
+- [x] Create Supabase migration SQL for strategy evolution tables
+- [x] Create feedback loop: execution results → optimizer (`/api/evolution/feedback` + execute route integration)
+- [x] Implement periodic re-optimization schedule (pg_cron SQL ready)
+- [x] Add strategy performance tracking (read/write via Supabase `strategy-evolution.js`)
+- [x] Create A/B testing framework for strategy variants (`createABTest`, `getActiveABTest`, `completeABTest`)
+- [x] Add evolution metrics to UI (`EvolutionPanel.jsx` integrated into TradingWorkflow + Dashboard)
+- [x] Implement automatic strategy rotation (`checkAndRotate` + cron job)
+- [x] Update `/api/trading/analyze` to use active variant params
+- [x] Update `/api/trading/execute` to record execution feedback
+- [ ] Run migration SQL in Supabase Dashboard
+- [ ] Run evolution cron SQL in Supabase Dashboard
+- [ ] Test with live market data
 - [ ] Deploy to GitHub
 
 ---
@@ -177,6 +213,7 @@ Use Optuna HPO to evolve strategy parameters based on live performance. Leverage
 | Phase 3 | 2026-05-11 | Merged to main, deployed to Vercel |
 | Phase 4 | 2026-05-12 | Merged to main, deployed to Vercel — TDA early warning + Supabase migration |
 | Phase 5 | - | - |
+
 ```
 
 ---
@@ -190,17 +227,21 @@ When you start the new chat, tell the AI about these critical files:
 | `proxy.js` | Clerk middleware — MUST NOT be deleted or renamed (required for NextJS v16) |
 | `.env.local` | All API keys — MUST NOT be deleted |
 | `src/components/trading/TradingWorkflow.jsx` | Main trading UI |
-| `src/app/api/trading/analyze/route.js` | Analysis pipeline |
+| `src/app/api/trading/analyze/route.js` | Analysis pipeline (now uses active variant params) |
 | `src/app/api/trading/approve/route.js` | Trade approval |
-| `src/app/api/trading/execute/route.js` | Trade execution |
+| `src/app/api/trading/execute/route.js` | Trade execution (now records evolution feedback) |
 | `src/app/api/trading/recommendations/route.js` | Recommendations API |
 | `src/app/api/trading/schedule/execute/route.js` | Scheduled orders |
+| `src/lib/strategy-evolution.js` | Phase 5: Strategy evolution engine (variant mgmt, A/B, rotation, Optuna) |
 | `src/lib/supabase/client.js` | Supabase browser client (client components) |
 | `src/lib/supabase/server.js` | Supabase server client (API routes, server components) |
-| `src/lib/supabase/db.js` | Supabase DB helper (Prisma-compatible wrapper) |
+| `src/lib/supabase/db.js` | Supabase DB helper (Prisma-compatible wrapper, includes evolution tables) |
 | `src/lib/db.js` | Re-exports from supabase/db.js — all routes import from here |
 | `src/lib/trade-validation.js` | Walk-forward validation logic |
-| `supabase/migrations/00000000000001_create_tables.sql` | Database table definitions |
+| `src/components/evolution/EvolutionPanel.jsx` | Phase 5: Strategy evolution UI panel |
+| `supabase/migrations/00000000000001_create_tables.sql` | Database table definitions (Phases 1-4) |
+| `supabase/migrations/00000000000002_strategy_evolution.sql` | Phase 5: Strategy evolution tables + seed |
+| `supabase/migrations/00000000000003_evolution_cron.sql` | Phase 5: Evolution cron jobs |
 | `EXECUTION_PLAN.md` | The execution plan above |
 
 ---

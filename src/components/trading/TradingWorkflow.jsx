@@ -1,6 +1,8 @@
 'use client'
 
 import { useState, useCallback, useEffect, useRef, Component } from 'react'
+import dynamic from 'next/dynamic'
+const EvolutionPanel = dynamic(() => import('@/components/evolution/EvolutionPanel'), { ssr: false })
 
 /* ─── Safe String Helpers ─── */
 
@@ -1677,6 +1679,18 @@ const delays = [600, 1200, 1500, 1200, 2000, 1500, 1800, 1000]
         <>
           {/* Analysis Summary */}
           <AnalysisSummary data={analysisData} />
+
+          {/* Phase 5: Strategy Evolution */}
+          <div className="mt-6">
+            <div className="flex items-center gap-2 mb-3">
+              <div className="w-8 h-8 rounded-lg bg-accent/15 flex items-center justify-center">
+                <IconFlask size={16} className="text-accent" />
+              </div>
+              <h3 className="font-semibold text-sm">Strategy Evolution</h3>
+              <span className="badge badge-xs badge-ghost">Phase 5</span>
+            </div>
+            <EvolutionPanel />
+          </div>
 
           {/* Divider */}
           <div className="divider text-base-content/40 uppercase tracking-wider text-sm font-semibold">
