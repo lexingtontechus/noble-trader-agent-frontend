@@ -35,6 +35,14 @@ export async function POST(request) {
         });
       } catch {}
     }
-    return Response.json({ error: `Validation failed: ${error.message}` }, { status: 500 });
+    return Response.json(
+      {
+        error: `Validation failed: ${error.message}`,
+        passed: false,
+        score: 0,
+        source: "error",
+      },
+      { status: 200 } // Return 200 with error info so UI can display it gracefully
+    );
   }
 }

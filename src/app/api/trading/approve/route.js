@@ -26,9 +26,17 @@ export async function POST(request) {
       );
     }
 
-    const trade = await db.tradeRecommendation.findUnique({
-      where: { id: tradeId },
-    });
+    let trade;
+    try {
+      trade = await db.tradeRecommendation.findUnique({
+        where: { id: tradeId },
+      });
+    } catch (dbErr) {
+      return Response.json(
+        { error: "Database temporarily unavailable. Please try again.", code: "DB_ERROR", detail: dbErr.message },
+        { status: 503 }
+      );
+    }
 
     if (!trade) {
       return Response.json(

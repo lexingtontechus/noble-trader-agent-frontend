@@ -1,6 +1,7 @@
-// Prisma schema for Supabase PostgreSQL.
-// Uses the default "public" schema with prefixed table names (ta_*)
-// to avoid conflicts with existing Supabase tables.
+// Prisma schema — currently uses SQLite for local development.
+// On Vercel, the database is auto-created in /tmp (ephemeral).
+// Tables use ta_* prefix to avoid conflicts.
+// TODO: Migrate to Supabase PostgreSQL for persistent production data.
 
 generator client {
   provider = "prisma-client-js"

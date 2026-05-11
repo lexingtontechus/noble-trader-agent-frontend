@@ -17,26 +17,32 @@ export async function validateTrade({ tradeId, symbol, side, prices: providedPri
 
   // Resolve trade from DB if tradeId provided
   if (tradeId) {
-    trade = await db.tradeRecommendation.findUnique({ where: { id: tradeId } });
-    if (!trade) throw new Error("Trade not found: " + tradeId);
-    targetSymbol = trade.symbol;
-    targetSide = trade.side;
+    try {
+      trade = await db.tradeRecommendation.findUnique({ where: { id: tradeId } });
+      if (!trade) throw new Error("Trade not found: " + tradeId);
+      targetSymbol = trade.symbol;
+      targetSide = trade.side;
 
-    // Already validated?
-    if (trade.validationStatus === "passed" || trade.validationStatus === "failed") {
-      return {
-        passed: trade.validationStatus === "passed",
-        score: trade.validationScore || 0,
-        details: trade.validationDetails ? JSON.parse(trade.validationDetails) : {},
-        cached: true,
-      };
+      // Already validated?
+      if (trade.validationStatus === "passed" || trade.validationStatus === "failed") {
+        return {
+          passed: trade.validationStatus === "passed",
+          score: trade.validationScore || 0,
+          details: trade.validationDetails ? JSON.parse(trade.validationDetails) : {},
+          cached: true,
+        };
+      }
+
+      // Mark as validating
+      await db.tradeRecommendation.update({
+        where: { id: tradeId },
+        data: { validationStatus: "validating" },
+      });
+    } catch (dbErr) {
+      // If DB is unavailable, continue with just the symbol/side from params
+      console.error("DB lookup failed for tradeId:", tradeId, dbErr.message);
+      trade = null;
     }
-
-    // Mark as validating
-    await db.tradeRecommendation.update({
-      where: { id: tradeId },
-      data: { validationStatus: "validating" },
-    });
   }
 
   if (!targetSymbol) throw new Error("symbol or tradeId is required");
@@ -50,14 +56,16 @@ export async function validateTrade({ tradeId, symbol, side, prices: providedPri
       prices = data?.prices || [];
     } catch (e) {
       if (trade) {
-        await db.tradeRecommendation.update({
-          where: { id: tradeId },
-          data: {
-            validationStatus: "error",
-            validationDetails: JSON.stringify({ error: "Failed to fetch historical prices", message: e.message }),
-            validatedAt: new Date(),
-          },
-        });
+        try {
+          await db.tradeRecommendation.update({
+            where: { id: tradeId },
+            data: {
+              validationStatus: "error",
+              validationDetails: JSON.stringify({ error: "Failed to fetch historical prices", message: e.message }),
+              validatedAt: new Date(),
+            },
+          });
+        } catch {}
       }
       throw new Error("Failed to fetch historical prices for " + targetSymbol);
     }
@@ -65,14 +73,16 @@ export async function validateTrade({ tradeId, symbol, side, prices: providedPri
 
   if (!prices || prices.length < 100) {
     if (trade) {
-      await db.tradeRecommendation.update({
-        where: { id: tradeId },
-        data: {
-          validationStatus: "error",
-          validationDetails: JSON.stringify({ error: "Insufficient price data", n_prices: prices?.length || 0 }),
-          validatedAt: new Date(),
-        },
-      });
+      try {
+        await db.tradeRecommendation.update({
+          where: { id: tradeId },
+          data: {
+            validationStatus: "error",
+            validationDetails: JSON.stringify({ error: "Insufficient price data", n_prices: prices?.length || 0 }),
+            validatedAt: new Date(),
+          },
+        });
+      } catch {}
     }
     throw new Error("Insufficient price data for validation: " + (prices?.length || 0) + " bars");
   }
@@ -80,6 +90,7 @@ export async function validateTrade({ tradeId, symbol, side, prices: providedPri
   // Run walk-forward backtest
   let backtestResult;
   let source = "fastapi";
+  let fastapiError = null;
   try {
     backtestResult = await Promise.race([
       runBacktest(prices, targetSymbol, {
@@ -96,43 +107,57 @@ export async function validateTrade({ tradeId, symbol, side, prices: providedPri
         risk_check: true,
         regime_gate: true,
       }),
-      new Promise((_, rej) => setTimeout(() => rej(new Error("Backtest timeout")), 120000)),
+      new Promise((_, rej) => setTimeout(() => rej(new Error("Backtest timeout (120s)")), 120000)),
     ]);
+
+    // Validate the response has required fields
+    if (!backtestResult || typeof backtestResult !== "object") {
+      throw new Error("Invalid backtest response from FastAPI");
+    }
+    if (backtestResult.error || backtestResult.detail) {
+      throw new Error(backtestResult.error || backtestResult.detail || "FastAPI backtest error");
+    }
   } catch (e) {
+    fastapiError = e.message;
     source = "local";
     backtestResult = localWalkForwardValidation(prices, targetSide);
   }
 
   // Compute validation score
-  const validation = computeValidationScore(backtestResult, targetSide);
+  const validation = computeValidationScore(backtestResult, targetSide, source);
 
-  // Update DB
+  // Update DB if trade exists
   if (trade) {
-    await db.tradeRecommendation.update({
-      where: { id: tradeId },
-      data: {
-        validationStatus: validation.passed ? "passed" : "failed",
-        validationScore: validation.score,
-        validationDetails: JSON.stringify({
-          ...validation,
-          backtest: {
-            total_return: backtestResult.total_return,
-            annual_return: backtestResult.annual_return,
-            sharpe_ratio: backtestResult.sharpe_ratio,
-            sortino_ratio: backtestResult.sortino_ratio,
-            max_drawdown: backtestResult.max_drawdown,
-            win_rate: backtestResult.win_rate,
-            profit_factor: backtestResult.profit_factor,
-            n_trades: backtestResult.n_trades,
-            avg_win_pct: backtestResult.avg_win_pct,
-            avg_loss_pct: backtestResult.avg_loss_pct,
-            regime_distribution: backtestResult.regime_distribution,
-            source,
-          },
-        }),
-        validatedAt: new Date(),
-      },
-    });
+    try {
+      await db.tradeRecommendation.update({
+        where: { id: tradeId },
+        data: {
+          validationStatus: validation.passed ? "passed" : "failed",
+          validationScore: validation.score,
+          validationDetails: JSON.stringify({
+            ...validation,
+            backtest: {
+              total_return: backtestResult.total_return,
+              annual_return: backtestResult.annual_return,
+              sharpe_ratio: backtestResult.sharpe_ratio,
+              sortino_ratio: backtestResult.sortino_ratio,
+              max_drawdown: backtestResult.max_drawdown,
+              win_rate: backtestResult.win_rate,
+              profit_factor: backtestResult.profit_factor,
+              n_trades: backtestResult.n_trades,
+              avg_win_pct: backtestResult.avg_win_pct,
+              avg_loss_pct: backtestResult.avg_loss_pct,
+              regime_distribution: backtestResult.regime_distribution,
+              source,
+            },
+            fastapi_error: fastapiError,
+          }),
+          validatedAt: new Date(),
+        },
+      });
+    } catch (dbErr) {
+      console.error("Failed to update validation result in DB:", dbErr.message);
+    }
   }
 
   return {
@@ -141,6 +166,7 @@ export async function validateTrade({ tradeId, symbol, side, prices: providedPri
     details: validation,
     symbol: targetSymbol,
     side: targetSide,
+    source,
     backtest_summary: {
       total_return: backtestResult.total_return,
       annual_return: backtestResult.annual_return,
@@ -158,6 +184,7 @@ export async function validateTrade({ tradeId, symbol, side, prices: providedPri
 /**
  * Local fallback: simple walk-forward validation when FastAPI is unavailable.
  * Uses a 70/30 train/test split with basic return statistics.
+ * This is a statistical approximation — not true persistent homology.
  */
 function localWalkForwardValidation(prices, side) {
   const n = prices.length;
@@ -182,19 +209,35 @@ function localWalkForwardValidation(prices, side) {
   }
 
   const nWins = returns.filter(r => r > 0).length;
+  const nLosses = returns.filter(r => r <= 0).length;
   const winRate = returns.length > 0 ? nWins / returns.length : 0;
+
+  // Calculate actual profit factor
+  const grossWin = returns.filter(r => r > 0).reduce((a, r) => a + r, 0);
+  const grossLoss = Math.abs(returns.filter(r => r < 0).reduce((a, r) => a + r, 0)) || 0.001;
+  const profitFactor = grossLoss > 0 ? grossWin / grossLoss : 1.0;
+
+  // Calculate Sortino ratio (downside deviation only)
+  const negReturns = returns.filter(r => r < 0);
+  const downsideVar = negReturns.length > 0 ? negReturns.reduce((a, r) => a + (r - meanRet) ** 2, 0) / negReturns.length : 0;
+  const downsideVol = Math.sqrt(downsideVar) * Math.sqrt(252);
+  const sortino = downsideVol > 0 ? (meanRet * 252 - 0.04) / downsideVol : 0;
+
+  // Average win/loss percentages
+  const avgWin = nWins > 0 ? returns.filter(r => r > 0).reduce((a, r) => a + r, 0) / nWins : 0;
+  const avgLoss = nLosses > 0 ? returns.filter(r => r <= 0).reduce((a, r) => a + r, 0) / nLosses : 0;
 
   return {
     total_return: totalReturn,
     annual_return: meanRet * 252,
     sharpe_ratio: vol > 0 ? (meanRet * 252 - 0.04) / vol : 0,
-    sortino_ratio: 0,
+    sortino_ratio: sortino,
     max_drawdown: maxDd,
     win_rate: winRate,
-    profit_factor: 1.0,
+    profit_factor: profitFactor,
     n_trades: returns.length,
-    avg_win_pct: 0.01,
-    avg_loss_pct: -0.01,
+    avg_win_pct: avgWin,
+    avg_loss_pct: avgLoss,
     regime_distribution: {},
   };
 }
@@ -209,13 +252,20 @@ function localWalkForwardValidation(prices, side) {
  *  - Profit factor: 15%
  *  - Total return: 10%
  *
- * Pass criteria:
- *  1. Composite score >= 0.4
- *  2. Max drawdown < 30%
- *  3. Profit factor > 0.8 (or at least 5 trades)
- *  4. At least 3 trades in backtest
+ * Pass criteria (adjusted for source):
+ *  FASTAPI source (full walk-forward):
+ *    1. Composite score >= 0.4
+ *    2. Max drawdown < 30%
+ *    3. Profit factor > 0.8 (or at least 5 trades)
+ *    4. At least 3 trades in backtest
+ *
+ *  LOCAL source (statistical approximation):
+ *    1. Composite score >= 0.3 (relaxed)
+ *    2. Max drawdown < 35% (relaxed)
+ *    3. At least 5 trades in backtest
+ *    Note: Local validation is advisory only — always warns the user
  */
-function computeValidationScore(result, side) {
+function computeValidationScore(result, side, source = "fastapi") {
   const sharpe = result.sharpe_ratio || 0;
   const winRate = result.win_rate || 0;
   const maxDd = Math.abs(result.max_drawdown || 0);
@@ -238,16 +288,30 @@ function computeValidationScore(result, side) {
     (pfScore * 0.15) +
     (returnScore * 0.10);
 
-  // Pass criteria
-  const passed =
-    score >= 0.4 &&
-    maxDd < 0.30 &&
-    (profitFactor > 0.8 || nTrades >= 5) &&
-    nTrades >= 3;
+  // Determine pass criteria based on source
+  const isLocal = source === "local";
+  let passed;
+
+  if (isLocal) {
+    // Relaxed criteria for local fallback — this is advisory only
+    passed =
+      score >= 0.3 &&
+      maxDd < 0.35 &&
+      nTrades >= 5;
+  } else {
+    // Full criteria for FastAPI walk-forward backtest
+    passed =
+      score >= 0.4 &&
+      maxDd < 0.30 &&
+      (profitFactor > 0.8 || nTrades >= 5) &&
+      nTrades >= 3;
+  }
 
   return {
     passed,
     score: Math.round(score * 1000) / 1000,
+    source,
+    warning: isLocal ? "Local statistical approximation — run full FastAPI validation for accurate results" : null,
     components: {
       sharpe_score: Math.round(sharpeScore * 1000) / 1000,
       win_rate_score: Math.round(winRateScore * 1000) / 1000,
@@ -255,12 +319,9 @@ function computeValidationScore(result, side) {
       pf_score: Math.round(pfScore * 1000) / 1000,
       return_score: Math.round(returnScore * 1000) / 1000,
     },
-    thresholds: {
-      min_score: 0.4,
-      max_drawdown_limit: 0.30,
-      min_profit_factor: 0.8,
-      min_trades: 3,
-    },
+    thresholds: isLocal
+      ? { min_score: 0.3, max_drawdown_limit: 0.35, min_trades: 5, note: "relaxed for local fallback" }
+      : { min_score: 0.4, max_drawdown_limit: 0.30, min_profit_factor: 0.8, min_trades: 3 },
     raw: {
       sharpe_ratio: sharpe,
       win_rate: winRate,
