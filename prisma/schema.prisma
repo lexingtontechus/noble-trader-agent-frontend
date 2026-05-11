@@ -22,6 +22,10 @@ model AnalysisRun {
   correlation String?  // JSON stringified
   optimizer   String?  // JSON stringified
   regimes     String?  // JSON stringified
+  // Phase 2: New fields
+  strategySignals String? // JSON stringified - per-symbol strategy signals
+  riskAnalysis    String? // JSON stringified - per-symbol risk analysis
+  kellySizes      String? // JSON stringified - per-symbol Kelly sizing
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
@@ -46,6 +50,16 @@ model TradeRecommendation {
   status        String       @default("pending") // pending | approved | blocked | executing | filled | failed | cancelled
   alpacaOrderId String?
   errorMessage  String?
+  // Phase 2: New fields for enhanced pipeline
+  regime        String?      // HMM regime label (bullish/bearish/neutral/crisis/volatile)
+  regimeLabel   String?      // Human-readable regime name
+  strategySignal String?     // long | short | flat
+  strategyConfidence Float?  // 0-1 confidence score
+  kellyFraction Float?       // Kelly optimal fraction
+  kellySize     Float?       // Position size from Kelly ($)
+  riskScore     Float?       // Risk score from analysis
+  varDaily      Float?       // Daily Value-at-Risk
+  cvarDaily     Float?       // Daily CVaR
   createdAt     DateTime     @default(now())
   updatedAt     DateTime     @updatedAt
 

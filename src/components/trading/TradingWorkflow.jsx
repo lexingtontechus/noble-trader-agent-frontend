@@ -37,6 +37,15 @@ function normalizeTrade(t) {
     estimatedValue: t.estimatedValue ?? t.estimated_value ?? null,
     estimated_value: t.estimated_value ?? t.estimatedValue ?? null,
     timeInForce: String(t.timeInForce ?? t.time_in_force ?? 'day'),
+    regime: t.regime || null,
+    regimeLabel: t.regimeLabel || t.regime_label || null,
+    strategySignal: t.strategySignal || t.strategy_signal || null,
+    strategyConfidence: t.strategyConfidence ?? t.strategy_confidence ?? null,
+    kellyFraction: t.kellyFraction ?? t.kelly_fraction ?? null,
+    kellySize: t.kellySize ?? t.kelly_size ?? null,
+    riskScore: t.riskScore ?? t.risk_score ?? null,
+    varDaily: t.varDaily ?? t.var_daily ?? null,
+    cvarDaily: t.cvarDaily ?? t.cvar_daily ?? null,
   }
 }
 
@@ -160,7 +169,9 @@ function IconPlay({ size = 18, className = '' }) {
 
 const ANALYZE_STEPS = [
   { key: 'fetching', label: 'Fetching Positions' },
-  { key: 'regimes', label: 'Detecting Regimes' },
+  { key: 'regimes', label: 'HMM Regime Detection' },
+  { key: 'strategy', label: 'Strategy Signals' },
+  { key: 'risk', label: 'Risk Analysis' },
   { key: 'correlations', label: 'Analyzing Correlations' },
   { key: 'optimizing', label: 'Optimizing Portfolio' },
   { key: 'generating', label: 'Generating Recommendations' },
@@ -178,6 +189,8 @@ const REGIME_COLORS = {
   neutral: 'badge-ghost',
   trending: 'badge-info',
   volatile: 'badge-warning',
+  sideways: 'badge-warning',
+  recovery: 'badge-success',
 }
 
 const REGIME_LABELS = {
@@ -190,6 +203,8 @@ const REGIME_LABELS = {
   neutral: 'Neutral',
   trending: 'Trending',
   volatile: 'Volatile',
+  sideways: 'Sideways',
+  recovery: 'Recovery',
 }
 
 function regimeBadgeClass(regime) {
@@ -338,6 +353,9 @@ function AnalysisSummary({ data }) {
   const correlationRegime = data?.correlation_regime || data?.corr_regime || null
   const optimizationMetrics = data?.optimization_metrics || data?.metrics || {}
   const strategyExplanation = data?.strategy_explanation || data?.strategy || null
+  const strategySignals = data?.strategy_signals || {}
+  const kellySizing = data?.kelly_sizing || {}
+  const riskAnalysis = data?.risk_analysis || {}
 
   // If loaded from DB, we might not have all analysis details
   const isFromDb = data?.fromDb === true
@@ -394,20 +412,158 @@ function AnalysisSummary({ data }) {
                 <IconShield size={16} className="text-warning" />
               </div>
               <h3 className="font-semibold text-sm">Regime Summary</h3>
+              {regimeSummary[0]?.n_states && (
+                <span className="badge badge-xs badge-ghost ml-auto">{regimeSummary[0].n_states}-state HMM</span>
+              )}
             </div>
             <div className="flex flex-wrap gap-2">
               {regimeSummary.map((item, i) => {
                 const symbol = item.symbol || item.asset || `Asset ${i + 1}`
                 const regime = item.regime || item.regime_label || 'neutral'
+                const confidence = item.regime_confidence || item.confidence
                 return (
                   <div key={i} className="flex items-center gap-1.5 bg-base-300/40 rounded-lg px-3 py-1.5">
                     <span className="font-mono text-xs font-medium">{symbol}</span>
                     <span className={`badge badge-sm ${regimeBadgeClass(regime)}`}>
                       {regimeDisplayLabel(regime)}
                     </span>
+                    {typeof confidence === 'number' && (
+                      <span className="text-xs text-base-content/40">{(confidence * 100).toFixed(0)}%</span>
+                    )}
                   </div>
                 )
               })}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Strategy Signals */}
+      {strategySignals && Object.keys(strategySignals).length > 0 && (
+        <div className="card bg-base-200 shadow-lg">
+          <div className="card-body p-4">
+            <div className="flex items-center gap-2 mb-3">
+              <div className="w-8 h-8 rounded-lg bg-info/15 flex items-center justify-center">
+                <IconZap size={16} className="text-info" />
+              </div>
+              <h3 className="font-semibold text-sm">Strategy Signals</h3>
+            </div>
+            <div className="space-y-2">
+              {Object.entries(strategySignals).map(([symbol, data]) => {
+                const signal = data.signal || 'flat'
+                const confidence = typeof data.confidence === 'number' ? data.confidence : 0.5
+                const signalColor = signal === 'long' ? 'text-success' : signal === 'short' ? 'text-error' : 'text-base-content/50'
+                const signalBadge = signal === 'long' ? 'badge-success' : signal === 'short' ? 'badge-error' : 'badge-ghost'
+                const signalLabel = signal.toUpperCase()
+                return (
+                  <div key={symbol} className="flex items-center gap-3 bg-base-300/30 rounded-lg px-3 py-2">
+                    <span className="font-mono text-sm font-medium w-20 truncate">{symbol}</span>
+                    <span className={`badge badge-sm ${signalBadge}`}>{signalLabel}</span>
+                    <div className="flex-1 bg-base-300 rounded-full h-2 overflow-hidden">
+                      <div
+                        className={`${signal === 'long' ? 'bg-success' : signal === 'short' ? 'bg-error' : 'bg-base-content/30'} h-full rounded-full transition-all duration-700`}
+                        style={{ width: `${confidence * 100}%` }}
+                      />
+                    </div>
+                    <span className="font-mono text-xs w-12 text-right">{(confidence * 100).toFixed(0)}%</span>
+                  </div>
+                )
+              })}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Kelly Position Sizing */}
+      {kellySizing && Object.keys(kellySizing).length > 0 && (
+        <div className="card bg-base-200 shadow-lg">
+          <div className="card-body p-4">
+            <div className="flex items-center gap-2 mb-3">
+              <div className="w-8 h-8 rounded-lg bg-secondary/15 flex items-center justify-center">
+                <IconChart size={16} className="text-secondary" />
+              </div>
+              <h3 className="font-semibold text-sm">Kelly Position Sizing</h3>
+            </div>
+            <div className="space-y-2">
+              {Object.entries(kellySizing).map(([symbol, data]) => {
+                const fraction = typeof data.kelly_fraction === 'number' ? data.kelly_fraction : (typeof data.kellyFraction === 'number' ? data.kellyFraction : 0)
+                const size = typeof data.position_size === 'number' ? data.position_size : (typeof data.kellySize === 'number' ? data.kellySize : 0)
+                return (
+                  <div key={symbol} className="flex items-center gap-3 bg-base-300/30 rounded-lg px-3 py-2">
+                    <span className="font-mono text-sm font-medium w-20 truncate">{symbol}</span>
+                    <div className="flex-1 bg-base-300 rounded-full h-2 overflow-hidden">
+                      <div
+                        className="bg-secondary h-full rounded-full transition-all duration-700"
+                        style={{ width: `${Math.min(fraction * 100 * 4, 100)}%` }}
+                      />
+                    </div>
+                    <span className="font-mono text-xs w-20 text-right">
+                      {(fraction * 100).toFixed(1)}% / {typeof size === 'number' ? `$${size.toLocaleString(undefined, { maximumFractionDigits: 0 })}` : '---'}
+                    </span>
+                  </div>
+                )
+              })}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Risk Analysis */}
+      {riskAnalysis && Object.keys(riskAnalysis).length > 0 && (
+        <div className="card bg-base-200 shadow-lg">
+          <div className="card-body p-4">
+            <div className="flex items-center gap-2 mb-3">
+              <div className="w-8 h-8 rounded-lg bg-error/15 flex items-center justify-center">
+                <IconShield size={16} className="text-error" />
+              </div>
+              <h3 className="font-semibold text-sm">Risk Analysis</h3>
+            </div>
+            <div className="overflow-x-auto">
+              <table className="table table-sm">
+                <thead>
+                  <tr>
+                    <th className="text-xs">Symbol</th>
+                    <th className="text-xs">Risk Score</th>
+                    <th className="text-xs">Daily VaR</th>
+                    <th className="text-xs">Daily CVaR</th>
+                    <th className="text-xs">Limit</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {Object.entries(riskAnalysis).map(([symbol, data]) => {
+                    const riskScore = typeof data.risk_score === 'number' ? data.risk_score : 0.5
+                    const varDaily = typeof data.var_daily === 'number' ? data.var_daily : 0
+                    const cvarDaily = typeof data.cvar_daily === 'number' ? data.cvar_daily : 0
+                    const breach = data.risk_limit_breach === true
+                    return (
+                      <tr key={symbol}>
+                        <td className="font-mono text-sm">{symbol}</td>
+                        <td>
+                          <div className="flex items-center gap-2">
+                            <progress
+                              className={`progress w-16 ${riskScore > 0.7 ? 'progress-error' : riskScore > 0.4 ? 'progress-warning' : 'progress-success'}`}
+                              value={riskScore}
+                              max="1"
+                            />
+                            <span className="font-mono text-xs">{(riskScore * 100).toFixed(0)}%</span>
+                          </div>
+                        </td>
+                        <td className="font-mono text-xs text-error">{(varDaily * 100).toFixed(2)}%</td>
+                        <td className="font-mono text-xs text-error">{(cvarDaily * 100).toFixed(2)}%</td>
+                        <td>
+                          {breach ? (
+                            <span className="badge badge-xs badge-error gap-1">
+                              <IconAlertTriangle size={10} /> Breach
+                            </span>
+                          ) : (
+                            <span className="badge badge-xs badge-success">OK</span>
+                          )}
+                        </td>
+                      </tr>
+                    )
+                  })}
+                </tbody>
+              </table>
             </div>
           </div>
         </div>
@@ -587,6 +743,43 @@ function TradeCard({ trade, onApprove, onBlock, approved }) {
             </div>
           </div>
         </div>
+
+        {/* Phase 2: Strategy & Risk Info */}
+        {(trade.strategySignal || trade.kellyFraction != null || trade.riskScore != null) && (
+          <div className="mt-2 flex flex-wrap gap-2">
+            {trade.strategySignal && (
+              <div className="flex items-center gap-1 text-xs bg-base-300/30 rounded px-2 py-1">
+                <span className="text-base-content/40">Signal:</span>
+                <span className={`font-mono font-medium ${trade.strategySignal === 'long' ? 'text-success' : trade.strategySignal === 'short' ? 'text-error' : 'text-base-content/50'}`}>
+                  {trade.strategySignal.toUpperCase()}
+                </span>
+                {trade.strategyConfidence != null && (
+                  <span className="text-base-content/40">({(trade.strategyConfidence * 100).toFixed(0)}%)</span>
+                )}
+              </div>
+            )}
+            {trade.kellyFraction != null && (
+              <div className="flex items-center gap-1 text-xs bg-base-300/30 rounded px-2 py-1">
+                <span className="text-base-content/40">Kelly:</span>
+                <span className="font-mono font-medium">{(trade.kellyFraction * 100).toFixed(1)}%</span>
+              </div>
+            )}
+            {trade.riskScore != null && (
+              <div className="flex items-center gap-1 text-xs bg-base-300/30 rounded px-2 py-1">
+                <span className="text-base-content/40">Risk:</span>
+                <span className={`font-mono font-medium ${trade.riskScore > 0.7 ? 'text-error' : trade.riskScore > 0.4 ? 'text-warning' : 'text-success'}`}>
+                  {(trade.riskScore * 100).toFixed(0)}%
+                </span>
+              </div>
+            )}
+            {trade.varDaily != null && (
+              <div className="flex items-center gap-1 text-xs bg-base-300/30 rounded px-2 py-1">
+                <span className="text-base-content/40">VaR:</span>
+                <span className="font-mono font-medium text-error">{(trade.varDaily * 100).toFixed(2)}%</span>
+              </div>
+            )}
+          </div>
+        )}
 
         {/* Reason */}
         {trade.reason && (
@@ -786,7 +979,7 @@ function TradingWorkflowInner() {
 
   // Simulate step progression during analysis
   const simulateAnalysisSteps = useCallback(() => {
-    const delays = [800, 1200, 1500, 1800, 1000]
+    const delays = [600, 1200, 1500, 1200, 1500, 1800, 1000]
     let currentDelay = 0
 
     ANALYZE_STEPS.forEach((step, idx) => {
