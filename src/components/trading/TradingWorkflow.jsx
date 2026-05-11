@@ -46,6 +46,11 @@ function normalizeTrade(t) {
     riskScore: t.riskScore ?? t.risk_score ?? null,
     varDaily: t.varDaily ?? t.var_daily ?? null,
     cvarDaily: t.cvarDaily ?? t.cvar_daily ?? null,
+    // Phase 3: Validation fields
+    validationStatus: t.validationStatus || t.validation_status || null,
+    validationScore: t.validationScore ?? t.validation_score ?? null,
+    validationDetails: t.validationDetails || t.validation_details || null,
+    validatedAt: t.validatedAt || t.validated_at || null,
   }
 }
 
@@ -165,6 +170,30 @@ function IconPlay({ size = 18, className = '' }) {
   )
 }
 
+function IconFlask({ size = 18, className = '' }) {
+  return (
+    <svg xmlns="http://www.w3.org/2000/svg" width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}>
+      <path d="M9 3h6" /><path d="M10 9V3" /><path d="M14 9V3" /><path d="M9 9l-4.5 8.5a2 2 0 0 0 1.7 2.9h10.6a2 2 0 0 0 1.7-2.9L15 9" />
+    </svg>
+  )
+}
+
+function IconCheckCircle({ size = 18, className = '' }) {
+  return (
+    <svg xmlns="http://www.w3.org/2000/svg" width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}>
+      <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14" /><polyline points="22 4 12 14.01 9 11.01" />
+    </svg>
+  )
+}
+
+function IconXCircle({ size = 18, className = '' }) {
+  return (
+    <svg xmlns="http://www.w3.org/2000/svg" width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}>
+      <circle cx="12" cy="12" r="10" /><line x1="15" y1="9" x2="9" y2="15" /><line x1="9" y1="9" x2="15" y2="15" />
+    </svg>
+  )
+}
+
 /* ─── Analysis Loading Steps ─── */
 
 const ANALYZE_STEPS = [
@@ -172,6 +201,7 @@ const ANALYZE_STEPS = [
   { key: 'regimes', label: 'HMM Regime Detection' },
   { key: 'strategy', label: 'Strategy Signals' },
   { key: 'risk', label: 'Risk Analysis' },
+  { key: 'tda', label: 'TDA Anomaly Detection' },
   { key: 'correlations', label: 'Analyzing Correlations' },
   { key: 'optimizing', label: 'Optimizing Portfolio' },
   { key: 'generating', label: 'Generating Recommendations' },
@@ -357,6 +387,12 @@ function AnalysisSummary({ data }) {
   const kellySizing = data?.kelly_sizing || {}
   const riskAnalysis = data?.risk_analysis || {}
 
+  // Phase 4: TDA anomaly analysis
+  const tdaAnalysis = data?.tda_analysis || {}
+
+  // Phase 3: Validation summary from recommendations
+  const validationSummary = data?.validation_summary || null
+
   // If loaded from DB, we might not have all analysis details
   const isFromDb = data?.fromDb === true
 
@@ -508,6 +544,40 @@ function AnalysisSummary({ data }) {
         </div>
       )}
 
+      {/* Kelly Position Sizing */}
+      {kellySizing && Object.keys(kellySizing).length > 0 && (
+        <div className="card bg-base-200 shadow-lg">
+          <div className="card-body p-4">
+            <div className="flex items-center gap-2 mb-3">
+              <div className="w-8 h-8 rounded-lg bg-secondary/15 flex items-center justify-center">
+                <IconChart size={16} className="text-secondary" />
+              </div>
+              <h3 className="font-semibold text-sm">Kelly Position Sizing</h3>
+            </div>
+            <div className="space-y-2">
+              {Object.entries(kellySizing).map(([symbol, data]) => {
+                const fraction = typeof data.kelly_fraction === 'number' ? data.kelly_fraction : (typeof data.kellyFraction === 'number' ? data.kellyFraction : 0)
+                const size = typeof data.position_size === 'number' ? data.position_size : (typeof data.kellySize === 'number' ? data.kellySize : 0)
+                return (
+                  <div key={symbol} className="flex items-center gap-3 bg-base-300/30 rounded-lg px-3 py-2">
+                    <span className="font-mono text-sm font-medium w-20 truncate">{symbol}</span>
+                    <div className="flex-1 bg-base-300 rounded-full h-2 overflow-hidden">
+                      <div
+                        className="bg-secondary h-full rounded-full transition-all duration-700"
+                        style={{ width: `${Math.min(fraction * 100 * 4, 100)}%` }}
+                      />
+                    </div>
+                    <span className="font-mono text-xs w-20 text-right">
+                      {(fraction * 100).toFixed(1)}% / {typeof size === 'number' ? `$${size.toLocaleString(undefined, { maximumFractionDigits: 0 })}` : '---'}
+                    </span>
+                  </div>
+                )
+              })}
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Risk Analysis */}
       {riskAnalysis && Object.keys(riskAnalysis).length > 0 && (
         <div className="card bg-base-200 shadow-lg">
@@ -564,6 +634,132 @@ function AnalysisSummary({ data }) {
                   })}
                 </tbody>
               </table>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Phase 4: TDA Anomaly Detection */}
+      {tdaAnalysis && Object.keys(tdaAnalysis).length > 0 && (
+        <div className="card bg-base-200 shadow-lg">
+          <div className="card-body p-4">
+            <div className="flex items-center gap-2 mb-3">
+              <div className="w-8 h-8 rounded-lg bg-warning/15 flex items-center justify-center">
+                <IconFlask size={16} className="text-warning" />
+              </div>
+              <h3 className="font-semibold text-sm">TDA Anomaly Detection</h3>
+              <span className="badge badge-xs badge-ghost ml-auto">Topological Analysis</span>
+            </div>
+            <div className="overflow-x-auto">
+              <table className="table table-sm">
+                <thead>
+                  <tr>
+                    <th className="text-xs">Symbol</th>
+                    <th className="text-xs">Anomaly</th>
+                    <th className="text-xs">Regime Change</th>
+                    <th className="text-xs">Betti-0</th>
+                    <th className="text-xs">Betti-1</th>
+                    <th className="text-xs">Entropy</th>
+                    <th className="text-xs">Alert</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {Object.entries(tdaAnalysis).map(([symbol, data]) => {
+                    const anomaly = typeof data.anomaly_score === 'number' ? data.anomaly_score : null
+                    const regimeChange = typeof data.regime_change_probability === 'number' ? data.regime_change_probability : null
+                    const betti0 = data.betti_0 ?? '-'
+                    const betti1 = data.betti_1 ?? '-'
+                    const entropy = typeof data.total_entropy === 'number' ? data.total_entropy : null
+                    const isAnomalous = anomaly != null && anomaly >= 1.5
+                    const isRegimeChange = regimeChange != null && regimeChange >= 0.6
+                    const alertLevel = isAnomalous && anomaly >= 2.25 ? 'critical' : isRegimeChange ? 'high' : isAnomalous ? 'medium' : 'none'
+                    return (
+                      <tr key={symbol}>
+                        <td className="font-mono text-sm">{symbol}</td>
+                        <td>
+                          {anomaly != null ? (
+                            <div className="flex items-center gap-2">
+                              <progress
+                                className={`progress w-12 ${anomaly >= 2.25 ? 'progress-error' : anomaly >= 1.5 ? 'progress-warning' : 'progress-success'}`}
+                                value={Math.min(anomaly / 3, 1)}
+                                max="1"
+                              />
+                              <span className={`font-mono text-xs ${anomaly >= 2.25 ? 'text-error' : anomaly >= 1.5 ? 'text-warning' : 'text-success'}`}>
+                                {anomaly.toFixed(2)}
+                              </span>
+                            </div>
+                          ) : <span className="text-base-content/30 text-xs">N/A</span>}
+                        </td>
+                        <td>
+                          {regimeChange != null ? (
+                            <span className={`font-mono text-xs ${regimeChange >= 0.6 ? 'text-error font-bold' : regimeChange >= 0.3 ? 'text-warning' : 'text-success'}`}>
+                              {(regimeChange * 100).toFixed(1)}%
+                            </span>
+                          ) : <span className="text-base-content/30 text-xs">N/A</span>}
+                        </td>
+                        <td className="font-mono text-xs">{betti0}</td>
+                        <td className="font-mono text-xs">{betti1}</td>
+                        <td>
+                          {entropy != null ? (
+                            <span className={`font-mono text-xs ${entropy >= 0.8 ? 'text-warning' : 'text-base-content/60'}`}>
+                              {entropy.toFixed(2)}
+                            </span>
+                          ) : <span className="text-base-content/30 text-xs">N/A</span>}
+                        </td>
+                        <td>
+                          {alertLevel !== 'none' ? (
+                            <span className={`badge badge-xs ${alertLevel === 'critical' ? 'badge-error' : alertLevel === 'high' ? 'badge-warning' : 'badge-info'}`}>
+                              {alertLevel.toUpperCase()}
+                            </span>
+                          ) : (
+                            <span className="badge badge-xs badge-success">OK</span>
+                          )}
+                        </td>
+                      </tr>
+                    )
+                  })}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Phase 3: Validation Summary */}
+      {validationSummary && (
+        <div className="card bg-base-200 shadow-lg">
+          <div className="card-body p-4">
+            <div className="flex items-center gap-2 mb-3">
+              <div className="w-8 h-8 rounded-lg bg-info/15 flex items-center justify-center">
+                <IconFlask size={16} className="text-info" />
+              </div>
+              <h3 className="font-semibold text-sm">Walk-Forward Validation Summary</h3>
+            </div>
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+              <div className="bg-base-300/30 rounded-lg p-3">
+                <div className="text-xs text-base-content/40">Passed</div>
+                <div className="font-mono font-bold text-lg text-success">
+                  {validationSummary.passed || 0}
+                </div>
+              </div>
+              <div className="bg-base-300/30 rounded-lg p-3">
+                <div className="text-xs text-base-content/40">Failed</div>
+                <div className="font-mono font-bold text-lg text-error">
+                  {validationSummary.failed || 0}
+                </div>
+              </div>
+              <div className="bg-base-300/30 rounded-lg p-3">
+                <div className="text-xs text-base-content/40">Pending</div>
+                <div className="font-mono font-bold text-lg text-base-content/50">
+                  {validationSummary.pending || 0}
+                </div>
+              </div>
+              <div className="bg-base-300/30 rounded-lg p-3">
+                <div className="text-xs text-base-content/40">Avg Score</div>
+                <div className="font-mono font-bold text-lg">
+                  {validationSummary.avgScore != null ? `${(validationSummary.avgScore * 100).toFixed(1)}%` : '---'}
+                </div>
+              </div>
             </div>
           </div>
         </div>
@@ -681,7 +877,7 @@ function AnalysisSummary({ data }) {
 
 /* ─── Trade Recommendation Card ─── */
 
-function TradeCard({ trade, onApprove, onBlock, approved }) {
+function TradeCard({ trade, onApprove, onBlock, onValidate, approved, validating }) {
   const isSell = safeUpper(trade.side || trade.action) === 'SELL'
   const sideColor = isSell ? 'border-error/40' : 'border-success/40'
   const sideBg = isSell ? 'bg-error/5' : 'bg-success/5'
@@ -692,6 +888,16 @@ function TradeCard({ trade, onApprove, onBlock, approved }) {
   const orderType = String(trade.orderType || trade.order_type || trade.type || 'market')
   const limitPrice = trade.limitPrice || trade.limit_price
   const estValue = trade.estimatedValue || trade.estimated_value
+  // Phase 3: Validation state
+  const validationStatus = trade.validationStatus || trade.validation_status
+  const validationScore = trade.validationScore ?? trade.validation_score
+  const isValidating = validating || validationStatus === 'validating'
+  const validationPassed = validationStatus === 'passed'
+  const validationFailed = validationStatus === 'failed'
+  const validationError = validationStatus === 'error'
+  const validationDetails = trade.validationDetails
+    ? (typeof trade.validationDetails === 'string' ? JSON.parse(trade.validationDetails) : trade.validationDetails)
+    : null
 
   return (
     <div className={`card bg-base-200 shadow-md border-l-4 ${sideColor} ${sideBg} transition-all`}>
@@ -704,6 +910,21 @@ function TradeCard({ trade, onApprove, onBlock, approved }) {
             <span className={`badge badge-sm ${priorityStyle.badge}`}>{priorityStyle.text}</span>
           </div>
           <div className="flex items-center gap-1">
+            {validationPassed && (
+              <span className="badge badge-sm badge-success gap-1">
+                <IconCheckCircle size={12} /> Validated
+              </span>
+            )}
+            {validationFailed && (
+              <span className="badge badge-sm badge-error gap-1">
+                <IconXCircle size={12} /> Failed WF
+              </span>
+            )}
+            {validationError && (
+              <span className="badge badge-sm badge-warning gap-1">
+                <IconAlertTriangle size={12} /> Val Error
+              </span>
+            )}
             {approved === true && (
               <span className="badge badge-sm badge-success gap-1">
                 <IconCheck size={12} /> Approved
@@ -788,6 +1009,49 @@ function TradeCard({ trade, onApprove, onBlock, approved }) {
           </div>
         )}
 
+        {/* Phase 3: Validation Results */}
+        {(validationPassed || validationFailed || validationError) && validationDetails && (
+          <div className={`mt-2 rounded-lg p-2 text-xs ${validationPassed ? 'bg-success/10 border border-success/20' : validationFailed ? 'bg-error/10 border border-error/20' : 'bg-warning/10 border border-warning/20'}`}>
+            <div className="flex items-center gap-2 mb-1">
+              {validationPassed ? (
+                <IconCheckCircle size={14} className="text-success" />
+              ) : validationFailed ? (
+                <IconXCircle size={14} className="text-error" />
+              ) : (
+                <IconAlertTriangle size={14} className="text-warning" />
+              )}
+              <span className={`font-semibold ${validationPassed ? 'text-success' : validationFailed ? 'text-error' : 'text-warning'}`}>
+                Walk-Forward Validation: {validationPassed ? 'PASSED' : validationFailed ? 'FAILED' : 'ERROR'}
+              </span>
+              {validationScore != null && (
+                <span className="font-mono ml-auto">Score: {(validationScore * 100).toFixed(1)}%</span>
+              )}
+            </div>
+            {validationDetails.raw && (
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-1 mt-1">
+                <div><span className="text-base-content/40">Sharpe:</span> <span className="font-mono">{(validationDetails.raw.sharpe_ratio || 0).toFixed(2)}</span></div>
+                <div><span className="text-base-content/40">Win Rate:</span> <span className="font-mono">{((validationDetails.raw.win_rate || 0) * 100).toFixed(1)}%</span></div>
+                <div><span className="text-base-content/40">Max DD:</span> <span className="font-mono">{((validationDetails.raw.max_drawdown || 0) * 100).toFixed(1)}%</span></div>
+                <div><span className="text-base-content/40">PF:</span> <span className="font-mono">{(validationDetails.raw.profit_factor || 0).toFixed(2)}</span></div>
+              </div>
+            )}
+            {validationFailed && validationDetails.thresholds && (
+              <div className="mt-1 text-base-content/50">
+                Thresholds: score &ge; 40%, max DD &lt; 30%, PF &gt; 0.8, min 3 trades
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Validation loading indicator */}
+        {isValidating && (
+          <div className="mt-2 flex items-center gap-2 text-xs text-primary bg-primary/10 rounded-lg px-3 py-2">
+            <span className="loading loading-spinner loading-xs text-primary"></span>
+            <span className="font-medium">Running walk-forward validation...</span>
+            <span className="text-base-content/40">(backtesting historical data)</span>
+          </div>
+        )}
+
         {/* Action Buttons */}
         {approved === null && (
           <div className="flex items-center gap-2 mt-3">
@@ -803,6 +1067,14 @@ function TradeCard({ trade, onApprove, onBlock, approved }) {
             >
               <IconX size={14} /> Block
             </button>
+            {!validationStatus && !isValidating && (
+              <button
+                className="btn btn-sm btn-outline btn-info gap-1 ml-auto"
+                onClick={() => onValidate(trade.id || trade.symbol)}
+              >
+                <IconFlask size={14} /> Validate
+              </button>
+            )}
           </div>
         )}
       </div>
@@ -895,6 +1167,9 @@ function TradingWorkflowInner() {
   // Approval tracking: { [tradeId]: true | false | null }
   const [approvals, setApprovals] = useState({})
 
+  // Phase 3: Validation tracking: { [tradeId]: 'validating' | 'passed' | 'failed' | 'error' }
+  const [validatingTrades, setValidatingTrades] = useState({})
+
   // Telegram
   const [telegramChatId, setTelegramChatId] = useState('')
   const [telegramStatus, setTelegramStatus] = useState(null) // null | 'sending' | 'sent' | 'error'
@@ -979,7 +1254,8 @@ function TradingWorkflowInner() {
 
   // Simulate step progression during analysis
   const simulateAnalysisSteps = useCallback(() => {
-    const delays = [600, 1200, 1500, 1200, 1500, 1800, 1000]
+
+const delays = [600, 1200, 1500, 1200, 2000, 1500, 1800, 1000]
     let currentDelay = 0
 
     ANALYZE_STEPS.forEach((step, idx) => {
@@ -1004,6 +1280,7 @@ function TradingWorkflowInner() {
     setTelegramStatus(null)
     setTelegramError('')
     setAnalyzeStep(ANALYZE_STEPS[0].key)
+    setValidatingTrades({})
 
     simulateAnalysisSteps()
 
@@ -1040,15 +1317,71 @@ function TradingWorkflowInner() {
     }
   }, [simulateAnalysisSteps])
 
-  // Approve a single trade
+  // Phase 3: Validate a single trade
+  const handleValidate = useCallback((tradeId) => {
+    // Mark as validating in local state
+    setValidatingTrades(prev => ({ ...prev, [tradeId]: 'validating' }))
+
+    // Call the validate endpoint
+    fetch('/api/trading/validate', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ tradeId }),
+    })
+      .then(res => res.json())
+      .then(result => {
+        const status = result.passed ? 'passed' : 'failed'
+        setValidatingTrades(prev => ({ ...prev, [tradeId]: status }))
+        // Update the trade's validation data in recommendations
+        setRecommendations(prev => prev.map(t => {
+          if ((t.id || t.symbol) === tradeId) {
+            return {
+              ...t,
+              validationStatus: status,
+              validationScore: result.score,
+              validationDetails: result.details || result,
+              validatedAt: new Date().toISOString(),
+            }
+          }
+          return t
+        }))
+      })
+      .catch(err => {
+        console.error('Validation failed:', err)
+        setValidatingTrades(prev => ({ ...prev, [tradeId]: 'error' }))
+      })
+  }, [])
+
+  // Approve a single trade (Phase 3: auto-validate first)
   const handleApprove = useCallback((tradeId) => {
     setApprovals(prev => ({ ...prev, [tradeId]: true }))
-    // Also persist to backend (fire and forget)
+    // Also persist to backend — the approve route will auto-validate if needed (fire and forget)
     fetch('/api/trading/approve', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ tradeId, action: 'approve' }),
-    }).catch(() => {})
+    })
+      .then(res => res.json())
+      .then(result => {
+        // If backend returned validation info, update local state
+        if (result.validation) {
+          const vStatus = result.validation.passed ? 'passed' : result.validation.score != null ? 'failed' : 'error'
+          setValidatingTrades(prev => ({ ...prev, [tradeId]: vStatus }))
+          setRecommendations(prev => prev.map(t => {
+            if ((t.id || t.symbol) === tradeId) {
+              return {
+                ...t,
+                validationStatus: vStatus,
+                validationScore: result.validation.score || 0,
+                validationDetails: result.validation.details || {},
+                validatedAt: new Date().toISOString(),
+              }
+            }
+            return t
+          }))
+        }
+      })
+      .catch(() => {})
   }, [])
 
   // Block a single trade
@@ -1224,6 +1557,7 @@ function TradingWorkflowInner() {
     setAnalyzeStep('')
     setApprovals({})
     setExecutionProgress({})
+    setValidatingTrades({})
     setTelegramStatus(null)
     setTelegramError('')
     setDeferredOrders([])
@@ -1369,6 +1703,19 @@ function TradingWorkflowInner() {
                   <IconCheck size={14} /> Approve All
                 </button>
                 <button
+                  className="btn btn-sm btn-outline btn-info gap-1"
+                  onClick={() => {
+                    recommendations.forEach(t => {
+                      const id = t.id || t.symbol
+                      if (!t.validationStatus && !validatingTrades[id]) {
+                        handleValidate(id)
+                      }
+                    })
+                  }}
+                >
+                  <IconFlask size={14} /> Validate All
+                </button>
+                <button
                   className="btn btn-sm btn-error btn-outline gap-1"
                   onClick={handleBlockAll}
                   disabled={pendingCount === 0}
@@ -1389,7 +1736,9 @@ function TradingWorkflowInner() {
                   trade={trade}
                   onApprove={handleApprove}
                   onBlock={handleBlock}
+                  onValidate={handleValidate}
                   approved={approvals[id]}
+                  validating={validatingTrades[id] === 'validating'}
                 />
               )
             })}

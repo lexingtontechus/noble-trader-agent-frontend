@@ -5,6 +5,7 @@ import { db } from "@/lib/db";
 
 const CRON_SECRET = process.env.CRON_SECRET;
 const TELEGRAM_BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN;
+const TELEGRAM_CHAT_ID = process.env.TELEGRAM_CHAT_ID;
 
 // Fallback Alpaca keys from env vars (used when Clerk auth is unavailable for cron)
 const ALPACA_API_KEY = process.env.ALPACA_API_KEY;
@@ -25,20 +26,46 @@ async function resolveAlpacaKeys() {
   return null;
 }
 
+/**
+ * Resolve Telegram chat ID for sending notifications.
+ * Priority: TELEGRAM_CHAT_ID env var → last successful notification in DB.
+ */
+async function resolveChatId() {
+  // 1. Environment variable takes priority
+  if (TELEGRAM_CHAT_ID) return TELEGRAM_CHAT_ID;
+
+  // 2. Fall back to last successful notification in DB
+  try {
+    const lastNotif = await db.telegramNotification.findFirst({
+      where: { success: true },
+      orderBy: { createdAt: "desc" },
+    });
+    if (lastNotif?.chatId) return lastNotif.chatId;
+  } catch {}
+
+  return null;
+}
+
 async function sendTelegramMessage(chatId, text) {
   if (!TELEGRAM_BOT_TOKEN) return null;
   const url = `https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage`;
-  const res = await fetch(url, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ chat_id: chatId, text, parse_mode: "HTML", disable_web_page_preview: true }),
-    signal: AbortSignal.timeout(15000),
-  });
-  if (!res.ok) {
-    const err = await res.json().catch(() => ({}));
-    throw new Error(err.description || `Telegram API error: ${res.status}`);
+  try {
+    const res = await fetch(url, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ chat_id: chatId, text, parse_mode: "HTML", disable_web_page_preview: true }),
+      signal: AbortSignal.timeout(15000),
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      console.error("Telegram API error:", err.description || res.status);
+      return null;
+    }
+    return res.json();
+  } catch (err) {
+    console.error("Telegram send failed:", err.message);
+    return null;
   }
-  return res.json();
 }
 
 /**
@@ -245,12 +272,9 @@ export async function POST(request) {
     let telegramSent = false;
     if (isCronRequest && executedOrders.length > 0 && TELEGRAM_BOT_TOKEN) {
       try {
-        const lastNotif = await db.telegramNotification.findFirst({
-          where: { success: true },
-          orderBy: { createdAt: "desc" },
-        });
+        const chatId = await resolveChatId();
 
-        if (lastNotif?.chatId) {
+        if (chatId) {
           const lines = [
             "⏰ <b>Scheduled Orders Executed</b>",
             "",
@@ -263,17 +287,19 @@ export async function POST(request) {
           }
           lines.push("", `🕐 ${new Date().toISOString()}`);
 
-          await sendTelegramMessage(lastNotif.chatId, lines.join("\n"));
+          const telResult = await sendTelegramMessage(chatId, lines.join("\n"));
 
-          await db.telegramNotification.create({
-            data: {
-              chatId: lastNotif.chatId,
-              message: `Cron: ${executed} orders executed`,
-              messageType: "schedule_reminder",
-              success: true,
-            },
-          });
-          telegramSent = true;
+          if (telResult) {
+            await db.telegramNotification.create({
+              data: {
+                chatId: String(chatId),
+                message: `Cron: ${executed} orders executed`,
+                messageType: "schedule_reminder",
+                success: true,
+              },
+            });
+            telegramSent = true;
+          }
         }
       } catch (telErr) {
         console.error("Telegram notification failed:", telErr.message);

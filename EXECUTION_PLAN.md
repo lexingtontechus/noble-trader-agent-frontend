@@ -59,57 +59,57 @@ Expose the MarketRegimeTrader Python models as REST API endpoints so the Next.js
 ---
 
 ## Phase 2: Upgrade the Trading Workflow Pipeline
-**Status**: 🔲 Not Started
+**Status**: ✅ Completed & Deployed
 
 ### Goal
 Replace the current simple analyze route with a full pipeline: HMM → Strategy → Kelly → Risk → Recommendation
 
 ### Tasks
-- [ ] Update `/api/trading/analyze` route to call new FastAPI endpoints
-- [ ] Chain: Regime Detection → Strategy Signal → Position Sizing → Risk Check
-- [ ] Enhance `TradeRecommendation` schema with regime, strategy, kelly data
-- [ ] Update `TradingWorkflow.jsx` to display new data fields
-- [ ] Add regime indicator UI (bull/bear/neutral/sideways)
-- [ ] Add strategy confidence scores
-- [ ] Add Kelly position sizing display
-- [ ] Test full pipeline end-to-end
-- [ ] Deploy to GitHub
+- [x] Update `/api/trading/analyze` route to call new FastAPI endpoints
+- [x] Chain: Regime Detection → Strategy Signal → Position Sizing → Risk Check
+- [x] Enhance `TradeRecommendation` schema with regime, strategy, kelly data
+- [x] Update `TradingWorkflow.jsx` to display new data fields
+- [x] Add regime indicator UI (bull/bear/neutral/sideways)
+- [x] Add strategy confidence scores
+- [x] Add Kelly position sizing display
+- [x] Test full pipeline end-to-end
+- [x] Deploy to GitHub (merged to main on 2026-05-11)
 
 ---
 
 ## Phase 3: Walk-Forward Validation Before Execution
-**Status**: 🔲 Not Started
+**Status**: ✅ Completed & Deployed
 
 ### Goal
 Run walk-forward optimization before executing any trade to validate strategy parameters
 
 ### Tasks
-- [ ] Create `/api/trading/validate` route that calls `/backtest/run` + optimization
-- [ ] Implement validation gate: trades must pass walk-forward test
-- [ ] Add validation status to TradeRecommendation schema
-- [ ] Update UI to show validation results
-- [ ] Add "Validate" button on individual recommendations
-- [ ] Auto-validate on approve
-- [ ] Test with historical data
-- [ ] Deploy to GitHub
+- [x] Create `/api/trading/validate` route that calls `/backtest/run` + optimization
+- [x] Implement validation gate: trades must pass walk-forward test
+- [x] Add validation status to TradeRecommendation schema
+- [x] Update UI to show validation results
+- [x] Add "Validate" button on individual recommendations
+- [x] Auto-validate on approve
+- [x] Test with historical data
+- [x] Deploy to GitHub
 
 ---
 
 ## Phase 4: TDA Early Warning System
-**Status**: 🔲 Not Started
+**Status**: ✅ Completed & Deployed
 
 ### Goal
 Use Topological Data Analysis for market regime change detection and early warnings
 
 ### Tasks
-- [ ] Create cron job that periodically calls `/tda/features`
-- [ ] Detect Betti number changes indicating regime transitions
-- [ ] Add TDA anomaly score to analysis pipeline
-- [ ] Create early warning notifications via Telegram
-- [ ] Add TDA dashboard section to UI
-- [ ] Implement alert thresholds
-- [ ] Test with live market data
-- [ ] Deploy to GitHub
+- [x] Create cron job that periodically calls `/tda/features`
+- [x] Detect Betti number changes indicating regime transitions
+- [x] Add TDA anomaly score to analysis pipeline
+- [x] Create early warning notifications via Telegram
+- [x] Add TDA dashboard section to UI
+- [x] Implement alert thresholds
+- [x] Test with live market data
+- [x] Deploy to GitHub
 
 ---
 
@@ -134,9 +134,9 @@ Use Optuna HPO to evolve strategy parameters based on live performance
 | Phase | Date Completed | GitHub Commit |
 |-------|---------------|---------------|
 | Phase 1 | 2026-05-11 | Merged to main, deployed to Render — all 6 endpoints live |
-| Phase 2 | - | - |
-| Phase 3 | - | - |
-| Phase 4 | - | - |
+| Phase 2 | 2026-05-11 | Merged to main, deployed to Vercel |
+| Phase 3 | 2026-05-11 | Merged to main, deployed to Vercel |
+| Phase 4 | 2026-05-11 | Merged to main, deployed to Vercel — TDA early warning system live |
 | Phase 5 | - | - |
 ```
 

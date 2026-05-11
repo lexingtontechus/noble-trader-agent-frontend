@@ -1,6 +1,6 @@
 import { getAlpacaKeys } from "@/lib/clerk-metadata";
 import { getPositions, getAccount } from "@/lib/alpaca-client";
-import { detectRegimeV2, strategySignal, analyzeRisk, detectCorrelation, optimisePortfolio } from "@/lib/fastapi-client";
+import { detectRegimeV2, strategySignal, analyzeRisk, detectCorrelation, optimisePortfolio, extractTDAFeatures } from "@/lib/fastapi-client";
 import { fetchHistoricalPrices } from "@/lib/yahoo-prices";
 import { alpacaToYahooSymbol, yahooToAlpacaSymbol } from "@/lib/symbol-utils";
 import { db } from "@/lib/db";
@@ -323,7 +323,31 @@ export async function POST(request) {
       }
     }
 
-    // 7. Correlation detection — try FastAPI, fall back to local
+    // 7. TDA anomaly detection — try FastAPI, fall back to local
+    const tdaResults = {};
+    if (fastApiAvailable) {
+      for (let i = 0; i < symbols.length; i++) {
+        const sym = symbols[i];
+        const prices = allPrices[i].slice(-useLen);
+        try {
+          const result = await Promise.race([
+            extractTDAFeatures(prices, yahooSymbols[i], {
+              embedding_dim: 3,
+              embedding_delay: 1,
+              max_filtration: 2.0,
+              n_filtration_steps: 20,
+              anomaly_threshold: 1.5,
+            }),
+            new Promise((_, rej) => setTimeout(() => rej(new Error("timeout")), 30000)),
+          ]);
+          tdaResults[sym] = result;
+        } catch {
+          tdaResults[sym] = { anomaly_score: null, regime_change_probability: null, source: "unavailable" };
+        }
+      }
+    }
+
+    // 8. Correlation detection — try FastAPI, fall back to local
     const logReturns = allPrices.map((prices) => toLogReturns(prices.slice(-useLen)));
 
     let correlationResult;
@@ -350,7 +374,7 @@ export async function POST(request) {
       correlationResult.source = "local";
     }
 
-    // 8. Optimization — try FastAPI, fall back to local
+    // 9. Optimization — try FastAPI, fall back to local
     let optimizerResult;
     if (fastApiAvailable) {
       try {
@@ -374,7 +398,7 @@ export async function POST(request) {
       optimizerResult.source = "local";
     }
 
-    // 9. Generate trade recommendations (enhanced with strategy signals + risk analysis)
+    // 10. Generate trade recommendations (enhanced with strategy signals + risk analysis)
     const recommendations = [];
     const REBALANCE_THRESHOLD = 0.05;
 
@@ -518,7 +542,7 @@ export async function POST(request) {
       }
     }
 
-    // 10. Save analysis to database (with Phase 2 data)
+    // 11. Save analysis to database (with Phase 2 data)
     let analysisRunId = null;
     try {
       // Prepare Phase 2 JSON data for storage
@@ -594,7 +618,7 @@ export async function POST(request) {
       console.error("Database save failed (non-fatal):", dbErr.message);
     }
 
-    // 11. Build response (with Phase 2 data)
+    // 12. Build response (with Phase 2 data)
     const regimeSummary = symbols.map((sym) => {
       const regimeData = regimeResults[sym] || {};
       return {
