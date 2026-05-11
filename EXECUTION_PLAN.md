@@ -59,21 +59,21 @@ Expose the MarketRegimeTrader Python models as REST API endpoints so the Next.js
 ---
 
 ## Phase 2: Upgrade the Trading Workflow Pipeline
-**Status**: 🔲 Not Started
+**Status**: ✅ Completed & Deployed
 
 ### Goal
 Replace the current simple analyze route with a full pipeline: HMM → Strategy → Kelly → Risk → Recommendation
 
 ### Tasks
-- [ ] Update `/api/trading/analyze` route to call new FastAPI endpoints
-- [ ] Chain: Regime Detection → Strategy Signal → Position Sizing → Risk Check
-- [ ] Enhance `TradeRecommendation` schema with regime, strategy, kelly data
-- [ ] Update `TradingWorkflow.jsx` to display new data fields
-- [ ] Add regime indicator UI (bull/bear/neutral/sideways)
-- [ ] Add strategy confidence scores
-- [ ] Add Kelly position sizing display
-- [ ] Test full pipeline end-to-end
-- [ ] Deploy to GitHub
+- [x] Update `/api/trading/analyze` route to call new FastAPI endpoints
+- [x] Chain: Regime Detection → Strategy Signal → Position Sizing → Risk Check
+- [x] Enhance `TradeRecommendation` schema with regime, strategy, kelly data
+- [x] Update `TradingWorkflow.jsx` to display new data fields
+- [x] Add regime indicator UI (bull/bear/neutral/sideways)
+- [x] Add strategy confidence scores
+- [x] Add Kelly position sizing display
+- [x] Test full pipeline end-to-end
+- [x] Deploy to GitHub (merged to main on 2026-05-11)
 
 ---
 
@@ -134,7 +134,7 @@ Use Optuna HPO to evolve strategy parameters based on live performance
 | Phase | Date Completed | GitHub Commit |
 |-------|---------------|---------------|
 | Phase 1 | 2026-05-11 | Merged to main, deployed to Render — all 6 endpoints live |
-| Phase 2 | - | - |
+| Phase 2 | 2026-05-11 | Merged to main, deployed to Vercel |
 | Phase 3 | - | - |
 | Phase 4 | - | - |
 | Phase 5 | - | - |
