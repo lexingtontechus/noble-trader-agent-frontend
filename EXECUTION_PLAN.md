@@ -23,7 +23,21 @@
 - **GitHub Backend (READ ONLY)**: `0x596173734972/MarketRegimeTrader`
 - **Alpaca Paper Trading**: Account `PA3C5BJY2CWK`
 - **Supabase**: Project `pcvscowltlrxzgxjurcr`, Region `us-west-1`
+  - URL: `https://pcvscowltlrxzgxjurcr.supabase.co`
+  - DB: PostgreSQL (replaces Prisma/SQLite)
+  - Cron: pg_cron + pg_net for scheduled jobs
+  - Tables: `ta_*` prefix (created via migration SQL)
 - **Telegram Bot Token**: configured in .env.local
+
+## Environment Variables (Required)
+| Variable | Purpose |
+|----------|---------|
+| `NEXT_PUBLIC_SUPABASE_URL` | Supabase project URL |
+| `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_DEFAULT_KEY` | Supabase publishable/anon key (handles DB access via RLS) |
+| `DATABASE_URL` | PostgreSQL connection string (Supabase pooler) — legacy, no longer used by app |
+| `CRON_SECRET` | Shared secret for pg_cron → API auth |
+| `TELEGRAM_BOT_TOKEN` | Telegram bot API token |
+| `TELEGRAM_CHAT_ID` | Default Telegram chat ID for notifications |
 
 ---
 
@@ -90,16 +104,17 @@ Run walk-forward optimization before executing any trade to validate strategy pa
 - [x] Update UI to show validation results
 - [x] Add "Validate" button on individual recommendations
 - [x] Auto-validate on approve
+- [x] Fix local fallback validation (advisory-only when FastAPI unavailable)
 - [x] Test with historical data
 - [x] Deploy to GitHub
 
 ---
 
-## Phase 4: TDA Early Warning System
+## Phase 4: TDA Early Warning System + Supabase Migration
 **Status**: ✅ Completed & Deployed
 
 ### Goal
-Use Topological Data Analysis for market regime change detection and early warnings
+Use Topological Data Analysis for market regime change detection and early warnings. Migrate database from Prisma/SQLite to Supabase PostgreSQL for Vercel serverless compatibility.
 
 ### Tasks
 - [x] Create cron job that periodically calls `/tda/features`
@@ -108,21 +123,45 @@ Use Topological Data Analysis for market regime change detection and early warni
 - [x] Create early warning notifications via Telegram
 - [x] Add TDA dashboard section to UI
 - [x] Implement alert thresholds
+- [x] Set up Supabase pg_cron + pg_net for scheduled jobs
+- [x] Migrate from Prisma/SQLite to Supabase PostgreSQL
+- [x] Create `src/lib/supabase/client.js` (browser client)
+- [x] Create `src/lib/supabase/server.js` (server client with cookies)
+- [x] Create `src/lib/supabase/db.js` (Prisma-compatible Supabase wrapper)
+- [x] Update `src/lib/db.js` to re-export from Supabase
+- [x] Remove @prisma/client and prisma dependencies
+- [x] Fix Walk-Forward Validation "FAILED" error (local fallback now advisory)
+- [x] Run migration SQL in Supabase Dashboard
 - [x] Test with live market data
 - [x] Deploy to GitHub
 
 ---
 
-## Phase 5: Strategy Evolution (Future)
+## Phase 5: Strategy Evolution
 **Status**: 🔲 Not Started
 
 ### Goal
-Use Optuna HPO to evolve strategy parameters based on live performance
+Use Optuna HPO to evolve strategy parameters based on live performance. Leverage Supabase for persistent storage of strategy performance data, evolution metrics, and A/B test results.
+
+### Architecture
+- **Supabase PostgreSQL** — persistent store for strategy variants, performance metrics, and evolution state
+- **FastAPI backend** — Optuna optimization runs
+- **pg_cron** — periodic re-optimization schedule
+- **Next.js API routes** — BFF layer using `@/lib/supabase/db`
+
+### Database Schema (Supabase tables to add)
+| Table | Purpose |
+|-------|---------|
+| `ta_strategy_variant` | Store strategy parameter sets (HMM states, kelly fraction, risk limits, etc.) |
+| `ta_strategy_performance` | Track live/backtest performance per variant |
+| `ta_ab_test` | A/B test assignments and results |
+| `ta_evolution_log` | History of strategy parameter changes and reasons |
 
 ### Tasks
+- [ ] Create Supabase migration SQL for strategy evolution tables
 - [ ] Create feedback loop: execution results → optimizer
-- [ ] Implement periodic re-optimization schedule
-- [ ] Add strategy performance tracking
+- [ ] Implement periodic re-optimization schedule (pg_cron)
+- [ ] Add strategy performance tracking (read/write via Supabase)
 - [ ] Create A/B testing framework for strategy variants
 - [ ] Add evolution metrics to UI
 - [ ] Implement automatic strategy rotation
@@ -136,7 +175,7 @@ Use Optuna HPO to evolve strategy parameters based on live performance
 | Phase 1 | 2026-05-11 | Merged to main, deployed to Render — all 6 endpoints live |
 | Phase 2 | 2026-05-11 | Merged to main, deployed to Vercel |
 | Phase 3 | 2026-05-11 | Merged to main, deployed to Vercel |
-| Phase 4 | 2026-05-11 | Merged to main, deployed to Vercel — TDA early warning system live |
+| Phase 4 | 2026-05-12 | Merged to main, deployed to Vercel — TDA early warning + Supabase migration |
 | Phase 5 | - | - |
 ```
 
@@ -148,7 +187,7 @@ When you start the new chat, tell the AI about these critical files:
 
 | File | Why It's Important |
 |------|-------------------|
-| `src/proxy.js` | Clerk middleware — MUST NOT be deleted |
+| `proxy.js` | Clerk middleware — MUST NOT be deleted or renamed (required for NextJS v16) |
 | `.env.local` | All API keys — MUST NOT be deleted |
 | `src/components/trading/TradingWorkflow.jsx` | Main trading UI |
 | `src/app/api/trading/analyze/route.js` | Analysis pipeline |
@@ -156,8 +195,12 @@ When you start the new chat, tell the AI about these critical files:
 | `src/app/api/trading/execute/route.js` | Trade execution |
 | `src/app/api/trading/recommendations/route.js` | Recommendations API |
 | `src/app/api/trading/schedule/execute/route.js` | Scheduled orders |
-| `prisma/schema.prisma` | Database schema (trading schema) |
-| `src/lib/db.js` | Prisma client |
+| `src/lib/supabase/client.js` | Supabase browser client (client components) |
+| `src/lib/supabase/server.js` | Supabase server client (API routes, server components) |
+| `src/lib/supabase/db.js` | Supabase DB helper (Prisma-compatible wrapper) |
+| `src/lib/db.js` | Re-exports from supabase/db.js — all routes import from here |
+| `src/lib/trade-validation.js` | Walk-forward validation logic |
+| `supabase/migrations/00000000000001_create_tables.sql` | Database table definitions |
 | `EXECUTION_PLAN.md` | The execution plan above |
 
 ---
