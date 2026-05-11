@@ -138,7 +138,7 @@ Use Topological Data Analysis for market regime change detection and early warni
 ---
 
 ## Phase 5: Strategy Evolution
-**Status**: 🟡 Implementation Complete — Pending Supabase Migration & Deploy
+**Status**: ✅ Completed & Deployed (GitHub PR #3 merged 2026-05-12)
 
 ### Goal
 Use Optuna HPO to evolve strategy parameters based on live performance. Leverage Supabase for persistent storage of strategy performance data, evolution metrics, and A/B test results.
@@ -201,7 +201,7 @@ Use Optuna HPO to evolve strategy parameters based on live performance. Leverage
 - [ ] Run migration SQL in Supabase Dashboard
 - [ ] Run evolution cron SQL in Supabase Dashboard
 - [ ] Test with live market data
-- [ ] Deploy to GitHub
+- [x] Deploy to GitHub (merged PR #3 to main on 2026-05-12)
 
 ---
 
@@ -212,7 +212,7 @@ Use Optuna HPO to evolve strategy parameters based on live performance. Leverage
 | Phase 2 | 2026-05-11 | Merged to main, deployed to Vercel |
 | Phase 3 | 2026-05-11 | Merged to main, deployed to Vercel |
 | Phase 4 | 2026-05-12 | Merged to main, deployed to Vercel — TDA early warning + Supabase migration |
-| Phase 5 | - | - |
+| Phase 5 | 2026-05-12 | Merged PR #3 to main — Strategy Evolution (Optuna HPO, A/B Testing, Auto-Rotation) |
 
 ```
 
