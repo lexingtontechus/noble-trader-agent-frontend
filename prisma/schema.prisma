@@ -7,9 +7,8 @@ generator client {
 }
 
 datasource db {
-  provider  = "postgresql"
-  url       = env("DATABASE_URL")
-  directUrl = env("DIRECT_URL")
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
 }
 
 /// A single analysis run — one button press from the user.
@@ -26,6 +25,8 @@ model AnalysisRun {
   strategySignals String? // JSON stringified - per-symbol strategy signals
   riskAnalysis    String? // JSON stringified - per-symbol risk analysis
   kellySizes      String? // JSON stringified - per-symbol Kelly sizing
+  // Phase 3: Validation summary
+  validationSummary String? // JSON stringified — per-symbol validation results
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
@@ -60,6 +61,11 @@ model TradeRecommendation {
   riskScore     Float?       // Risk score from analysis
   varDaily      Float?       // Daily Value-at-Risk
   cvarDaily     Float?       // Daily CVaR
+  // Phase 3: Walk-forward validation fields
+  validationStatus  String?  // pending | validating | passed | failed | error
+  validationScore   Float?   // 0-1 composite score from walk-forward validation
+  validationDetails String?  // JSON stringified — full backtest results
+  validatedAt       DateTime? // When validation was run
   createdAt     DateTime     @default(now())
   updatedAt     DateTime     @updatedAt
 

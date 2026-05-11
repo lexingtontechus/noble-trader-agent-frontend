@@ -78,20 +78,20 @@ Replace the current simple analyze route with a full pipeline: HMM → Strategy 
 ---
 
 ## Phase 3: Walk-Forward Validation Before Execution
-**Status**: 🔲 Not Started
+**Status**: ✅ Completed & Deployed
 
 ### Goal
 Run walk-forward optimization before executing any trade to validate strategy parameters
 
 ### Tasks
-- [ ] Create `/api/trading/validate` route that calls `/backtest/run` + optimization
-- [ ] Implement validation gate: trades must pass walk-forward test
-- [ ] Add validation status to TradeRecommendation schema
-- [ ] Update UI to show validation results
-- [ ] Add "Validate" button on individual recommendations
-- [ ] Auto-validate on approve
-- [ ] Test with historical data
-- [ ] Deploy to GitHub
+- [x] Create `/api/trading/validate` route that calls `/backtest/run` + optimization
+- [x] Implement validation gate: trades must pass walk-forward test
+- [x] Add validation status to TradeRecommendation schema
+- [x] Update UI to show validation results
+- [x] Add "Validate" button on individual recommendations
+- [x] Auto-validate on approve
+- [x] Test with historical data
+- [x] Deploy to GitHub
 
 ---
 
@@ -135,7 +135,7 @@ Use Optuna HPO to evolve strategy parameters based on live performance
 |-------|---------------|---------------|
 | Phase 1 | 2026-05-11 | Merged to main, deployed to Render — all 6 endpoints live |
 | Phase 2 | 2026-05-11 | Merged to main, deployed to Vercel |
-| Phase 3 | - | - |
+| Phase 3 | 2026-05-11 | Merged to main, deployed to Vercel |
 | Phase 4 | - | - |
 | Phase 5 | - | - |
 ```
