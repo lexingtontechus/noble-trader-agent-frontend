@@ -201,6 +201,7 @@ const ANALYZE_STEPS = [
   { key: 'regimes', label: 'HMM Regime Detection' },
   { key: 'strategy', label: 'Strategy Signals' },
   { key: 'risk', label: 'Risk Analysis' },
+  { key: 'tda', label: 'TDA Anomaly Detection' },
   { key: 'correlations', label: 'Analyzing Correlations' },
   { key: 'optimizing', label: 'Optimizing Portfolio' },
   { key: 'generating', label: 'Generating Recommendations' },
@@ -385,6 +386,9 @@ function AnalysisSummary({ data }) {
   const strategySignals = data?.strategy_signals || {}
   const kellySizing = data?.kelly_sizing || {}
   const riskAnalysis = data?.risk_analysis || {}
+
+  // Phase 4: TDA anomaly analysis
+  const tdaAnalysis = data?.tda_analysis || {}
 
   // Phase 3: Validation summary from recommendations
   const validationSummary = data?.validation_summary || null
@@ -586,6 +590,92 @@ function AnalysisSummary({ data }) {
                           {breach ? (
                             <span className="badge badge-xs badge-error gap-1">
                               <IconAlertTriangle size={10} /> Breach
+                            </span>
+                          ) : (
+                            <span className="badge badge-xs badge-success">OK</span>
+                          )}
+                        </td>
+                      </tr>
+                    )
+                  })}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Phase 4: TDA Anomaly Detection */}
+      {tdaAnalysis && Object.keys(tdaAnalysis).length > 0 && (
+        <div className="card bg-base-200 shadow-lg">
+          <div className="card-body p-4">
+            <div className="flex items-center gap-2 mb-3">
+              <div className="w-8 h-8 rounded-lg bg-warning/15 flex items-center justify-center">
+                <IconFlask size={16} className="text-warning" />
+              </div>
+              <h3 className="font-semibold text-sm">TDA Anomaly Detection</h3>
+              <span className="badge badge-xs badge-ghost ml-auto">Topological Analysis</span>
+            </div>
+            <div className="overflow-x-auto">
+              <table className="table table-sm">
+                <thead>
+                  <tr>
+                    <th className="text-xs">Symbol</th>
+                    <th className="text-xs">Anomaly</th>
+                    <th className="text-xs">Regime Change</th>
+                    <th className="text-xs">Betti-0</th>
+                    <th className="text-xs">Betti-1</th>
+                    <th className="text-xs">Entropy</th>
+                    <th className="text-xs">Alert</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {Object.entries(tdaAnalysis).map(([symbol, data]) => {
+                    const anomaly = typeof data.anomaly_score === 'number' ? data.anomaly_score : null
+                    const regimeChange = typeof data.regime_change_probability === 'number' ? data.regime_change_probability : null
+                    const betti0 = data.betti_0 ?? '-'
+                    const betti1 = data.betti_1 ?? '-'
+                    const entropy = typeof data.total_entropy === 'number' ? data.total_entropy : null
+                    const isAnomalous = anomaly != null && anomaly >= 1.5
+                    const isRegimeChange = regimeChange != null && regimeChange >= 0.6
+                    const alertLevel = isAnomalous && anomaly >= 2.25 ? 'critical' : isRegimeChange ? 'high' : isAnomalous ? 'medium' : 'none'
+                    return (
+                      <tr key={symbol}>
+                        <td className="font-mono text-sm">{symbol}</td>
+                        <td>
+                          {anomaly != null ? (
+                            <div className="flex items-center gap-2">
+                              <progress
+                                className={`progress w-12 ${anomaly >= 2.25 ? 'progress-error' : anomaly >= 1.5 ? 'progress-warning' : 'progress-success'}`}
+                                value={Math.min(anomaly / 3, 1)}
+                                max="1"
+                              />
+                              <span className={`font-mono text-xs ${anomaly >= 2.25 ? 'text-error' : anomaly >= 1.5 ? 'text-warning' : 'text-success'}`}>
+                                {anomaly.toFixed(2)}
+                              </span>
+                            </div>
+                          ) : <span className="text-base-content/30 text-xs">N/A</span>}
+                        </td>
+                        <td>
+                          {regimeChange != null ? (
+                            <span className={`font-mono text-xs ${regimeChange >= 0.6 ? 'text-error font-bold' : regimeChange >= 0.3 ? 'text-warning' : 'text-success'}`}>
+                              {(regimeChange * 100).toFixed(1)}%
+                            </span>
+                          ) : <span className="text-base-content/30 text-xs">N/A</span>}
+                        </td>
+                        <td className="font-mono text-xs">{betti0}</td>
+                        <td className="font-mono text-xs">{betti1}</td>
+                        <td>
+                          {entropy != null ? (
+                            <span className={`font-mono text-xs ${entropy >= 0.8 ? 'text-warning' : 'text-base-content/60'}`}>
+                              {entropy.toFixed(2)}
+                            </span>
+                          ) : <span className="text-base-content/30 text-xs">N/A</span>}
+                        </td>
+                        <td>
+                          {alertLevel !== 'none' ? (
+                            <span className={`badge badge-xs ${alertLevel === 'critical' ? 'badge-error' : alertLevel === 'high' ? 'badge-warning' : 'badge-info'}`}>
+                              {alertLevel.toUpperCase()}
                             </span>
                           ) : (
                             <span className="badge badge-xs badge-success">OK</span>
@@ -1130,7 +1220,7 @@ function TradingWorkflowInner() {
 
   // Simulate step progression during analysis
   const simulateAnalysisSteps = useCallback(() => {
-    const delays = [600, 1200, 1500, 1200, 1500, 1800, 1000]
+    const delays = [600, 1200, 1500, 1200, 2000, 1500, 1800, 1000]
     let currentDelay = 0
 
     ANALYZE_STEPS.forEach((step, idx) => {

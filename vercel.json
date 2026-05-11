@@ -1,0 +1,8 @@
+{
+  "crons": [
+    {
+      "path": "/api/tda/scan?secret=${CRON_SECRET}",
+      "schedule": "0 */4 * * *"
+    }
+  ]
+}

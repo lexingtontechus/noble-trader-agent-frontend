@@ -102,10 +102,51 @@ model TelegramNotification {
   id          String   @id @default(cuid())
   chatId      String
   message     String
-  messageType String   @default("trade_report") // trade_report | execution_summary | schedule_reminder
+  messageType String   @default("trade_report") // trade_report | execution_summary | schedule_reminder | tda_alert | early_warning
   success     Boolean
   error       String?
   createdAt   DateTime @default(now())
 
   @@map("ta_telegram_notification")
+}
+
+/// TDA scan result — one scan of a symbol's topological features
+model TDAScanResult {
+  id                      String   @id @default(cuid())
+  symbol                  String
+  anomalyScore            Float?   // TDA anomaly score
+  regimeChangeProbability Float?   // Probability of regime change
+  betti0                  Int?     // Betti-0 (connected components)
+  betti1                  Int?     // Betti-1 (loops)
+  totalEntropy            Float?   // Combined persistence entropy
+  featureVector           String?  // JSON array — 10-dim TDA feature vector
+  alertTriggered          Boolean  @default(false) // Did this scan trigger an alert?
+  alertLevel              String?  // none | low | medium | high | critical
+  source                  String?  // fastapi | local
+  scanResults             String?  // JSON stringified — full TDA response
+  createdAt               DateTime @default(now())
+
+  @@map("ta_tda_scan_result")
+}
+
+/// Early warning alert triggered by TDA regime change detection
+model EarlyWarningAlert {
+  id                String   @id @default(cuid())
+  symbol            String
+  alertType         String   // regime_change | anomaly_spike | betti_shift | entropy_surge
+  alertLevel        String   // low | medium | high | critical
+  anomalyScore      Float?
+  regimeChangeProb  Float?
+  betti0Before      Int?
+  betti0After       Int?
+  betti1Before      Int?
+  betti1After       Int?
+  message           String?  // Human-readable alert message
+  telegramSent      Boolean  @default(false)
+  telegramChatId    String?
+  acknowledged      Boolean  @default(false)
+  scanResultId      String?  // Reference to the triggering TDAScanResult
+  createdAt         DateTime @default(now())
+
+  @@map("ta_early_warning_alert")
 }

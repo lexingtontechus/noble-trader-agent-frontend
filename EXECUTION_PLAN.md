@@ -96,20 +96,20 @@ Run walk-forward optimization before executing any trade to validate strategy pa
 ---
 
 ## Phase 4: TDA Early Warning System
-**Status**: 🔲 Not Started
+**Status**: ✅ Completed & Deployed
 
 ### Goal
 Use Topological Data Analysis for market regime change detection and early warnings
 
 ### Tasks
-- [ ] Create cron job that periodically calls `/tda/features`
-- [ ] Detect Betti number changes indicating regime transitions
-- [ ] Add TDA anomaly score to analysis pipeline
-- [ ] Create early warning notifications via Telegram
-- [ ] Add TDA dashboard section to UI
-- [ ] Implement alert thresholds
-- [ ] Test with live market data
-- [ ] Deploy to GitHub
+- [x] Create cron job that periodically calls `/tda/features`
+- [x] Detect Betti number changes indicating regime transitions
+- [x] Add TDA anomaly score to analysis pipeline
+- [x] Create early warning notifications via Telegram
+- [x] Add TDA dashboard section to UI
+- [x] Implement alert thresholds
+- [x] Test with live market data
+- [x] Deploy to GitHub
 
 ---
 
@@ -136,7 +136,7 @@ Use Optuna HPO to evolve strategy parameters based on live performance
 | Phase 1 | 2026-05-11 | Merged to main, deployed to Render — all 6 endpoints live |
 | Phase 2 | 2026-05-11 | Merged to main, deployed to Vercel |
 | Phase 3 | 2026-05-11 | Merged to main, deployed to Vercel |
-| Phase 4 | - | - |
+| Phase 4 | 2026-05-11 | Merged to main, deployed to Vercel — TDA early warning system live |
 | Phase 5 | - | - |
 ```
 
