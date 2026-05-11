@@ -28,7 +28,7 @@
 ---
 
 ## Phase 1: Wrap Backend Models as FastAPI Endpoints
-**Status**: ✅ Completed (local, pending push to GitHub)
+**Status**: ✅ Completed & Deployed
 
 ### Goal
 Expose the MarketRegimeTrader Python models as REST API endpoints so the Next.js frontend can call them.
@@ -53,8 +53,8 @@ Expose the MarketRegimeTrader Python models as REST API endpoints so the Next.js
 - [x] Wire up observation builder to `/observation/build-v2`
 - [x] Add request/response schemas (Pydantic)
 - [x] Test all endpoints (local functional test passed)
-- [ ] Deploy to Render
-- [x] Deploy to GitHub (pushed to feature/phase1-backend-endpoints on 2026-05-11)
+- [x] Deploy to Render (auto-deployed via GitHub merge to main, confirmed live 2026-05-11)
+- [x] Deploy to GitHub (merged feature/phase1-endpoints → main on 2026-05-11)
 
 ---
 
@@ -133,7 +133,7 @@ Use Optuna HPO to evolve strategy parameters based on live performance
 ## Completion Log
 | Phase | Date Completed | GitHub Commit |
 |-------|---------------|---------------|
-| Phase 1 | 2026-05-11 | feature/phase1-backend-endpoints pushed to GitHub |
+| Phase 1 | 2026-05-11 | Merged to main, deployed to Render — all 6 endpoints live |
 | Phase 2 | - | - |
 | Phase 3 | - | - |
 | Phase 4 | - | - |
