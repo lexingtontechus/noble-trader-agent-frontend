@@ -1,32 +1,11 @@
-// Prisma client with PostgreSQL (Supabase) for Vercel serverless compatibility.
-// Previously used SQLite which doesn't work on Vercel's ephemeral filesystem.
-// Now uses PostgreSQL via DATABASE_URL (Supabase connection string).
+// Database client — now uses Supabase directly instead of Prisma.
+//
+// Prisma caused "Unable to open the database file" errors on Vercel serverless
+// because it relied on SQLite (ephemeral filesystem) and even after switching
+// to PostgreSQL, the Prisma Engine binary had cold-start issues on Vercel.
+//
+// The Supabase JS client is serverless-native and works perfectly on Vercel.
+// This file re-exports from @/lib/supabase/db so all existing imports
+// of `import { db } from "@/lib/db"` continue to work unchanged.
 
-import { PrismaClient } from "@prisma/client";
-
-const globalForPrisma = globalThis;
-
-const isProduction = process.env.NODE_ENV === "production";
-
-const db =
-  globalForPrisma.prisma ||
-  new PrismaClient({
-    log: isProduction ? ["error"] : ["error", "warn"],
-  });
-
-if (!isProduction) globalForPrisma.prisma = db;
-
-// Graceful shutdown — release DB connections when the process exits
-if (!globalForPrisma.prismaShutdownRegistered) {
-  globalForPrisma.prismaShutdownRegistered = true;
-  const shutdown = async () => {
-    try {
-      await db.$disconnect();
-    } catch {}
-    process.exit(0);
-  };
-  process.on("SIGTERM", shutdown);
-  process.on("SIGINT", shutdown);
-}
-
-export { db };
+export { db, db as default } from "@/lib/supabase/db";
