@@ -1,14 +1,13 @@
-// Prisma schema — currently uses SQLite for local development.
-// On Vercel, the database is auto-created in /tmp (ephemeral).
+// Prisma schema — PostgreSQL via Supabase for persistent production data.
+// On Vercel, DATABASE_URL must point to a Supabase PostgreSQL connection string.
 // Tables use ta_* prefix to avoid conflicts.
-// TODO: Migrate to Supabase PostgreSQL for persistent production data.
 
 generator client {
   provider = "prisma-client-js"
 }
 
 datasource db {
-  provider = "sqlite"
+  provider = "postgresql"
   url      = env("DATABASE_URL")
 }
 

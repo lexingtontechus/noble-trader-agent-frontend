@@ -1,11 +1,13 @@
 import { runBacktest } from "@/lib/fastapi-client";
 import { fetchHistoricalPrices } from "@/lib/yahoo-prices";
 import { alpacaToYahooSymbol } from "@/lib/symbol-utils";
-import { db } from "@/lib/db";
 
 /**
  * Run walk-forward validation on a trade.
  * Can be called from /api/trading/validate or /api/trading/approve
+ *
+ * DB-resilient: if the database is unavailable, validation still runs
+ * using just the symbol/side from the params. DB writes are best-effort.
  *
  * @param {object} params - { tradeId, symbol, side, prices? }
  * @returns {Promise<{ passed: boolean, score: number, details: object }>}
@@ -14,34 +16,42 @@ export async function validateTrade({ tradeId, symbol, side, prices: providedPri
   let targetSymbol = symbol;
   let targetSide = side;
   let trade = null;
+  let dbAvailable = true;
 
   // Resolve trade from DB if tradeId provided
   if (tradeId) {
     try {
+      const { db } = await import("@/lib/db");
       trade = await db.tradeRecommendation.findUnique({ where: { id: tradeId } });
-      if (!trade) throw new Error("Trade not found: " + tradeId);
-      targetSymbol = trade.symbol;
-      targetSide = trade.side;
+      if (!trade) {
+        // Trade not found in DB — continue with params only
+        console.warn("Trade not found in DB:", tradeId, "— using params");
+        trade = null;
+      } else {
+        targetSymbol = trade.symbol;
+        targetSide = trade.side;
 
-      // Already validated?
-      if (trade.validationStatus === "passed" || trade.validationStatus === "failed") {
-        return {
-          passed: trade.validationStatus === "passed",
-          score: trade.validationScore || 0,
-          details: trade.validationDetails ? JSON.parse(trade.validationDetails) : {},
-          cached: true,
-        };
+        // Already validated?
+        if (trade.validationStatus === "passed" || trade.validationStatus === "failed") {
+          return {
+            passed: trade.validationStatus === "passed",
+            score: trade.validationScore || 0,
+            details: trade.validationDetails ? JSON.parse(trade.validationDetails) : {},
+            cached: true,
+          };
+        }
+
+        // Mark as validating
+        await db.tradeRecommendation.update({
+          where: { id: tradeId },
+          data: { validationStatus: "validating" },
+        });
       }
-
-      // Mark as validating
-      await db.tradeRecommendation.update({
-        where: { id: tradeId },
-        data: { validationStatus: "validating" },
-      });
     } catch (dbErr) {
       // If DB is unavailable, continue with just the symbol/side from params
       console.error("DB lookup failed for tradeId:", tradeId, dbErr.message);
       trade = null;
+      dbAvailable = false;
     }
   }
 
@@ -55,8 +65,9 @@ export async function validateTrade({ tradeId, symbol, side, prices: providedPri
       const data = await fetchHistoricalPrices(yahooSymbol);
       prices = data?.prices || [];
     } catch (e) {
-      if (trade) {
+      if (trade && dbAvailable) {
         try {
+          const { db } = await import("@/lib/db");
           await db.tradeRecommendation.update({
             where: { id: tradeId },
             data: {
@@ -72,8 +83,9 @@ export async function validateTrade({ tradeId, symbol, side, prices: providedPri
   }
 
   if (!prices || prices.length < 100) {
-    if (trade) {
+    if (trade && dbAvailable) {
       try {
+        const { db } = await import("@/lib/db");
         await db.tradeRecommendation.update({
           where: { id: tradeId },
           data: {
@@ -126,9 +138,10 @@ export async function validateTrade({ tradeId, symbol, side, prices: providedPri
   // Compute validation score
   const validation = computeValidationScore(backtestResult, targetSide, source);
 
-  // Update DB if trade exists
-  if (trade) {
+  // Update DB if trade exists and DB is available
+  if (trade && dbAvailable) {
     try {
+      const { db } = await import("@/lib/db");
       await db.tradeRecommendation.update({
         where: { id: tradeId },
         data: {
