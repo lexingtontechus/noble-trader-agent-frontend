@@ -6,7 +6,8 @@
  * This allows incremental migration without rewriting every route.
  *
  * Key design decisions:
- *  - Uses the Supabase service_role key for API routes (bypasses RLS)
+ *  - Uses NEXT_PUBLIC_SUPABASE_PUBLISHABLE_DEFAULT_KEY (publishable key)
+ *  - RLS policies on the tables allow full access, so the publishable key works
  *  - Returns data in the same shape as Prisma where possible
  *  - Supports the subset of Prisma operations used in the codebase:
  *    findFirst, findUnique, findMany, create, update, updateMany, count
@@ -14,36 +15,35 @@
  *
  * ENV VARS REQUIRED:
  *  NEXT_PUBLIC_SUPABASE_URL — e.g. https://xxx.supabase.co
- *  SUPABASE_SERVICE_ROLE_KEY — service_role key (server-only, bypasses RLS)
- *  (NEXT_PUBLIC_SUPABASE_PUBLISHABLE_DEFAULT_KEY — anon key, for client-side)
+ *  NEXT_PUBLIC_SUPABASE_PUBLISHABLE_DEFAULT_KEY — publishable/anon key
  */
 
 import { createClient } from "@supabase/supabase-js";
 
-// ── Singleton Supabase admin client (service_role, bypasses RLS) ──────────────
+// ── Singleton Supabase client (using publishable key, RLS policies allow access) ──
 const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL;
-const SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
+const SUPABASE_KEY = process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_DEFAULT_KEY;
 
-let _supabaseAdmin = null;
+let _supabaseClient = null;
 
 function getAdminClient() {
-  if (_supabaseAdmin) return _supabaseAdmin;
+  if (_supabaseClient) return _supabaseClient;
   if (!SUPABASE_URL) {
     throw new Error(
       "Missing NEXT_PUBLIC_SUPABASE_URL env var. " +
       "Add it in Vercel project settings → Environment Variables."
     );
   }
-  if (!SERVICE_ROLE_KEY) {
+  if (!SUPABASE_KEY) {
     throw new Error(
-      "Missing SUPABASE_SERVICE_ROLE_KEY env var. " +
+      "Missing NEXT_PUBLIC_SUPABASE_PUBLISHABLE_DEFAULT_KEY env var. " +
       "Add it in Vercel project settings → Environment Variables."
     );
   }
-  _supabaseAdmin = createClient(SUPABASE_URL, SERVICE_ROLE_KEY, {
+  _supabaseClient = createClient(SUPABASE_URL, SUPABASE_KEY, {
     auth: { autoRefreshToken: false, persistSession: false },
   });
-  return _supabaseAdmin;
+  return _supabaseClient;
 }
 
 // ── Table name mapping (Prisma model → Supabase table) ────────────────────────
