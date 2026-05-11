@@ -54,6 +54,11 @@ const TABLE_MAP = {
   telegramNotification: "ta_telegram_notification",
   tdaScanResult: "ta_tda_scan_result",
   earlyWarningAlert: "ta_early_warning_alert",
+  // Phase 5: Strategy Evolution tables
+  strategyVariant: "ta_strategy_variant",
+  strategyPerformance: "ta_strategy_performance",
+  abTest: "ta_ab_test",
+  evolutionLog: "ta_evolution_log",
 };
 
 function tableName(model) {
@@ -260,6 +265,11 @@ export const db = {
   tdaScanResult: createModelProxy("tdaScanResult"),
   tDAScanResult: createModelProxy("tdaScanResult"), // Alias: Prisma generates tDAScanResult
   earlyWarningAlert: createModelProxy("earlyWarningAlert"),
+  // Phase 5: Strategy Evolution
+  strategyVariant: createModelProxy("strategyVariant"),
+  strategyPerformance: createModelProxy("strategyPerformance"),
+  abTest: createModelProxy("abTest"),
+  evolutionLog: createModelProxy("evolutionLog"),
 };
 
 export default db;

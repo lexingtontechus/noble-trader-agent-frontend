@@ -4,6 +4,7 @@ import { detectRegimeV2, strategySignal, analyzeRisk, detectCorrelation, optimis
 import { fetchHistoricalPrices } from "@/lib/yahoo-prices";
 import { alpacaToYahooSymbol, yahooToAlpacaSymbol } from "@/lib/symbol-utils";
 import { db } from "@/lib/db";
+import { getActiveVariant } from "@/lib/strategy-evolution";
 
 // Fallback Alpaca keys from env vars (used when Clerk auth is unavailable, e.g. cron jobs)
 const ALPACA_API_KEY = process.env.ALPACA_API_KEY;
@@ -200,6 +201,22 @@ export async function POST(request) {
       );
     }
 
+    // Phase 5: Get active strategy variant params (or defaults)
+    const activeVariant = await getActiveVariant();
+    const variantId = activeVariant?.id || "default";
+    const variantParams = {
+      kellyFraction: activeVariant?.kellyFraction ?? 0.5,
+      targetVol: activeVariant?.targetVol ?? 0.15,
+      baseRiskLimit: activeVariant?.baseRiskLimit ?? 0.02,
+      nHmmStates: activeVariant?.nHmmStates ?? 4,
+      hmmIter: activeVariant?.hmmIter ?? 100,
+      maxPositionPct: activeVariant?.maxPositionPct ?? 0.25,
+      regimeGate: activeVariant?.regimeGate ?? true,
+      riskCheck: activeVariant?.riskCheck ?? true,
+      commissionBps: activeVariant?.commissionBps ?? 5.0,
+      slippageBps: activeVariant?.slippageBps ?? 2.0,
+    };
+
     // 2. Fetch positions and account
     const [alpacaPositions, account] = await Promise.all([
       getPositions(keys.apiKey, keys.secretKey),
@@ -261,7 +278,7 @@ export async function POST(request) {
       const prices = allPrices[i].slice(-useLen);
       try {
         const result = await Promise.race([
-          detectRegimeV2(prices, yahooSymbols[i]),
+          detectRegimeV2(prices, yahooSymbols[i], { n_states: variantParams.nHmmStates, n_iter: variantParams.hmmIter }),
           new Promise((_, rej) => setTimeout(() => rej(new Error("timeout")), 15000)),
         ]);
         regimeResults[sym] = result;
@@ -288,7 +305,7 @@ export async function POST(request) {
       if (fastApiAvailable) {
         try {
           const result = await Promise.race([
-            strategySignal(prices, yahooSymbols[i], { use_regime: true, kelly_fraction: 0.5, target_vol: 0.15 }),
+            strategySignal(prices, yahooSymbols[i], { use_regime: variantParams.regimeGate, kelly_fraction: variantParams.kellyFraction, target_vol: variantParams.targetVol }),
             new Promise((_, rej) => setTimeout(() => rej(new Error("timeout")), 20000)),
           ]);
           strategyResults[sym] = result;
@@ -310,7 +327,7 @@ export async function POST(request) {
       if (fastApiAvailable) {
         try {
           const result = await Promise.race([
-            analyzeRisk(prices, yahooSymbols[i], { use_regime: true, stress_scenarios: true }),
+            analyzeRisk(prices, yahooSymbols[i], { use_regime: variantParams.regimeGate, stress_scenarios: true, base_risk_limit: variantParams.baseRiskLimit }),
             new Promise((_, rej) => setTimeout(() => rej(new Error("timeout")), 20000)),
           ]);
           riskResults[sym] = result;
@@ -712,6 +729,7 @@ export async function POST(request) {
         cash: parseFloat(account?.cash) || 0,
         buying_power: parseFloat(account?.buying_power) || 0,
       },
+      activeVariant: { id: variantId, name: activeVariant?.name || "Default", params: variantParams },
     });
   } catch (error) {
     console.error("Trading analyze error:", error);

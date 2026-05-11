@@ -2,6 +2,7 @@ import { getAlpacaKeys } from "@/lib/clerk-metadata";
 import { createOrder, getOrders } from "@/lib/alpaca-client";
 import { yahooToAlpacaSymbol, getAssetClass } from "@/lib/symbol-utils";
 import { db } from "@/lib/db";
+import { recordPerformance, getActiveVariant } from "@/lib/strategy-evolution";
 
 // Fallback Alpaca keys from env vars
 const ALPACA_API_KEY = process.env.ALPACA_API_KEY;
@@ -85,10 +86,11 @@ export async function POST(request) {
         filledOrders.push(order);
 
         // Update DB if trade has a DB id
+        let matchingTrade = null;
         if (trade.id && trade.id.includes("-")) {
           try {
             if (db?.tradeRecommendation) {
-              const matchingTrade = await db.tradeRecommendation.findFirst({
+              matchingTrade = await db.tradeRecommendation.findFirst({
                 where: {
                   symbol: trade.symbol,
                   side: trade.side,
@@ -109,6 +111,24 @@ export async function POST(request) {
           } catch (dbErr) {
             console.error("DB update failed for trade:", dbErr.message);
           }
+        }
+
+        // Phase 5: Record execution feedback for strategy evolution
+        try {
+          const activeVariant = await getActiveVariant();
+          if (activeVariant && activeVariant.id !== "default") {
+            await recordPerformance({
+              variantId: activeVariant.id,
+              symbol: trade.symbol,
+              tradeSide: trade.side || "buy",
+              entryPrice: parseFloat(trade.limit_price || trade.price || 0),
+              source: "live",
+              tradeId: matchingTrade?.id || trade.id,
+              metadata: { alpacaOrderId: order.id, orderType: orderPayload.type },
+            });
+          }
+        } catch (evoErr) {
+          console.error("Evolution feedback failed (non-fatal):", evoErr.message);
         }
       } catch (err) {
         console.error(`Order failed for ${trade.symbol}:`, err.message);

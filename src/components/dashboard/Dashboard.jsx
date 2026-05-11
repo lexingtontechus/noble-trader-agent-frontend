@@ -9,6 +9,8 @@ import StreamStatusPanel from "@/components/streaming/StreamStatusPanel";
 import AlertHistory from "@/components/streaming/AlertHistory";
 import { notifySuccess, notifyError } from "@/lib/notifications";
 import LiveBadge from "@/components/streaming/LiveBadge";
+import dynamic from 'next/dynamic'
+const EvolutionPanel = dynamic(() => import('@/components/evolution/EvolutionPanel'), { ssr: false })
 
 const DEFAULT_TICKERS = [
   { symbol: "GC=F", displayName: "Gold" },
@@ -310,6 +312,22 @@ export default function Dashboard() {
             onRetry={() => handleRetry(t.symbol)}
           />
         ))}
+      </div>
+
+      {/* Strategy Evolution Panel */}
+      <div className="card bg-base-200 shadow-xl border border-base-300">
+        <div className="card-body p-4">
+          <div className="flex items-center gap-2 mb-3">
+            <div className="w-8 h-8 rounded-lg bg-accent/15 flex items-center justify-center">
+              <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-accent">
+                <path d="M9 3h6" /><path d="M10 9V3" /><path d="M14 9V3" /><path d="M9 9l-4.5 8.5a2 2 0 0 0 1.7 2.9h10.6a2 2 0 0 0 1.7-2.9L15 9" />
+              </svg>
+            </div>
+            <h3 className="font-semibold text-sm">Strategy Evolution</h3>
+            <span className="badge badge-xs badge-ghost ml-auto">Phase 5</span>
+          </div>
+          <EvolutionPanel />
+        </div>
       </div>
     </div>
   );
