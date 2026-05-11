@@ -703,19 +703,6 @@ export async function POST(request) {
       strategy_signals: strategySignalsResponse,
       risk_analysis: riskAnalysisResponse,
       kelly_sizing: kellySizingResponse,
-      tda_analysis: Object.fromEntries(
-        symbols.map((sym) => [
-          sym,
-          {
-            anomaly_score: tdaResults[sym]?.anomaly_score ?? null,
-            regime_change_probability: tdaResults[sym]?.regime_change_probability ?? null,
-            betti_0: tdaResults[sym]?.betti_0 ?? null,
-            betti_1: tdaResults[sym]?.betti_1 ?? null,
-            total_entropy: tdaResults[sym]?.total_entropy ?? null,
-            source: tdaResults[sym]?.source || "unknown",
-          },
-        ])
-      ),
       strategy_explanation: `Portfolio is in ${corrRegime} correlation regime with ${(corrConfidence * 100).toFixed(0)}% confidence. Strategy signals: ${longCount} long, ${shortCount} short, ${flatCount} flat. ${highRiskCount > 0 ? `${highRiskCount} symbols have elevated risk (>70%).` : "All symbols within normal risk bounds."} ${fastApiAvailable ? "HMM-regime-aware" : "Statistical"} strategy signals and Kelly position sizing used. Sells prioritized to free buying power before placing buy orders.`,
       strategy: `${corrRegime} regime detected — ${longCount > shortCount ? "bullish bias" : shortCount > longCount ? "bearish bias" : "neutral stance"} with Kelly-adjusted position sizing. Reducing concentration risk by selling overweight positions first, then reallocating to underweight assets.`,
       recommendations,

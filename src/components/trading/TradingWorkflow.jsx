@@ -544,6 +544,40 @@ function AnalysisSummary({ data }) {
         </div>
       )}
 
+      {/* Kelly Position Sizing */}
+      {kellySizing && Object.keys(kellySizing).length > 0 && (
+        <div className="card bg-base-200 shadow-lg">
+          <div className="card-body p-4">
+            <div className="flex items-center gap-2 mb-3">
+              <div className="w-8 h-8 rounded-lg bg-secondary/15 flex items-center justify-center">
+                <IconChart size={16} className="text-secondary" />
+              </div>
+              <h3 className="font-semibold text-sm">Kelly Position Sizing</h3>
+            </div>
+            <div className="space-y-2">
+              {Object.entries(kellySizing).map(([symbol, data]) => {
+                const fraction = typeof data.kelly_fraction === 'number' ? data.kelly_fraction : (typeof data.kellyFraction === 'number' ? data.kellyFraction : 0)
+                const size = typeof data.position_size === 'number' ? data.position_size : (typeof data.kellySize === 'number' ? data.kellySize : 0)
+                return (
+                  <div key={symbol} className="flex items-center gap-3 bg-base-300/30 rounded-lg px-3 py-2">
+                    <span className="font-mono text-sm font-medium w-20 truncate">{symbol}</span>
+                    <div className="flex-1 bg-base-300 rounded-full h-2 overflow-hidden">
+                      <div
+                        className="bg-secondary h-full rounded-full transition-all duration-700"
+                        style={{ width: `${Math.min(fraction * 100 * 4, 100)}%` }}
+                      />
+                    </div>
+                    <span className="font-mono text-xs w-20 text-right">
+                      {(fraction * 100).toFixed(1)}% / {typeof size === 'number' ? `$${size.toLocaleString(undefined, { maximumFractionDigits: 0 })}` : '---'}
+                    </span>
+                  </div>
+                )
+              })}
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Risk Analysis */}
       {riskAnalysis && Object.keys(riskAnalysis).length > 0 && (
         <div className="card bg-base-200 shadow-lg">
@@ -1220,7 +1254,8 @@ function TradingWorkflowInner() {
 
   // Simulate step progression during analysis
   const simulateAnalysisSteps = useCallback(() => {
-    const delays = [600, 1200, 1500, 1200, 2000, 1500, 1800, 1000]
+
+const delays = [600, 1200, 1500, 1200, 2000, 1500, 1800, 1000]
     let currentDelay = 0
 
     ANALYZE_STEPS.forEach((step, idx) => {
