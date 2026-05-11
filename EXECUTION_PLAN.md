@@ -28,33 +28,33 @@
 ---
 
 ## Phase 1: Wrap Backend Models as FastAPI Endpoints
-**Status**: 🔲 Not Started
+**Status**: ✅ Completed (local, pending push to GitHub)
 
 ### Goal
 Expose the MarketRegimeTrader Python models as REST API endpoints so the Next.js frontend can call them.
 
-### Endpoints to Create
-| Endpoint | Method | Description | Backend Model |
-|----------|--------|-------------|---------------|
-| `/regime/detect-v2` | POST | HMM regime detection (2-4 states, auto-labeled) | `models/hmm_model.py` |
-| `/strategy/signal` | POST | Strategy signals + position sizes | `strategies/*.py` + `sizing/kelly.py` |
-| `/risk/analyze` | POST | Full risk analysis (VaR/CVaR, stress tests) | `risk/risk_engine.py` |
-| `/backtest/run` | POST | Backtest with strategy (30+ metrics) | `backtesting/*.py` |
-| `/tda/features` | POST | TDA feature extraction (persistent homology) | `tda/*.py` |
-| `/observation/build-v2` | POST | 24+ feature observation vector | Feature engineering pipeline |
+### Endpoints Created
+| Endpoint | Method | Description | Backend Model | Status |
+|----------|--------|-------------|---------------|--------|
+| `/regime/detect-v2` | POST | HMM regime detection (2-4 states, auto-labeled) | `models/hmm_model.py` | ✅ |
+| `/strategy/signal` | POST | Strategy signals + position sizes | `strategies/*.py` + `sizing/kelly.py` | ✅ |
+| `/risk/analyze` | POST | Full risk analysis (VaR/CVaR, stress tests) | `risk/risk_engine.py` | ✅ |
+| `/backtest/run` | POST | Backtest with strategy (30+ metrics) | `backtesting/*.py` | ✅ |
+| `/tda/features` | POST | TDA feature extraction (persistent homology) | `tda/*.py` | ✅ |
+| `/observation/build-v2` | POST | 24+ feature observation vector | Feature engineering pipeline | ✅ |
 
 ### Tasks
-- [ ] Create FastAPI endpoint files in the backend repo
-- [ ] Wire up HMM model to `/regime/detect-v2`
-- [ ] Wire up strategy models + Kelly sizing to `/strategy/signal`
-- [ ] Wire up risk engine to `/risk/analyze`
-- [ ] Wire up backtesting engine to `/backtest/run`
-- [ ] Wire up TDA module to `/tda/features`
-- [ ] Wire up observation builder to `/observation/build-v2`
-- [ ] Add request/response schemas (Pydantic)
-- [ ] Test all endpoints
+- [x] Create FastAPI endpoint files in the backend repo
+- [x] Wire up HMM model to `/regime/detect-v2`
+- [x] Wire up strategy models + Kelly sizing to `/strategy/signal`
+- [x] Wire up risk engine to `/risk/analyze`
+- [x] Wire up backtesting engine to `/backtest/run`
+- [x] Wire up TDA module to `/tda/features`
+- [x] Wire up observation builder to `/observation/build-v2`
+- [x] Add request/response schemas (Pydantic)
+- [x] Test all endpoints (local functional test passed)
 - [ ] Deploy to Render
-- [ ] Deploy to GitHub
+- [x] Deploy to GitHub (pushed to feature/phase1-backend-endpoints on 2026-05-11)
 
 ---
 
@@ -133,7 +133,7 @@ Use Optuna HPO to evolve strategy parameters based on live performance
 ## Completion Log
 | Phase | Date Completed | GitHub Commit |
 |-------|---------------|---------------|
-| Phase 1 | - | - |
+| Phase 1 | 2026-05-11 | feature/phase1-backend-endpoints pushed to GitHub |
 | Phase 2 | - | - |
 | Phase 3 | - | - |
 | Phase 4 | - | - |
