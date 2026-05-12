@@ -105,15 +105,14 @@ export default function ObservationFeatures({ data, symbol, period }) {
   }
 
   return (
-    <div className="card bg-base-100 shadow-xl">
-      <div className="card-body">
-        <h2 className="card-title">
-          Observation Features
-          <span className="badge badge-ghost badge-sm">24-dim</span>
-          {displayFullVector && (
-            <span className="badge badge-success badge-sm">Live</span>
-          )}
-        </h2>
+    <div className="space-y-2">
+      <div className="flex items-center gap-2">
+        <h3 className="font-semibold text-sm">Observation Features</h3>
+        <span className="badge badge-ghost badge-xs">24-dim</span>
+        {displayFullVector && (
+          <span className="badge badge-success badge-xs">Live</span>
+        )}
+      </div>
 
         {/* Loading state */}
         {loading && (
@@ -304,7 +303,6 @@ export default function ObservationFeatures({ data, symbol, period }) {
             </p>
           )}
         </Section>
-      </div>
     </div>
   )
 }

@@ -82,6 +82,11 @@ function CommentaryCardWrapper({ symbol, regime, sizing, risk }) {
   return <CommentaryCard commentary={commentary} loading={false} />;
 }
 
+/**
+ * Accordion name must be unique per TickerCard instance so
+ * multiple TickerCards on the same page don't interfere.
+ * We use the symbol as the accordion namespace.
+ */
 export default function TickerCard({
   symbol,
   displayName,
@@ -90,18 +95,6 @@ export default function TickerCard({
   error,
   onRetry,
 }) {
-  const [openSections, setOpenSections] = useState({
-    regime: true,
-    hmm: false,
-    risk: false,
-    recommendations: false,
-    commentary: false,
-  });
-
-  const toggleSection = (key) => {
-    setOpenSections((prev) => ({ ...prev, [key]: !prev[key] }));
-  };
-
   if (loading) {
     return <LoadingSkeleton type="card" />;
   }
@@ -129,7 +122,6 @@ export default function TickerCard({
   const risk = analysis.risk || {};
   const prices = data.prices || [];
   const dates = data.dates || [];
-  const features = analysis.observation_features || analysis.features || null;
 
   // Calculate current price and return
   const lastPrice = prices.length > 0 ? prices[prices.length - 1] : null;
@@ -137,6 +129,9 @@ export default function TickerCard({
   const totalReturn =
     firstPrice && lastPrice ? (lastPrice - firstPrice) / firstPrice : null;
   const isPositiveReturn = totalReturn != null && totalReturn >= 0;
+
+  // Unique accordion name per symbol so cards don't conflict
+  const accName = `ticker-acc-${symbol}`;
 
   return (
     <div className="card bg-base-200 shadow-xl">
@@ -168,12 +163,17 @@ export default function TickerCard({
           regimeLabel={regime.regime_label}
         />
 
-        {/* Collapsible: Regime State (default open) */}
+        {/* ═══════════════════════════════════════════
+            DaisyUI Accordion — radio inputs with same
+            name so only one section open at a time.
+            ═══════════════════════════════════════════ */}
+
+        {/* Regime State — default open */}
         <div className="collapse collapse-arrow bg-base-300 rounded-lg">
           <input
-            type="checkbox"
-            checked={openSections.regime}
-            onChange={() => toggleSection("regime")}
+            type="radio"
+            name={accName}
+            defaultChecked
           />
           <div className="collapse-title text-sm font-semibold">
             🏛️ Regime State
@@ -183,12 +183,11 @@ export default function TickerCard({
           </div>
         </div>
 
-        {/* Collapsible: HMM Features */}
+        {/* HMM Features */}
         <div className="collapse collapse-arrow bg-base-300 rounded-lg">
           <input
-            type="checkbox"
-            checked={openSections.hmm}
-            onChange={() => toggleSection("hmm")}
+            type="radio"
+            name={accName}
           />
           <div className="collapse-title text-sm font-semibold">
             🔬 HMM Features
@@ -198,12 +197,11 @@ export default function TickerCard({
           </div>
         </div>
 
-        {/* Collapsible: Risk Metrics */}
+        {/* Risk Metrics */}
         <div className="collapse collapse-arrow bg-base-300 rounded-lg">
           <input
-            type="checkbox"
-            checked={openSections.risk}
-            onChange={() => toggleSection("risk")}
+            type="radio"
+            name={accName}
           />
           <div className="collapse-title text-sm font-semibold">
             ⚠️ Risk Metrics
@@ -213,12 +211,11 @@ export default function TickerCard({
           </div>
         </div>
 
-        {/* Collapsible: Recommendations */}
+        {/* Recommendations */}
         <div className="collapse collapse-arrow bg-base-300 rounded-lg">
           <input
-            type="checkbox"
-            checked={openSections.recommendations}
-            onChange={() => toggleSection("recommendations")}
+            type="radio"
+            name={accName}
           />
           <div className="collapse-title text-sm font-semibold">
             💡 Recommendations
@@ -228,12 +225,11 @@ export default function TickerCard({
           </div>
         </div>
 
-        {/* Collapsible: AI Commentary */}
+        {/* AI Commentary */}
         <div className="collapse collapse-arrow bg-base-300 rounded-lg">
           <input
-            type="checkbox"
-            checked={openSections.commentary}
-            onChange={() => toggleSection("commentary")}
+            type="radio"
+            name={accName}
           />
           <div className="collapse-title text-sm font-semibold">
             🤖 AI Commentary
