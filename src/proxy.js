@@ -1,9 +1,40 @@
-// Next.js v16 looks for proxy.js at the same level as app/ (i.e., src/)
-// when using src/app/ directory structure. This file re-exports from the
-// root proxy.js so that clerkMiddleware is properly registered.
-// See: https://nextjs.org/docs/app/api-reference/file-conventions/proxy
-import proxyFn, { config } from "../proxy.js";
+import { clerkMiddleware, createRouteMatcher } from "@clerk/nextjs/server";
 
-export default proxyFn;
-export { proxyFn as proxy };
-export { config };
+const isPublicRoute = createRouteMatcher([
+  "/",
+  "/sign-in(.*)",
+  "/sign-up(.*)",
+  "/api/health(.*)",
+  "/api/auth/(.*)",
+  "/api/trading/(.*)",
+  "/api/alpaca/(.*)",
+  "/api/portfolio/(.*)",
+  "/api/telegram/(.*)",
+  "/api/tda/(.*)",
+  "/api/evolution/(.*)",
+  "/api/simulate(.*)",
+  "/api/cron/(.*)",
+  "/api/clerk/(.*)",
+  "/api/commentary(.*)",
+  "/api/correlation/(.*)",
+  "/api/googl-fill(.*)",
+  "/api/observation/(.*)",
+  "/api/optimise/(.*)",
+  "/api/prices(.*)",
+  "/api/stream/(.*)",
+  "/api/analyse(.*)",
+  "/index.html",
+]);
+
+export default clerkMiddleware(async (auth, request) => {
+  if (!isPublicRoute(request)) {
+    await auth.protect();
+  }
+});
+
+export const config = {
+  matcher: [
+    "/((?!_next|[^?]*\\.(?:html?|css|js(?!on)|jpe?g|webp|png|gif|svg|ttf|woff2?|ico|csv|docx?|xlsx?|zip|webmanifest)).*)",
+    "/(api|trpc)(.*)",
+  ],
+};
