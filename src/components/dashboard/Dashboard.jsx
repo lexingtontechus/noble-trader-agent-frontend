@@ -357,14 +357,10 @@ export default function Dashboard() {
         ))}
       </div>
 
-      {/* Streaming Status + Alerts */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        <div className="col-span-1">
-          <StreamStatusPanel />
-        </div>
-        <div className="col-span-1">
-          <AlertHistory />
-        </div>
+      {/* Streaming Status + Alerts — equal-height cards */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 items-stretch">
+        <StreamStatusPanel />
+        <AlertHistory />
       </div>
 
       {/* Strategy Evolution Panel */}

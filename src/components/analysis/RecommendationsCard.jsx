@@ -39,102 +39,99 @@ export default function RecommendationsCard({ data }) {
   const allNotes = [...sizingNotes, ...riskNotes]
 
   return (
-    <div className="card bg-base-100 shadow-xl">
-      <div className="card-body">
-        <h2 className="card-title">
-          Recommendations
-          <span className={`badge ${actionClass} badge-lg`}>{actionLabel}</span>
-        </h2>
+    <div className="space-y-3">
+      {/* Header */}
+      <div className="flex items-center gap-2">
+        <h3 className="font-semibold text-sm">Recommendations</h3>
+        <span className={`badge ${actionClass} badge-sm`}>{actionLabel}</span>
+      </div>
 
-        {/* Position Size */}
-        <div className="stats shadow mt-2">
-          <div className="stat">
-            <div className="stat-title">Recommended Position Size</div>
-            <div className="stat-value text-primary text-3xl">{recommendedF}%</div>
-            <div className="stat-desc">Regime-gated fractional Kelly</div>
-          </div>
+      {/* Position Size — compact inline */}
+      <div className="bg-base-200 rounded-lg px-3 py-2">
+        <div className="text-xs text-base-content/60">Recommended Position Size</div>
+        <div className="text-primary text-2xl font-bold font-mono">{recommendedF}%</div>
+        <div className="text-xs text-base-content/50">Regime-gated fractional Kelly</div>
+      </div>
+
+      {/* Stop / TP levels — horizontal row */}
+      {(stop != null || tp != null) && (
+        <div className="grid grid-cols-2 gap-2">
+          {stop != null && (
+            <div className="bg-base-200 rounded-lg px-3 py-2">
+              <div className="text-xs text-base-content/60">Suggested Stop</div>
+              <div className="text-warning text-lg font-bold font-mono">
+                {typeof stop === 'number' ? stop.toFixed(4) : stop}
+              </div>
+            </div>
+          )}
+          {tp != null && (
+            <div className="bg-base-200 rounded-lg px-3 py-2">
+              <div className="text-xs text-base-content/60">Take-Profit</div>
+              <div className="text-success text-lg font-bold font-mono">
+                {typeof tp === 'number' ? tp.toFixed(4) : tp}
+              </div>
+            </div>
+          )}
         </div>
+      )}
 
-        {/* Stop / TP levels */}
-        {(stop != null || tp != null) && (
-          <div className="stats stats-vertical shadow mt-4">
-            {stop != null && (
-              <div className="stat">
-                <div className="stat-title">Suggested Stop</div>
-                <div className="stat-value text-warning text-xl">
-                  {typeof stop === 'number' ? stop.toFixed(4) : stop}
-                </div>
-              </div>
-            )}
-            {tp != null && (
-              <div className="stat">
-                <div className="stat-title">Suggested Take-Profit</div>
-                <div className="stat-value text-success text-xl">
-                  {typeof tp === 'number' ? tp.toFixed(4) : tp}
-                </div>
-              </div>
-            )}
-          </div>
-        )}
+      {/* Kelly Breakdown Steps — horizontal compact */}
+      <div>
+        <div className="text-xs font-medium mb-2 text-base-content/70">Kelly Sizing Pipeline</div>
+        <ul className="steps steps-horizontal text-xs w-full">
+          <li className="step" data-content="">
+            <span className="font-mono text-xs">{fullKelly}%</span>
+            <br />
+            <span className="opacity-60">Full</span>
+          </li>
+          <li className="step" data-content="">
+            <span className="font-mono text-xs">{fractional}%</span>
+            <br />
+            <span className="opacity-60">Frac</span>
+          </li>
+          <li className="step" data-content="">
+            <span className="font-mono text-xs">{volScaled}%</span>
+            <br />
+            <span className="opacity-60">Vol</span>
+          </li>
+          <li className="step" data-content="">
+            <span className="font-mono text-xs">{regimeGated}%</span>
+            <br />
+            <span className="opacity-60">Gate</span>
+          </li>
+          <li className="step step-primary" data-content="">
+            <span className="font-mono text-xs">{recommended}%</span>
+            <br />
+            <span className="opacity-60">Final</span>
+          </li>
+        </ul>
+      </div>
 
-        {/* Kelly Breakdown Steps */}
-        <div className="mt-4">
-          <h3 className="text-sm font-medium mb-3">Kelly Sizing Pipeline</h3>
-          <ul className="steps steps-vertical text-xs w-full">
-            <li className="step" data-content="">
-              <span className="font-mono">{fullKelly}%</span>
-              <br />
-              <span className="opacity-60">Full Kelly</span>
-            </li>
-            <li className="step" data-content="">
-              <span className="font-mono">{fractional}%</span>
-              <br />
-              <span className="opacity-60">Fractional</span>
-            </li>
-            <li className="step" data-content="">
-              <span className="font-mono">{volScaled}%</span>
-              <br />
-              <span className="opacity-60">Vol-Scaled</span>
-            </li>
-            <li className="step" data-content="">
-              <span className="font-mono">{regimeGated}%</span>
-              <br />
-              <span className="opacity-60">Regime-Gated</span>
-            </li>
-            <li className="step step-primary" data-content="">
-              <span className="font-mono">{recommended}%</span>
-              <br />
-              <span className="opacity-60">Recommended</span>
-            </li>
+      {/* Sharpe Ratio — inline compact */}
+      <div className="bg-base-200 rounded-lg px-3 py-2 flex items-center justify-between">
+        <div>
+          <div className="text-xs text-base-content/60">Sharpe Ratio</div>
+          <div className="text-accent font-bold font-mono">{sharpe}</div>
+        </div>
+        <div className="text-xs text-base-content/50 text-right">
+          {sharpe === 'N/A' ? 'Insufficient data' :
+            parseFloat(sharpe) > 1.0 ? 'Strong risk-adjusted' :
+            parseFloat(sharpe) > 0.5 ? 'Moderate' :
+            'Below target'}
+        </div>
+      </div>
+
+      {/* Notes — compact */}
+      {allNotes.length > 0 && (
+        <div>
+          <div className="text-xs font-medium mb-1 text-base-content/70">Notes</div>
+          <ul className="list list-disc text-xs opacity-70">
+            {allNotes.map((note, i) => (
+              <li key={i} className="list-item ml-4">{note}</li>
+            ))}
           </ul>
         </div>
-
-        {/* Sharpe Ratio */}
-        <div className="stats shadow mt-4">
-          <div className="stat">
-            <div className="stat-title">Sharpe Ratio</div>
-            <div className="stat-value text-accent">{sharpe}</div>
-            <div className="stat-desc">
-              {sharpe === 'N/A' ? 'Insufficient data' :
-                parseFloat(sharpe) > 1.0 ? 'Strong risk-adjusted return' :
-                parseFloat(sharpe) > 0.5 ? 'Moderate risk-adjusted return' :
-                'Below target risk-adjusted return'}
-            </div>
-          </div>
-        </div>
-
-        {/* Notes */}
-        {allNotes.length > 0 && (
-          <div className="mt-4">
-            <h3 className="text-sm font-medium mb-2">Notes</h3>
-            <ul className="list list-disc text-xs opacity-70">
-              {allNotes.map((note, i) => (
-                <li key={i} className="list-item ml-4">{note}</li>
-              ))}
-            </ul>
-          </div>
-        )}
-      </div>
+      )}
     </div>
   )
 }

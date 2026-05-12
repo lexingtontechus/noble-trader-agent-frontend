@@ -16,8 +16,8 @@ export default function StreamStatusPanel() {
   const hasSubscriptions = subscriptions.size > 0;
 
   return (
-    <div className="card bg-base-200 shadow-xl">
-      <div className="card-body p-4">
+    <div className="card bg-base-200 shadow-xl h-full">
+      <div className="card-body p-4 flex flex-col">
         <div className="flex items-center justify-between mb-3">
           <h3 className="card-title text-sm">
             📡 Active Streams
