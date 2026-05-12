@@ -1438,7 +1438,8 @@ const delays = [600, 1200, 1500, 1200, 2000, 1500, 1800, 1000]
 
   // Phase 3: Execute approved trades one-by-one with real-time progress
   const handleExecute = useCallback(async () => {
-    setShowExecuteConfirm(false)
+    // Note: setShowExecuteConfirm(false) is called by the button before this function
+    // via setTimeout to ensure the modal closes before execution starts
     setPhase('executing')
 
     const approvedTrades = recommendations.filter(r => {
@@ -1452,6 +1453,20 @@ const delays = [600, 1200, 1500, 1200, 2000, 1500, 1800, 1000]
       const bPrio = b.priority ?? (b.side === 'sell' ? 0 : 50)
       return aPrio - bPrio
     })
+
+    // Edge case: no approved trades found
+    if (sorted.length === 0) {
+      setExecutionResults({
+        total: 0,
+        filled: 0,
+        failed: 0,
+        deferred: 0,
+        results: [],
+        summary: 'No approved trades to execute',
+      })
+      setPhase('done')
+      return
+    }
 
     // Initialize all as pending
     const initProgress = {}
@@ -1574,6 +1589,7 @@ const delays = [600, 1200, 1500, 1200, 2000, 1500, 1800, 1000]
       setDeferredOrders(newDeferred)
       setPhase('done')
     } catch (err) {
+      console.error('Execution error:', err)
       setError(err.message || 'Network error during execution')
       setPhase('review')
     }
@@ -2142,7 +2158,7 @@ const delays = [600, 1200, 1500, 1200, 2000, 1500, 1800, 1000]
           Execute Confirmation Dialog
           ═══════════════════════════════════════════ */}
       {showExecuteConfirm && (
-        <div className="modal modal-open">
+        <div className="modal modal-open" style={{ zIndex: 9999 }}>
           <div className="modal-box">
             <h3 className="font-bold text-lg flex items-center gap-2">
               <IconAlertTriangle size={22} className="text-warning" />
@@ -2183,7 +2199,11 @@ const delays = [600, 1200, 1500, 1200, 2000, 1500, 1800, 1000]
               </button>
               <button
                 className="btn btn-primary btn-sm gap-1"
-                onClick={handleExecute}
+                onClick={() => {
+                  setShowExecuteConfirm(false)
+                  // Defer execution to next tick so modal closes first
+                  setTimeout(() => handleExecute(), 0)
+                }}
               >
                 <IconPlay size={14} /> Execute {approvedCount} Trade{approvedCount !== 1 ? 's' : ''}
               </button>
