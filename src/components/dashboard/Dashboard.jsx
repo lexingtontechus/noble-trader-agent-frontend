@@ -13,9 +13,9 @@ import dynamic from 'next/dynamic'
 const EvolutionPanel = dynamic(() => import('@/components/evolution/EvolutionPanel'), { ssr: false })
 
 const DEFAULT_TICKERS = [
-  { symbol: "GC=F", displayName: "Gold" },
-  { symbol: "BTC-USD", displayName: "Bitcoin" },
-  { symbol: "EURUSD=X", displayName: "USD/EUR" },
+  { symbol: "GC=F", displayName: "Gold", icon: "🥇" },
+  { symbol: "BTC-USD", displayName: "Bitcoin", icon: "₿" },
+  { symbol: "EURUSD=X", displayName: "USD/EUR", icon: "💱" },
 ];
 
 const PERIOD_MAP = {
@@ -38,6 +38,7 @@ export default function Dashboard() {
   const [loading, setLoading] = useState({});
   const [errors, setErrors] = useState({});
   const [showComparison, setShowComparison] = useState(false);
+  const [activeTab, setActiveTab] = useState(DEFAULT_TICKERS[0].symbol);
   const intervalRef = useRef(null);
   const periodDebounceRef = useRef(null);
   const initialLoadDone = useRef(false);
@@ -153,6 +154,9 @@ export default function Dashboard() {
   const allLoaded = DEFAULT_TICKERS.every((t) => tickerData[t.symbol]);
   const hasSubscriptions = subscriptions.size > 0;
 
+  // Active ticker info
+  const activeTicker = DEFAULT_TICKERS.find((t) => t.symbol === activeTab);
+
   return (
     <div className="space-y-6">
       {/* Streaming Control Bar — prominent at top */}
@@ -182,20 +186,6 @@ export default function Dashboard() {
           </div>
         </div>
       </div>
-
-      {/* Global Error Banner — when ALL tickers fail */}
-      {Object.values(errors).filter(Boolean).length === DEFAULT_TICKERS.length && (
-        <div className="alert alert-error">
-          <svg xmlns="http://www.w3.org/2000/svg" className="stroke-current shrink-0 h-6 w-6" fill="none" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M10 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2m7-2a9 9 0 11-18 0 9 9 0 0118 0z" />
-          </svg>
-          <div>
-            <div className="font-medium">Backend appears offline</div>
-            <div className="text-xs opacity-70">All ticker fetches failed. The analysis backend may be experiencing issues.</div>
-          </div>
-          <button className="btn btn-sm btn-ghost" onClick={fetchAllTickers}>Retry All</button>
-        </div>
-      )}
 
       {/* Controls Row */}
       <div className="flex flex-wrap items-center justify-between gap-4">
@@ -251,6 +241,18 @@ export default function Dashboard() {
             )}
           </button>
 
+          {/* Last Updated */}
+          {lastUpdated && (
+            <span className="text-xs text-base-content/40">
+              {lastUpdated.toLocaleTimeString()}
+              {autoRefresh && (
+                <span className="ml-1 badge badge-xs badge-primary badge-outline">
+                  auto 5m
+                </span>
+              )}
+            </span>
+          )}
+
           {/* Comparison toggle */}
           {allLoaded && (
             <button
@@ -263,19 +265,21 @@ export default function Dashboard() {
         </div>
       </div>
 
-      {/* Last Updated */}
-      {lastUpdated && (
-        <div className="text-xs text-base-content/40">
-          Last updated: {lastUpdated.toLocaleTimeString()}
-          {autoRefresh && (
-            <span className="ml-2 badge badge-xs badge-primary badge-outline">
-              auto 5m
-            </span>
-          )}
+      {/* Global Error Banner — when ALL tickers fail */}
+      {Object.values(errors).filter(Boolean).length === DEFAULT_TICKERS.length && (
+        <div className="alert alert-error">
+          <svg xmlns="http://www.w3.org/2000/svg" className="stroke-current shrink-0 h-6 w-6" fill="none" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M10 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2m7-2a9 9 0 11-18 0 9 9 0 0118 0z" />
+          </svg>
+          <div>
+            <div className="font-medium">Backend appears offline</div>
+            <div className="text-xs opacity-70">All ticker fetches failed. The analysis backend may be experiencing issues.</div>
+          </div>
+          <button className="btn btn-sm btn-ghost" onClick={fetchAllTickers}>Retry All</button>
         </div>
       )}
 
-      {/* Regime Summary Banner */}
+      {/* Regime Summary Banner — compact at-a-glance for all tickers */}
       <RegimeSummaryBanner tickers={tickerObjects} />
 
       {/* Comparison Table */}
@@ -288,30 +292,79 @@ export default function Dashboard() {
         </div>
       )}
 
+      {/* ═══════════════════════════════════════════
+          Ticker Tab Layout — DaisyUI tabs
+          One ticker at a time, full-width content.
+          Each tab shows a compact status indicator
+          (regime badge or loading/error state).
+          ═══════════════════════════════════════════ */}
+      <div role="tablist" className="tabs tabs-bordered tabs-lg">
+        {DEFAULT_TICKERS.map((t) => {
+          const isLoading = loading[t.symbol];
+          const hasError = errors[t.symbol];
+          const data = tickerData[t.symbol];
+          const regimeLabel = data?.analysis?.regime?.regime_label;
+          const isActive = activeTab === t.symbol;
+
+          return (
+            <button
+              key={t.symbol}
+              role="tab"
+              className={`tab ${isActive ? "tab-active" : ""}`}
+              onClick={() => setActiveTab(t.symbol)}
+            >
+              <span className="flex items-center gap-2">
+                <span>{t.icon}</span>
+                <span className="font-semibold">{t.displayName}</span>
+                {isLoading && (
+                  <span className="loading loading-spinner loading-xs text-primary" />
+                )}
+                {!isLoading && hasError && (
+                  <span className="badge badge-xs badge-error">!</span>
+                )}
+                {!isLoading && !hasError && regimeLabel && (
+                  <span className={`badge badge-xs ${
+                    regimeLabel.toLowerCase().includes("bull") ? "badge-success" :
+                    regimeLabel.toLowerCase().includes("bear") ? "badge-error" :
+                    "badge-warning"
+                  }`}>
+                    {regimeLabel}
+                  </span>
+                )}
+              </span>
+            </button>
+          );
+        })}
+      </div>
+
+      {/* Tab Content — only the active ticker */}
+      <div className="min-h-[400px]">
+        {DEFAULT_TICKERS.map((t) => (
+          <div
+            key={t.symbol}
+            role="tabpanel"
+            className={activeTab === t.symbol ? "" : "hidden"}
+          >
+            <TickerCard
+              symbol={t.symbol}
+              displayName={t.displayName}
+              data={tickerData[t.symbol] || null}
+              loading={loading[t.symbol] || false}
+              error={errors[t.symbol] || null}
+              onRetry={() => handleRetry(t.symbol)}
+            />
+          </div>
+        ))}
+      </div>
+
       {/* Streaming Status + Alerts */}
-      <div className="grid grid-cols-2 lg:grid-cols-2 gap-6">
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         <div className="col-span-1">
           <StreamStatusPanel />
         </div>
         <div className="col-span-1">
           <AlertHistory />
         </div>
-      </div>
-
-      {/* Ticker Cards Grid */}
-      <div className="flex flex-wrap gap-2">
-        {/*grid grid-cols-1 lg:grid-cols-3 gap-6">*/}
-        {DEFAULT_TICKERS.map((t) => (
-          <TickerCard
-            key={t.symbol}
-            symbol={t.symbol}
-            displayName={t.displayName}
-            data={tickerData[t.symbol] || null}
-            loading={loading[t.symbol] || false}
-            error={errors[t.symbol] || null}
-            onRetry={() => handleRetry(t.symbol)}
-          />
-        ))}
       </div>
 
       {/* Strategy Evolution Panel */}
