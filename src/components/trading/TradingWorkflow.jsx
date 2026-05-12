@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useCallback, useEffect, useRef, Component } from 'react'
+import { useState, useCallback, useEffect, useRef, Component, createPortal } from 'react'
 import dynamic from 'next/dynamic'
 const EvolutionPanel = dynamic(() => import('@/components/evolution/EvolutionPanel'), { ssr: false })
 
@@ -1192,6 +1192,18 @@ function TradingWorkflowInner() {
   // Ref for simulating analysis steps
   const stepTimerRef = useRef(null)
 
+  // Ref for execute confirmation modal — scroll into view when opened
+  const executeModalRef = useRef(null)
+
+  // When execute confirm modal opens, scroll to top so the fixed-position modal is visible
+  useEffect(() => {
+    if (showExecuteConfirm) {
+      // DaisyUI modals use position:fixed but a CSS transform on an ancestor
+      // can break that. Scrolling to top ensures the modal is always visible.
+      window.scrollTo({ top: 0, behavior: 'smooth' })
+    }
+  }, [showExecuteConfirm])
+
   // Load latest analysis from DB on mount
   const [loadingLatest, setLoadingLatest] = useState(true)
 
@@ -2156,9 +2168,11 @@ const delays = [600, 1200, 1500, 1200, 2000, 1500, 1800, 1000]
 
       {/* ═══════════════════════════════════════════
           Execute Confirmation Dialog
+          Rendered via createPortal to <body> so ancestor
+          CSS transforms don't break position:fixed.
           ═══════════════════════════════════════════ */}
-      {showExecuteConfirm && (
-        <div className="modal modal-open" style={{ zIndex: 9999 }}>
+      {showExecuteConfirm && createPortal(
+        <div ref={executeModalRef} className="modal modal-open" style={{ zIndex: 9999 }}>
           <div className="modal-box">
             <h3 className="font-bold text-lg flex items-center gap-2">
               <IconAlertTriangle size={22} className="text-warning" />
@@ -2210,7 +2224,8 @@ const delays = [600, 1200, 1500, 1200, 2000, 1500, 1800, 1000]
             </div>
           </div>
           <div className="modal-backdrop" onClick={() => setShowExecuteConfirm(false)}></div>
-        </div>
+        </div>,
+        document.body
       )}
     </div>
   )

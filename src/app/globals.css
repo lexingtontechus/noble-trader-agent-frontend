@@ -54,14 +54,16 @@ body {
 }
 
 /* Fade-in animation for view transitions */
+/* NOTE: We intentionally do NOT use `transform` in this keyframe.
+   A persisted `transform` (even translateY(0)) breaks `position: fixed`
+   on descendant elements like DaisyUI modals, because any computed
+   transform value other than `none` creates a new containing block. */
 @keyframes fadeInUp {
   from {
     opacity: 0;
-    transform: translateY(8px);
   }
   to {
     opacity: 1;
-    transform: translateY(0);
   }
 }
 .animate-fade-in-up {
