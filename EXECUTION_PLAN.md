@@ -14,6 +14,9 @@
 - **Deploy to GitHub** when each phase is completed
 - **Wait for confirmation** before progressing to next phase
 - Use **feature branches** and merge via PRs
+- **Always** use **DaisyUI** for all UX components and design
+- **Always** use **Supabase** for all database requirements — do NOT use Prisma
+- **Clerk `private.metadata`** stores the user's Alpaca Keys
 
 ## Key References
 - **FastAPI Backend**: `https://noble-trader-fastapi-backend.onrender.com` (free plan, cold start ~30s)
@@ -28,6 +31,7 @@
   - Cron: pg_cron + pg_net for scheduled jobs
   - Tables: `ta_*` prefix (created via migration SQL)
 - **Telegram Bot Token**: configured in .env.local
+- **Yahoo Finance & Alpaca symbols are different** — Alpaca does NOT support FOREX or GOLD
 
 ## Environment Variables (Required)
 | Variable | Purpose |
