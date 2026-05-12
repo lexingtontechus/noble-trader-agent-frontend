@@ -1324,11 +1324,16 @@ const delays = [600, 1200, 1500, 1200, 2000, 1500, 1800, 1000]
     // Mark as validating in local state
     setValidatingTrades(prev => ({ ...prev, [tradeId]: 'validating' }))
 
-    // Call the validate endpoint
+    // Find the trade in recommendations to get symbol/side for fallback
+    const trade = recommendations.find(t => (t.id || t.symbol) === tradeId)
+    const symbol = trade?.symbol
+    const side = trade?.side || trade?.action
+
+    // Call the validate endpoint — send symbol/side as fallback in case DB id lookup fails
     fetch('/api/trading/validate', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ tradeId }),
+      body: JSON.stringify({ tradeId, symbol, side }),
     })
       .then(res => res.json())
       .then(result => {
@@ -1352,16 +1357,20 @@ const delays = [600, 1200, 1500, 1200, 2000, 1500, 1800, 1000]
         console.error('Validation failed:', err)
         setValidatingTrades(prev => ({ ...prev, [tradeId]: 'error' }))
       })
-  }, [])
+  }, [recommendations])
 
   // Approve a single trade (Phase 3: auto-validate first)
   const handleApprove = useCallback((tradeId) => {
     setApprovals(prev => ({ ...prev, [tradeId]: true }))
+    // Find the trade in recommendations to get symbol/side for fallback
+    const trade = recommendations.find(t => (t.id || t.symbol) === tradeId)
+    const symbol = trade?.symbol
+    const side = trade?.side || trade?.action
     // Also persist to backend — the approve route will auto-validate if needed (fire and forget)
     fetch('/api/trading/approve', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ tradeId, action: 'approve' }),
+      body: JSON.stringify({ tradeId, action: 'approve', symbol, side }),
     })
       .then(res => res.json())
       .then(result => {
@@ -1384,18 +1393,22 @@ const delays = [600, 1200, 1500, 1200, 2000, 1500, 1800, 1000]
         }
       })
       .catch(() => {})
-  }, [])
+  }, [recommendations])
 
   // Block a single trade
   const handleBlock = useCallback((tradeId) => {
     setApprovals(prev => ({ ...prev, [tradeId]: false }))
+    // Find the trade in recommendations to get symbol/side for fallback
+    const trade = recommendations.find(t => (t.id || t.symbol) === tradeId)
+    const symbol = trade?.symbol
+    const side = trade?.side || trade?.action
     // Also persist to backend (fire and forget)
     fetch('/api/trading/approve', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ tradeId, action: 'block' }),
+      body: JSON.stringify({ tradeId, action: 'block', symbol, side }),
     }).catch(() => {})
-  }, [])
+  }, [recommendations])
 
   // Approve all
   const handleApproveAll = useCallback(() => {
@@ -1521,7 +1534,7 @@ const delays = [600, 1200, 1500, 1200, 2000, 1500, 1800, 1000]
               await fetch('/api/trading/approve', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ tradeId: id, action: 'executed', alpacaOrderId: result.id }),
+                body: JSON.stringify({ tradeId: id, action: 'executed', alpacaOrderId: result.id, symbol: trade.symbol, side: trade.side }),
               })
             } catch {
               // Non-fatal DB update

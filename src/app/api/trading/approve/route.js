@@ -1,16 +1,29 @@
 import { validateTrade } from "@/lib/trade-validation";
 
 /**
+ * Parse a synthetic trade id like "sell-AAPL-1778554793607" or "buy-DIA-1778554793607"
+ * Returns { side, symbol } or null if not parseable.
+ */
+function parseSyntheticTradeId(tradeId) {
+  if (!tradeId || typeof tradeId !== "string") return null;
+  const match = tradeId.match(/^(buy|sell|short)-([A-Z]+)-/i);
+  if (match) {
+    return { side: match[1].toLowerCase(), symbol: match[2].toUpperCase() };
+  }
+  return null;
+}
+
+/**
  * POST /api/trading/approve
- * Approve or block a trade recommendation.
+ * Approve, block, or mark-executed a trade recommendation.
  * Phase 3: When approving, auto-validate first (walk-forward backtest check).
  * DB-resilient: handles database unavailability gracefully.
- * Body: { tradeId: string, action: "approve" | "block" }
+ * Body: { tradeId: string, action: "approve" | "block" | "executed", symbol?, side?, alpacaOrderId? }
  */
 export async function POST(request) {
   try {
     const body = await request.json();
-    const { tradeId, action } = body;
+    const { tradeId, action, symbol, side, alpacaOrderId } = body;
 
     if (!tradeId || !action) {
       return Response.json(
@@ -19,9 +32,9 @@ export async function POST(request) {
       );
     }
 
-    if (!["approve", "block"].includes(action)) {
+    if (!["approve", "block", "executed"].includes(action)) {
       return Response.json(
-        { error: "action must be 'approve' or 'block'" },
+        { error: "action must be 'approve', 'block', or 'executed'" },
         { status: 400 }
       );
     }
@@ -34,16 +47,54 @@ export async function POST(request) {
       trade = await db.tradeRecommendation.findUnique({
         where: { id: tradeId },
       });
+
+      // If not found by primary id, try fallback by symbol + side
+      if (!trade) {
+        const parsed = parseSyntheticTradeId(tradeId);
+        const lookupSymbol = symbol || parsed?.symbol;
+        const lookupSide = side || parsed?.side;
+        if (lookupSymbol && lookupSide) {
+          console.warn("Trade not found by id:", tradeId, "— trying symbol+side fallback:", lookupSymbol, lookupSide);
+          const statusFilter = action === "executed" ? "approved" : "pending";
+          trade = await db.tradeRecommendation.findFirst({
+            where: { symbol: lookupSymbol, side: lookupSide, status: statusFilter },
+            orderBy: { createdAt: "desc" },
+          });
+        }
+      }
     } catch (dbErr) {
       console.error("Database lookup failed:", dbErr.message);
       dbAvailable = false;
     }
 
+    // Handle "executed" action — update with Alpaca order id
+    if (action === "executed") {
+      if (dbAvailable && trade) {
+        try {
+          const { db } = await import("@/lib/db");
+          await db.tradeRecommendation.update({
+            where: { id: trade.id },
+            data: {
+              status: "executing",
+              alpacaOrderId: alpacaOrderId || null,
+            },
+          });
+        } catch (dbErr) {
+          console.error("Failed to update trade to executing:", dbErr.message);
+        }
+      }
+      return Response.json({
+        id: trade?.id || tradeId,
+        status: "executing",
+        alpacaOrderId: alpacaOrderId || null,
+        db_warning: !trade ? "Trade not found in DB — execution status not persisted" : undefined,
+      });
+    }
+
     if (!trade && dbAvailable) {
-      return Response.json(
-        { error: "Trade recommendation not found", tradeId, action },
-        { status: 404 }
-      );
+      // Trade not found — return synthetic response instead of 404
+      // This allows the frontend flow to continue even if DB lookup fails
+      console.warn("Trade not found in DB for approve/block:", tradeId);
     }
 
     // Phase 3: Auto-validate on approve if not yet validated
@@ -52,14 +103,14 @@ export async function POST(request) {
       if (trade && !trade.validationStatus) {
         // Trade exists in DB but not yet validated
         try {
-          validationInfo = await validateTrade({ tradeId });
+          validationInfo = await validateTrade({ tradeId: trade.id, symbol: trade.symbol, side: trade.side });
         } catch (validateErr) {
           console.error("Auto-validation failed (non-blocking):", validateErr.message);
           if (dbAvailable) {
             try {
               const { db } = await import("@/lib/db");
               await db.tradeRecommendation.update({
-                where: { id: tradeId },
+                where: { id: trade.id },
                 data: {
                   validationStatus: "error",
                   validationDetails: JSON.stringify({ error: "Auto-validation call failed", message: validateErr.message }),
@@ -77,18 +128,23 @@ export async function POST(request) {
           details: trade.validationDetails ? JSON.parse(trade.validationDetails) : {},
           cached: true,
         };
-      } else if (!trade) {
-        // DB unavailable — try validation with just the tradeId (will use params if DB fails)
-        try {
-          validationInfo = await validateTrade({ tradeId });
-        } catch (validateErr) {
-          console.error("Auto-validation failed (DB unavailable):", validateErr.message);
-          validationInfo = {
-            passed: false,
-            score: 0,
-            details: { error: validateErr.message },
-            source: "error",
-          };
+      } else {
+        // Trade not in DB — try validation with symbol/side params
+        const parsed = parseSyntheticTradeId(tradeId);
+        const vSymbol = symbol || parsed?.symbol;
+        const vSide = side || parsed?.side;
+        if (vSymbol) {
+          try {
+            validationInfo = await validateTrade({ tradeId, symbol: vSymbol, side: vSide });
+          } catch (validateErr) {
+            console.error("Auto-validation failed (trade not in DB):", validateErr.message);
+            validationInfo = {
+              passed: false,
+              score: 0,
+              details: { error: validateErr.message },
+              source: "error",
+            };
+          }
         }
       }
     }
@@ -99,7 +155,7 @@ export async function POST(request) {
       try {
         const { db } = await import("@/lib/db");
         updated = await db.tradeRecommendation.update({
-          where: { id: tradeId },
+          where: { id: trade.id },
           data: { status: action === "approve" ? "approved" : "blocked" },
         });
       } catch (dbErr) {
@@ -107,12 +163,12 @@ export async function POST(request) {
       }
     }
 
-    // If DB is unavailable, return a synthetic response
+    // If DB update didn't happen, return a synthetic response
     if (!updated) {
       return Response.json({
         id: tradeId,
         status: action === "approve" ? "approved" : "blocked",
-        db_warning: dbAvailable ? "Trade not found" : "Database temporarily unavailable — status not persisted",
+        db_warning: dbAvailable ? "Trade not found in DB — status not persisted" : "Database temporarily unavailable — status not persisted",
         ...(validationInfo ? { validation: validationInfo } : {}),
       });
     }

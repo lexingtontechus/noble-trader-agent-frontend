@@ -29,9 +29,30 @@ export async function validateTrade({ tradeId, symbol, side, prices: providedPri
       const { db } = await import("@/lib/db");
       trade = await db.tradeRecommendation.findUnique({ where: { id: tradeId } });
       if (!trade) {
-        // Trade not found in DB — continue with params only
-        console.warn("Trade not found in DB:", tradeId, "— using params");
-        trade = null;
+        // Trade not found by primary id — try fallback lookup by symbol + side
+        // The tradeId from frontend may be a synthetic id like "sell-AAPL-1778554793607"
+        console.warn("Trade not found in DB by id:", tradeId, "— trying symbol+side fallback");
+        try {
+          // Parse side and symbol from synthetic id if not provided in params
+          const parsed = parseSyntheticTradeId(tradeId);
+          const lookupSymbol = targetSymbol || parsed?.symbol;
+          const lookupSide = targetSide || parsed?.side;
+          if (lookupSymbol && lookupSide) {
+            trade = await db.tradeRecommendation.findFirst({
+              where: { symbol: lookupSymbol, side: lookupSide, status: "pending" },
+              orderBy: { createdAt: "desc" },
+            });
+            if (trade) {
+              targetSymbol = trade.symbol;
+              targetSide = trade.side;
+            }
+          }
+        } catch (fallbackErr) {
+          console.warn("Fallback lookup also failed:", fallbackErr.message);
+        }
+        if (!trade) {
+          console.warn("Trade not found in DB:", tradeId, "— using params");
+        }
       } else {
         targetSymbol = trade.symbol;
         targetSide = trade.side;
@@ -46,9 +67,9 @@ export async function validateTrade({ tradeId, symbol, side, prices: providedPri
           };
         }
 
-        // Mark as validating
+        // Mark as validating (use trade.id which is the real DB id, not the possibly-synthetic tradeId)
         await db.tradeRecommendation.update({
-          where: { id: tradeId },
+          where: { id: trade.id },
           data: { validationStatus: "validating" },
         });
       }
@@ -58,6 +79,13 @@ export async function validateTrade({ tradeId, symbol, side, prices: providedPri
       trade = null;
       dbAvailable = false;
     }
+  }
+
+  // Try to parse symbol/side from synthetic tradeId as last resort
+  if (!targetSymbol && tradeId) {
+    const parsed = parseSyntheticTradeId(tradeId);
+    if (parsed?.symbol) targetSymbol = parsed.symbol;
+    if (parsed?.side) targetSide = parsed.side;
   }
 
   if (!targetSymbol) throw new Error("symbol or tradeId is required");
@@ -74,7 +102,7 @@ export async function validateTrade({ tradeId, symbol, side, prices: providedPri
         try {
           const { db } = await import("@/lib/db");
           await db.tradeRecommendation.update({
-            where: { id: tradeId },
+            where: { id: trade.id },
             data: {
               validationStatus: "error",
               validationDetails: JSON.stringify({ error: "Failed to fetch historical prices", message: e.message }),
@@ -92,7 +120,7 @@ export async function validateTrade({ tradeId, symbol, side, prices: providedPri
       try {
         const { db } = await import("@/lib/db");
         await db.tradeRecommendation.update({
-          where: { id: tradeId },
+          where: { id: trade.id },
           data: {
             validationStatus: "error",
             validationDetails: JSON.stringify({ error: "Insufficient price data", n_prices: prices?.length || 0 }),
@@ -143,12 +171,12 @@ export async function validateTrade({ tradeId, symbol, side, prices: providedPri
   // Compute validation score
   const validation = computeValidationScore(backtestResult, targetSide, source);
 
-  // Update DB if trade exists and DB is available
+  // Update DB if trade exists and DB is available (use trade.id which is the real DB id)
   if (trade && dbAvailable) {
     try {
       const { db } = await import("@/lib/db");
       await db.tradeRecommendation.update({
-        where: { id: tradeId },
+        where: { id: trade.id },
         data: {
           validationStatus: validation.passed ? "passed" : "failed",
           validationScore: validation.score,
@@ -208,6 +236,20 @@ export async function validateTrade({ tradeId, symbol, side, prices: providedPri
  *  - "buy": positive when price goes up (standard)
  *  - "sell": positive when price goes down (inverted)
  */
+/**
+ * Parse a synthetic trade id like "sell-AAPL-1778554793607" or "buy-DIA-1778554793607"
+ * Returns { side, symbol } or null if not parseable.
+ */
+function parseSyntheticTradeId(tradeId) {
+  if (!tradeId || typeof tradeId !== "string") return null;
+  // Match patterns like: sell-AAPL-1778554793607 or buy-DIA-123
+  const match = tradeId.match(/^(buy|sell|short)-([A-Z]+)-/i);
+  if (match) {
+    return { side: match[1].toLowerCase(), symbol: match[2].toUpperCase() };
+  }
+  return null;
+}
+
 function localWalkForwardValidation(prices, side) {
   const n = prices.length;
   const trainSize = Math.floor(n * 0.7);
