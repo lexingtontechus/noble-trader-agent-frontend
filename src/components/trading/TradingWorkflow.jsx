@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useCallback, useEffect, useRef, Component, createPortal } from 'react'
+import { useState, useCallback, useEffect, useRef, Component } from 'react'
 import dynamic from 'next/dynamic'
 const EvolutionPanel = dynamic(() => import('@/components/evolution/EvolutionPanel'), { ssr: false })
 
@@ -1186,23 +1186,11 @@ function TradingWorkflowInner() {
   // Execution progress per trade
   const [executionProgress, setExecutionProgress] = useState({}) // { [tradeId]: 'pending' | 'submitting' | 'filled' | 'failed' }
 
-  // Confirmation dialog
-  const [showExecuteConfirm, setShowExecuteConfirm] = useState(false)
-
   // Ref for simulating analysis steps
   const stepTimerRef = useRef(null)
 
-  // Ref for execute confirmation modal — scroll into view when opened
-  const executeModalRef = useRef(null)
-
-  // When execute confirm modal opens, scroll to top so the fixed-position modal is visible
-  useEffect(() => {
-    if (showExecuteConfirm) {
-      // DaisyUI modals use position:fixed but a CSS transform on an ancestor
-      // can break that. Scrolling to top ensures the modal is always visible.
-      window.scrollTo({ top: 0, behavior: 'smooth' })
-    }
-  }, [showExecuteConfirm])
+  // Ref for native <dialog> element (DaisyUI modal pattern)
+  const executeDialogRef = useRef(null)
 
   // Load latest analysis from DB on mount
   const [loadingLatest, setLoadingLatest] = useState(true)
@@ -1882,7 +1870,7 @@ const delays = [600, 1200, 1500, 1200, 2000, 1500, 1800, 1000]
                     </p>
                     <button
                       className="btn btn-primary gap-2"
-                      onClick={() => setShowExecuteConfirm(true)}
+                      onClick={() => executeDialogRef.current?.showModal()}
                     >
                       <IconPlay size={18} /> Execute Approved Trades
                     </button>
@@ -1902,7 +1890,7 @@ const delays = [600, 1200, 1500, 1200, 2000, 1500, 1800, 1000]
             <div className="flex justify-center">
               <button
                 className="btn btn-primary btn-sm gap-2"
-                onClick={() => setShowExecuteConfirm(true)}
+                onClick={() => executeDialogRef.current?.showModal()}
               >
                 <IconPlay size={16} /> Execute {approvedCount} Approved Trade{approvedCount !== 1 ? 's' : ''} Now
               </button>
@@ -2167,66 +2155,64 @@ const delays = [600, 1200, 1500, 1200, 2000, 1500, 1800, 1000]
       )}
 
       {/* ═══════════════════════════════════════════
-          Execute Confirmation Dialog
-          Rendered via createPortal to <body> so ancestor
-          CSS transforms don't break position:fixed.
+          Execute Confirmation Dialog (native <dialog>)
+          Uses DaisyUI's recommended showModal() pattern.
+          The native <dialog> element auto-centers in the
+          viewport regardless of scroll position or ancestor
+          CSS transforms — no portal or scroll hack needed.
           ═══════════════════════════════════════════ */}
-      {showExecuteConfirm && createPortal(
-        <div ref={executeModalRef} className="modal modal-open" style={{ zIndex: 9999 }}>
-          <div className="modal-box">
-            <h3 className="font-bold text-lg flex items-center gap-2">
-              <IconAlertTriangle size={22} className="text-warning" />
-              Confirm Execution
-            </h3>
-            <p className="py-4 text-sm text-base-content/70">
-              You are about to execute <strong className="text-success">{approvedCount} trade{approvedCount !== 1 ? 's' : ''}</strong>.
-              This will submit real orders to your broker. This action cannot be undone.
-            </p>
-            <div className="bg-base-300/30 rounded-lg p-3 mb-4 max-h-48 overflow-y-auto">
-              {recommendations
-                .filter(r => approvals[r.id || r.symbol] === true)
-                .map((trade, i) => {
-                  const id = trade.id || trade.symbol
-                  const isSell = safeUpper(trade.side || trade.action) === 'SELL'
-                  return (
-                    <div key={id || i} className="flex items-center gap-2 py-1 text-sm">
-                      <span className={`badge badge-xs ${isSell ? 'badge-error' : 'badge-success'}`}>
-                        {safeUpper(trade.side || trade.action || 'BUY')}
+      <dialog ref={executeDialogRef} className="modal">
+        <div className="modal-box">
+          <h3 className="font-bold text-lg flex items-center gap-2">
+            <IconAlertTriangle size={22} className="text-warning" />
+            Confirm Execution
+          </h3>
+          <p className="py-4 text-sm text-base-content/70">
+            You are about to execute <strong className="text-success">{approvedCount} trade{approvedCount !== 1 ? 's' : ''}</strong>.
+            This will submit real orders to your broker. This action cannot be undone.
+          </p>
+          <div className="bg-base-300/30 rounded-lg p-3 mb-4 max-h-48 overflow-y-auto">
+            {recommendations
+              .filter(r => approvals[r.id || r.symbol] === true)
+              .map((trade, i) => {
+                const id = trade.id || trade.symbol
+                const isSell = safeUpper(trade.side || trade.action) === 'SELL'
+                return (
+                  <div key={id || i} className="flex items-center gap-2 py-1 text-sm">
+                    <span className={`badge badge-xs ${isSell ? 'badge-error' : 'badge-success'}`}>
+                      {safeUpper(trade.side || trade.action || 'BUY')}
+                    </span>
+                    <span className="font-mono">{trade.symbol || trade.ticker}</span>
+                    <span className="text-base-content/40">x{trade.qty || trade.quantity}</span>
+                    {trade.limit_price && (
+                      <span className="text-base-content/40 font-mono text-xs">
+                        @ ${Number(trade.limit_price).toFixed(2)}
                       </span>
-                      <span className="font-mono">{trade.symbol || trade.ticker}</span>
-                      <span className="text-base-content/40">x{trade.qty || trade.quantity}</span>
-                      {trade.limit_price && (
-                        <span className="text-base-content/40 font-mono text-xs">
-                          @ ${Number(trade.limit_price).toFixed(2)}
-                        </span>
-                      )}
-                    </div>
-                  )
-                })}
-            </div>
-            <div className="modal-action">
-              <button
-                className="btn btn-ghost btn-sm"
-                onClick={() => setShowExecuteConfirm(false)}
-              >
-                Cancel
-              </button>
-              <button
-                className="btn btn-primary btn-sm gap-1"
-                onClick={() => {
-                  setShowExecuteConfirm(false)
-                  // Defer execution to next tick so modal closes first
-                  setTimeout(() => handleExecute(), 0)
-                }}
-              >
-                <IconPlay size={14} /> Execute {approvedCount} Trade{approvedCount !== 1 ? 's' : ''}
-              </button>
-            </div>
+                    )}
+                  </div>
+                )
+              })}
           </div>
-          <div className="modal-backdrop" onClick={() => setShowExecuteConfirm(false)}></div>
-        </div>,
-        document.body
-      )}
+          <div className="modal-action">
+            <form method="dialog">
+              <button className="btn btn-ghost btn-sm">Cancel</button>
+            </form>
+            <button
+              className="btn btn-primary btn-sm gap-1"
+              onClick={() => {
+                executeDialogRef.current?.close()
+                // Defer execution to next tick so modal closes first
+                setTimeout(() => handleExecute(), 0)
+              }}
+            >
+              <IconPlay size={14} /> Execute {approvedCount} Trade{approvedCount !== 1 ? 's' : ''}
+            </button>
+          </div>
+        </div>
+        <form method="dialog" className="modal-backdrop">
+          <button>close</button>
+        </form>
+      </dialog>
     </div>
   )
 }
