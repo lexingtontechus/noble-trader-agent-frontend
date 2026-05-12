@@ -191,7 +191,7 @@ export default function TickerCard({
             🔬 HMM Features
           </div>
           <div className="collapse-content">
-            <ObservationFeatures data={analysis} />
+            <ObservationFeatures data={analysis} symbol={symbol} period={data.period} />
           </div>
         </div>
 
