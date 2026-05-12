@@ -1423,7 +1423,7 @@ const delays = [600, 1200, 1500, 1200, 2000, 1500, 1800, 1000]
     })
   }, [])
 
-  // Phase 3: Execute approved trades
+  // Phase 3: Execute approved trades one-by-one with real-time progress
   const handleExecute = useCallback(async () => {
     setShowExecuteConfirm(false)
     setPhase('executing')
@@ -1433,64 +1433,131 @@ const delays = [600, 1200, 1500, 1200, 2000, 1500, 1800, 1000]
       return approvals[id] === true
     })
 
+    // Sort: sells first (free buying power), then buys
+    const sorted = [...approvedTrades].sort((a, b) => {
+      const aPrio = a.priority ?? (a.side === 'sell' ? 0 : 50)
+      const bPrio = b.priority ?? (b.side === 'sell' ? 0 : 50)
+      return aPrio - bPrio
+    })
+
     // Initialize all as pending
     const initProgress = {}
-    approvedTrades.forEach(t => {
+    sorted.forEach(t => {
       initProgress[t.id || t.symbol] = 'pending'
     })
     setExecutionProgress(initProgress)
 
+    const allResults = []
+    const newDeferred = []
+
     try {
-      // Simulate individual trade submissions for visual progress
-      for (let i = 0; i < approvedTrades.length; i++) {
-        const trade = approvedTrades[i]
+      // Execute trades one-by-one for real-time progress
+      for (let i = 0; i < sorted.length; i++) {
+        const trade = sorted[i]
         const id = trade.id || trade.symbol
 
         // Mark as submitting
         setExecutionProgress(prev => ({ ...prev, [id]: 'submitting' }))
 
-        // Small delay for visual feedback
-        await new Promise(resolve => setTimeout(resolve, 600 + Math.random() * 800))
+        try {
+          const res = await fetch('/api/alpaca/orders/create', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              symbol: trade.symbol,
+              qty: trade.qty || trade.quantity,
+              side: trade.side || trade.action,
+              type: trade.order_type || trade.orderType || trade.type || 'market',
+              time_in_force: trade.time_in_force || trade.timeInForce || (trade.side === 'buy' ? 'gtc' : 'day'),
+              limit_price: trade.limit_price || trade.limitPrice || null,
+            }),
+          })
+
+          const result = await res.json()
+
+          if (!res.ok) {
+            // Order failed — mark as failed but continue with remaining trades
+            const isBuyingPower = result.error?.toLowerCase().includes('buying power') ||
+              result.error?.toLowerCase().includes('insufficient')
+
+            setExecutionProgress(prev => ({ ...prev, [id]: 'failed' }))
+            allResults.push({
+              id,
+              symbol: trade.symbol,
+              side: trade.side,
+              qty: trade.qty,
+              status: 'failed',
+              error: result.error || `Order failed (${res.status})`,
+              insufficient_buying_power: isBuyingPower,
+            })
+
+            if (isBuyingPower) {
+              newDeferred.push({
+                id,
+                symbol: trade.symbol,
+                side: trade.side,
+                qty: trade.qty,
+                order_type: trade.order_type || trade.orderType || 'limit',
+                limit_price: trade.limit_price || trade.limitPrice,
+                time_in_force: trade.time_in_force || 'gtc',
+                reason: 'Deferred: insufficient buying power',
+              })
+            }
+          } else {
+            // Order succeeded
+            setExecutionProgress(prev => ({ ...prev, [id]: 'filled' }))
+            allResults.push({
+              id,
+              symbol: trade.symbol,
+              side: trade.side,
+              qty: trade.qty,
+              status: 'filled',
+              alpaca_order_id: result.id,
+              order: result,
+            })
+
+            // Update DB trade status if available
+            try {
+              await fetch('/api/trading/approve', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ tradeId: id, action: 'executed', alpacaOrderId: result.id }),
+              })
+            } catch {
+              // Non-fatal DB update
+            }
+          }
+        } catch (err) {
+          // Network or unexpected error for this single trade
+          setExecutionProgress(prev => ({ ...prev, [id]: 'failed' }))
+          allResults.push({
+            id,
+            symbol: trade.symbol,
+            side: trade.side,
+            qty: trade.qty,
+            status: 'failed',
+            error: err.message || 'Network error',
+          })
+        }
+
+        // Small delay between trades to avoid rate limiting
+        if (i < sorted.length - 1) {
+          await new Promise(resolve => setTimeout(resolve, 300))
+        }
       }
 
-      // Call the execute endpoint
-      const res = await fetch('/api/trading/execute', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ trades: approvedTrades }),
+      const filled = allResults.filter(r => r.status === 'filled').length
+      const failed = allResults.filter(r => r.status === 'failed').length
+      const deferred = newDeferred.length
+
+      setExecutionResults({
+        total: allResults.length,
+        filled,
+        failed,
+        deferred,
+        results: allResults,
+        summary: `${filled} filled, ${failed} failed, ${deferred} deferred`,
       })
-      const result = await res.json()
-
-      if (!res.ok) {
-        setError(result.error || `Execution failed (${res.status})`)
-        setPhase('review')
-        return
-      }
-
-      setExecutionResults(result)
-
-      // Update progress based on results
-      const resultsList = result.results || result.executions || []
-      const newProgress = {}
-      const newDeferred = []
-
-      resultsList.forEach(r => {
-        const id = r.id || r.symbol || r.trade_id
-        newProgress[id] = r.status === 'filled' || r.status === 'success' ? 'filled' : 'failed'
-        if (r.status === 'failed' || r.status === 'deferred' || r.insufficient_buying_power) {
-          newDeferred.push(r)
-        }
-      })
-
-      // Fill in any trades not in results
-      approvedTrades.forEach(t => {
-        const id = t.id || t.symbol
-        if (!newProgress[id]) {
-          newProgress[id] = 'filled'
-        }
-      })
-
-      setExecutionProgress(newProgress)
       setDeferredOrders(newDeferred)
       setPhase('done')
     } catch (err) {
