@@ -7,19 +7,21 @@ const CRON_SECRET = process.env.CRON_SECRET;
 const TELEGRAM_BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN;
 const TELEGRAM_CHAT_ID = process.env.TELEGRAM_CHAT_ID;
 
-// Fallback Alpaca keys from env vars (used when Clerk auth is unavailable for cron)
+// Alpaca keys from env vars — used ONLY for cron-triggered requests
+// (cron has no Clerk session cookie, so Clerk private metadata is unavailable).
+// User-facing requests use Clerk private metadata exclusively (see /api/alpaca/* routes).
 const ALPACA_API_KEY = process.env.ALPACA_API_KEY;
 const ALPACA_SECRET_KEY = process.env.ALPACA_SECRET_KEY;
 
 async function resolveAlpacaKeys() {
-  // Try Clerk auth first
+  // Try Clerk private metadata first (user-facing requests)
   try {
     const keys = await getAlpacaKeys();
     if (keys?.apiKey && keys?.secretKey) return keys;
   } catch {
-    // Clerk not available — fall through to env vars
+    // Clerk not available — fall through to env vars (cron scenario)
   }
-  // Fallback to environment variables
+  // Fallback to environment variables (cron jobs only — no Clerk session)
   if (ALPACA_API_KEY && ALPACA_SECRET_KEY) {
     return { apiKey: ALPACA_API_KEY, secretKey: ALPACA_SECRET_KEY };
   }

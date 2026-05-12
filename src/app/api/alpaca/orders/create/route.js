@@ -2,20 +2,6 @@ import { createOrder } from "@/lib/alpaca-client";
 import { getAlpacaKeys } from "@/lib/clerk-metadata";
 import { yahooToAlpacaSymbol, getAssetClass, isAlpacaTradable, getAlpacaTradeabilityReason } from "@/lib/symbol-utils";
 
-const ALPACA_API_KEY = process.env.ALPACA_API_KEY;
-const ALPACA_SECRET_KEY = process.env.ALPACA_SECRET_KEY;
-
-async function resolveAlpacaKeys() {
-  try {
-    const keys = await getAlpacaKeys();
-    if (keys?.apiKey && keys?.secretKey) return keys;
-  } catch { /* Clerk not available */ }
-  if (ALPACA_API_KEY && ALPACA_SECRET_KEY) {
-    return { apiKey: ALPACA_API_KEY, secretKey: ALPACA_SECRET_KEY };
-  }
-  return null;
-}
-
 const VALID_TYPES = {
   equity: ["market", "limit", "stop", "stop_limit", "trailing_stop"],
   crypto: ["market", "limit", "stop_limit"],
@@ -33,9 +19,12 @@ function getCategory(assetClass) {
 
 export async function POST(request) {
   try {
-    const keys = await resolveAlpacaKeys();
+    const keys = await getAlpacaKeys();
     if (!keys?.apiKey || !keys?.secretKey) {
-      return Response.json({ error: "Alpaca API keys not configured" }, { status: 403 });
+      return Response.json(
+        { error: "Alpaca API keys not configured. Save your keys in Settings.", code: "NO_KEYS" },
+        { status: 403 }
+      );
     }
 
     const body = await request.json();

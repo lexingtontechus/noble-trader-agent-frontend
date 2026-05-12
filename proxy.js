@@ -11,6 +11,7 @@ const isPublicRoute = createRouteMatcher([
   "/api/portfolio/(.*)",
   "/api/telegram/(.*)",
   "/api/tda/(.*)",
+  "/api/evolution/(.*)",
   "/api/simulate(.*)",
   "/api/cron/(.*)",
   "/api/clerk/(.*)",
