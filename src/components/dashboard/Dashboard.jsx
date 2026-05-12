@@ -282,6 +282,12 @@ export default function Dashboard() {
       {/* Regime Summary Banner — compact at-a-glance for all tickers */}
       <RegimeSummaryBanner tickers={tickerObjects} />
 
+      {/* Streaming Status + Alerts — equal-height cards */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 items-stretch">
+        <StreamStatusPanel />
+        <AlertHistory />
+      </div>
+
       {/* Comparison Table */}
       {showComparison && allLoaded && (
         <div className="card bg-base-200 shadow-xl">
@@ -293,12 +299,12 @@ export default function Dashboard() {
       )}
 
       {/* ═══════════════════════════════════════════
-          Ticker Tab Layout — DaisyUI tabs
+          Ticker Tab Layout — DaisyUI boxed tabs (button-style)
           One ticker at a time, full-width content.
           Each tab shows a compact status indicator
           (regime badge or loading/error state).
           ═══════════════════════════════════════════ */}
-      <div role="tablist" className="tabs tabs-bordered tabs-lg">
+      <div role="tablist" className="tabs tabs-boxed bg-base-300 p-1">
         {DEFAULT_TICKERS.map((t) => {
           const isLoading = loading[t.symbol];
           const hasError = errors[t.symbol];
@@ -310,7 +316,11 @@ export default function Dashboard() {
             <button
               key={t.symbol}
               role="tab"
-              className={`tab ${isActive ? "tab-active" : ""}`}
+              className={`tab tab-lg flex-1 transition-all ${
+                isActive
+                  ? "tab-active bg-primary text-primary-content shadow-md"
+                  : "hover:bg-base-200"
+              }`}
               onClick={() => setActiveTab(t.symbol)}
             >
               <span className="flex items-center gap-2">
@@ -355,12 +365,6 @@ export default function Dashboard() {
             />
           </div>
         ))}
-      </div>
-
-      {/* Streaming Status + Alerts — equal-height cards */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 items-stretch">
-        <StreamStatusPanel />
-        <AlertHistory />
       </div>
 
       {/* Strategy Evolution Panel */}
