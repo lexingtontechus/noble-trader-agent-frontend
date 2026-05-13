@@ -330,10 +330,10 @@ export default function Dashboard() {
                   <span className="loading loading-spinner loading-xs text-primary" />
                 )}
                 {!isLoading && hasError && (
-                  <span className="badge badge-xs badge-error">!</span>
+                  <span className="badge badge-error font-bold">!</span>
                 )}
                 {!isLoading && !hasError && regimeLabel && (
-                  <span className={`badge badge-xs ${
+                  <span className={`badge font-bold ${
                     regimeLabel.toLowerCase().includes("bull") ? "badge-success" :
                     regimeLabel.toLowerCase().includes("bear") ? "badge-error" :
                     "badge-warning"
