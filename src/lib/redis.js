@@ -1,0 +1,194 @@
+/**
+ * Upstash Redis client — L1 cache for Renko snapshots.
+ * Supabase is L2 (persistent, slower). Redis is L1 (fast, in-memory).
+ *
+ * Cache keys:
+ *   renko:snapshot:{symbol}:{brickSize} — full pipeline snapshot JSON
+ *   renko:price:{symbol}                — latest price (15s TTL)
+ *   renko:regime:{symbol}               — current regime label (5min TTL)
+ *
+ * All methods gracefully degrade: if Redis is not configured or an
+ * operation fails, they silently return null/false without breaking
+ * the application.
+ */
+
+import { Redis } from "@upstash/redis";
+import { CACHE_TTL } from "@/lib/config";
+
+// ── Singleton client ────────────────────────────────────────────────────────
+
+let _client = undefined; // undefined = not yet initialised; null = unavailable
+
+/**
+ * Lazily create the Upstash Redis client.
+ * Returns null if env vars are not configured.
+ */
+function getClient() {
+  if (_client !== undefined) return _client;
+
+  const url = process.env.UPSTASH_REDIS_REST_URL;
+  const token = process.env.UPSTASH_REDIS_REST_TOKEN;
+
+  if (!url || !token) {
+    console.warn("[redis] UPSTASH_REDIS_REST_URL or UPSTASH_REDIS_REST_TOKEN not set — L1 cache disabled");
+    _client = null;
+    return null;
+  }
+
+  try {
+    _client = new Redis({ url, token });
+    return _client;
+  } catch (err) {
+    console.error("[redis] Failed to create client:", err.message);
+    _client = null;
+    return null;
+  }
+}
+
+// ── Core operations ─────────────────────────────────────────────────────────
+
+/**
+ * Get a JSON value from Redis.
+ * Returns null on miss, error, or if Redis is unavailable.
+ */
+async function get(key) {
+  try {
+    const client = getClient();
+    if (!client) return null;
+    const value = await client.get(key);
+    return value ?? null;
+  } catch (err) {
+    console.warn(`[redis] GET ${key} failed:`, err.message);
+    return null;
+  }
+}
+
+/**
+ * Set a JSON value with optional TTL (seconds).
+ * Returns false on error or if Redis is unavailable.
+ */
+async function set(key, value, ttlSeconds) {
+  try {
+    const client = getClient();
+    if (!client) return false;
+    // @upstash/redis handles JSON serialization automatically
+    if (ttlSeconds && ttlSeconds > 0) {
+      await client.setex(key, ttlSeconds, value);
+    } else {
+      await client.set(key, value);
+    }
+    return true;
+  } catch (err) {
+    console.warn(`[redis] SET ${key} failed:`, err.message);
+    return false;
+  }
+}
+
+/**
+ * Delete a key from Redis.
+ * Returns false on error or if Redis is unavailable.
+ */
+async function del(key) {
+  try {
+    const client = getClient();
+    if (!client) return false;
+    await client.del(key);
+    return true;
+  } catch (err) {
+    console.warn(`[redis] DEL ${key} failed:`, err.message);
+    return false;
+  }
+}
+
+// ── Convenience: Renko snapshots ─────────────────────────────────────────────
+
+/**
+ * Get a cached Renko snapshot from Redis L1.
+ */
+async function getSnapshot(symbol, brickSize) {
+  const key = `renko:snapshot:${symbol}:${brickSize}`;
+  return get(key);
+}
+
+/**
+ * Save a Renko snapshot to Redis L1.
+ * Default TTL: 4 hours (matches Supabase TTL).
+ */
+async function setSnapshot(symbol, brickSize, data, ttlSeconds = CACHE_TTL.REDIS.SNAPSHOT) {
+  const key = `renko:snapshot:${symbol}:${brickSize}`;
+  return set(key, data, ttlSeconds);
+}
+
+/**
+ * Delete a Renko snapshot from Redis L1.
+ */
+async function delSnapshot(symbol, brickSize) {
+  const key = `renko:snapshot:${symbol}:${brickSize}`;
+  return del(key);
+}
+
+// ── Convenience: Latest price ────────────────────────────────────────────────
+
+/**
+ * Get the latest price for a symbol from Redis.
+ */
+async function getPrice(symbol) {
+  const key = `renko:price:${symbol}`;
+  return get(key);
+}
+
+/**
+ * Save the latest price for a symbol to Redis.
+ * Default TTL: 15 seconds.
+ */
+async function setPrice(symbol, price, ttlSeconds = CACHE_TTL.REDIS.PRICE) {
+  const key = `renko:price:${symbol}`;
+  return set(key, price, ttlSeconds);
+}
+
+// ── Convenience: Regime ──────────────────────────────────────────────────────
+
+/**
+ * Get the current regime label for a symbol from Redis.
+ */
+async function getRegime(symbol) {
+  const key = `renko:regime:${symbol}`;
+  return get(key);
+}
+
+/**
+ * Save the current regime label for a symbol to Redis.
+ * Default TTL: 5 minutes.
+ */
+async function setRegime(symbol, regime, ttlSeconds = CACHE_TTL.REDIS.REGIME) {
+  const key = `renko:regime:${symbol}`;
+  return set(key, regime, ttlSeconds);
+}
+
+// ── Availability check ───────────────────────────────────────────────────────
+
+/**
+ * Check if Redis is configured (env vars present).
+ * Does NOT guarantee connectivity — just that configuration exists.
+ */
+function isAvailable() {
+  const url = process.env.UPSTASH_REDIS_REST_URL;
+  const token = process.env.UPSTASH_REDIS_REST_TOKEN;
+  return !!(url && token);
+}
+
+// ── Export ───────────────────────────────────────────────────────────────────
+
+export const redis = {
+  get,
+  set,
+  del,
+  getSnapshot,
+  setSnapshot,
+  delSnapshot,
+  getPrice,
+  setPrice,
+  getRegime,
+  setRegime,
+  isAvailable,
+};

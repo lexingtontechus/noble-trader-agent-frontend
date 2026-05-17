@@ -2,13 +2,16 @@
 
 import { useState, useEffect, useCallback, useRef, Component } from "react";
 import dynamic from "next/dynamic";
-import { notifySuccess, notifyError } from "@/lib/notifications";
+import { notifySuccess, notifyError, notifyWarning } from "@/lib/notifications";
+import useRenkoStream from "@/hooks/useRenkoStream";
 
 // Lazy-load heavy sub-components
 const BrickChart = dynamic(() => import("./BrickChart"), { ssr: false });
 const SignalsPanel = dynamic(() => import("./SignalsPanel"), { ssr: false });
 const TradesPanel = dynamic(() => import("./TradesPanel"), { ssr: false });
 const ConfigPanel = dynamic(() => import("./ConfigPanel"), { ssr: false });
+const OrderTracker = dynamic(() => import("./OrderTracker"), { ssr: false });
+const RiskDashboard = dynamic(() => import("./RiskDashboard"), { ssr: false });
 
 // ── Error Boundary ─────────────────────────────────────────────────────────
 
@@ -71,7 +74,9 @@ const TABS = [
   { key: "bricks", label: "🧱 Brick Chart", shortLabel: "Bricks" },
   { key: "signals", label: "📊 Signals", shortLabel: "Signals" },
   { key: "trades", label: "💰 Trades", shortLabel: "Trades" },
+  { key: "orders", label: "📋 Orders", shortLabel: "Orders" },
   { key: "config", label: "⚙️ Config", shortLabel: "Config" },
+  { key: "risk", label: "🛡️ Risk", shortLabel: "Risk" },
 ];
 
 // ── Metric Card ──────────────────────────────────────────────────────────────
@@ -142,6 +147,7 @@ export default function RenkoPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [saving, setSaving] = useState(false);
+  const [streaming, setStreaming] = useState(false);
 
   // Data state
   const [pipelineState, setPipelineState] = useState(null);
@@ -151,6 +157,24 @@ export default function RenkoPage() {
   const [trades, setTrades] = useState([]);
   const [stats, setStats] = useState(null);
   const [config, setConfig] = useState({});
+
+  // ── Live Renko Stream ──────────────────────────────────────────────
+  const renkoStream = useRenkoStream(symbol, {
+    enabled: streaming,
+    onBrick: (brick) => {
+      notifySuccess(
+        `New ${brick.direction || ""} brick at ${brick.close_price ?? brick.close ?? "?"}`
+      );
+      fetchAllData(false);
+    },
+    onSignal: (signal) => {
+      notifyWarning(`Signal: ${signal.pattern_type || signal.type || "unknown"}`, 8000);
+      fetchAllData(false);
+    },
+    onError: (err) => {
+      notifyError(`Stream error: ${err.message}`);
+    },
+  });
 
   // Refs for cleanup
   const abortControllerRef = useRef(null);
@@ -596,6 +620,15 @@ export default function RenkoPage() {
                 </svg>
               )}
             </button>
+
+            {/* Live Stream toggle */}
+            <button
+              className={`btn btn-sm ${streaming ? "btn-accent" : "btn-outline"}`}
+              onClick={() => setStreaming(!streaming)}
+              title={streaming ? "Stop live stream" : "Start live stream"}
+            >
+              {streaming ? "🔴 Live" : "⚪ Stream"}
+            </button>
           </div>
         </div>
 
@@ -703,6 +736,45 @@ export default function RenkoPage() {
                   />
                 </div>
 
+                {/* Stream Status Indicator */}
+                <div className="flex items-center gap-3 mt-2 text-xs">
+                  {streaming ? (
+                    renkoStream.connected ? (
+                      <span className="badge badge-success badge-sm gap-1">
+                        <span className="relative flex h-2 w-2">
+                          <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-success opacity-75"></span>
+                          <span className="relative inline-flex rounded-full h-2 w-2 bg-success"></span>
+                        </span>
+                        LIVE
+                      </span>
+                    ) : (
+                      <span className="badge badge-warning badge-sm gap-1">
+                        <span className="loading loading-spinner loading-xs"></span>
+                        Connecting...
+                      </span>
+                    )
+                  ) : (
+                    <span className="badge badge-ghost badge-sm gap-1">
+                      ⚪ Idle
+                    </span>
+                  )}
+                  {renkoStream.lastPrice != null && streaming && (
+                    <span className="text-base-content/50 font-mono">
+                      Last: ${renkoStream.lastPrice.toFixed(2)}
+                    </span>
+                  )}
+                  {renkoStream.lastTickTime && streaming && (
+                    <span className="text-base-content/30">
+                      {renkoStream.lastTickTime.toLocaleTimeString()}
+                    </span>
+                  )}
+                  {streaming && renkoStream.tickCount > 0 && (
+                    <span className="text-base-content/30">
+                      Ticks: {renkoStream.tickCount} | Bricks: {renkoStream.brickCount}
+                    </span>
+                  )}
+                </div>
+
                 {/* Run counts */}
                 <div className="flex items-center gap-4 mt-2 text-xs">
                   <div className="flex items-center gap-1.5">
@@ -778,12 +850,24 @@ export default function RenkoPage() {
               stats={stats}
             />
           )}
+          {activeTab === "orders" && (
+            <OrderTracker symbol={symbol} />
+          )}
           {activeTab === "config" && (
             <ConfigPanel
               config={config}
               onSave={handleSaveConfig}
               onReset={handleResetPipeline}
               saving={saving}
+            />
+          )}
+          {activeTab === "risk" && (
+            <RiskDashboard
+              trades={trades}
+              stats={stats}
+              state={pipelineState}
+              config={config}
+              bricks={bricks}
             />
           )}
         </div>

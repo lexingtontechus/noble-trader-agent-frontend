@@ -16,6 +16,13 @@ export const CACHE_TTL = {
   SEED: 300_000,             // 5min for seed data
   COMMENTARY: 600_000,       // 10min for AI commentary
   ANALYSIS: 300_000,         // 5min for analysis results
+
+  /** Redis L1 cache TTLs (seconds — Upstash setex uses seconds) */
+  REDIS: {
+    SNAPSHOT: 14_400,   // 4h  (same as Supabase TTL)
+    PRICE: 15,          // 15s
+    REGIME: 300,        // 5min
+  },
 };
 
 /** Polling intervals */

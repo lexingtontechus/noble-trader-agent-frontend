@@ -1,8 +1,15 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import dynamic from "next/dynamic";
 import { UserButton } from "@clerk/nextjs";
 import ThemeSwitcher from "@/components/shared/ThemeSwitcher";
+
+// Lazy-load NotificationCenter — not needed on initial render
+const NotificationCenter = dynamic(
+  () => import("@/components/renko/NotificationCenter"),
+  { ssr: false }
+);
 
 const NAV_ITEMS = [
   { key: "dashboard", label: "Dashboard", icon: "📊", shortLabel: "Home" },
@@ -132,8 +139,9 @@ export default function Navbar({ activeView, setActiveView }) {
           </div>
         </div>
 
-        {/* Right side: Theme, Health, User */}
+        {/* Right side: Notifications, Theme, Health, User */}
         <div className="navbar-end gap-2">
+          <NotificationCenter />
           <ThemeSwitcher />
 
           {/* Backend health indicator */}
