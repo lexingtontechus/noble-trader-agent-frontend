@@ -59,6 +59,8 @@ const TABLE_MAP = {
   strategyPerformance: "ta_strategy_performance",
   abTest: "ta_ab_test",
   evolutionLog: "ta_evolution_log",
+  // Phase 6: Renko HFT Pipeline
+  renkoSnapshot: "ta_renko_snapshot",
 };
 
 function tableName(model) {
@@ -270,6 +272,8 @@ export const db = {
   strategyPerformance: createModelProxy("strategyPerformance"),
   abTest: createModelProxy("abTest"),
   evolutionLog: createModelProxy("evolutionLog"),
+  // Phase 6: Renko HFT Pipeline
+  renkoSnapshot: createModelProxy("renkoSnapshot"),
 };
 
 export default db;

@@ -156,7 +156,43 @@ export default function RenkoPage() {
   const abortControllerRef = useRef(null);
   const intervalRef = useRef(null);
 
-  // Fetch all data
+  // ── Load cached snapshot from Supabase (fast, no backend call) ──────
+  const loadCachedSnapshot = useCallback(async (sym) => {
+    try {
+      const res = await fetch(`/api/renko/warmup?symbol=${encodeURIComponent(sym)}`);
+      if (res.ok) {
+        const data = await res.json();
+        if (data.cached) {
+          // Populate state from cached snapshot
+          setBricks(Array.isArray(data.bricks) ? data.bricks : []);
+          setClassified(Array.isArray(data.classified) ? data.classified : []);
+          setSignals(Array.isArray(data.signals) ? data.signals : []);
+          setTrades(Array.isArray(data.trades) ? data.trades : []);
+          setStats(data.stats || null);
+          if (data.config) setConfig(data.config);
+          setPipelineState(data.stats?.state || {
+            brick_count: data.total_bricks || 0,
+            last_brick_direction: null,
+            last_swing_label: null,
+            bull_run_count: 0,
+            bear_run_count: 0,
+            active_position: false,
+            session_trades: data.total_trades || 0,
+            session_pnl_bricks: 0,
+            total_trades: data.total_trades || 0,
+            total_pnl_bricks: data.total_pnl_bricks || 0,
+          });
+          setLoading(false);
+          return true; // Cache hit
+        }
+      }
+    } catch (e) {
+      console.warn("[RenkoPage] Cache load failed:", e.message);
+    }
+    return false; // Cache miss
+  }, []);
+
+  // Fetch all data from backend
   const fetchAllData = useCallback(
     async (showLoading = true) => {
       // Cancel any in-flight request
@@ -247,7 +283,15 @@ export default function RenkoPage() {
 
   // Initial fetch + auto-refresh
   useEffect(() => {
-    fetchAllData(true);
+    // Try loading from Supabase cache first (instant), then fall back to backend
+    const initData = async () => {
+      const cacheHit = await loadCachedSnapshot(symbol);
+      if (!cacheHit) {
+        // No cache — fetch from backend (may be empty if not warmed)
+        await fetchAllData(true);
+      }
+    };
+    initData();
 
     if (autoRefresh) {
       intervalRef.current = setInterval(() => {
@@ -278,6 +322,24 @@ export default function RenkoPage() {
     return () =>
       document.removeEventListener("visibilitychange", handleVisibility);
   }, [autoRefresh, fetchAllData]);
+
+  // Handle symbol change — load cache for new symbol
+  const handleSymbolChange = useCallback(async (newSymbol) => {
+    setSymbol(newSymbol);
+    setLoading(true);
+    setBricks([]);
+    setClassified([]);
+    setSignals([]);
+    setTrades([]);
+    setPipelineState(null);
+
+    // Try loading cached data for the new symbol
+    const cacheHit = await loadCachedSnapshot(newSymbol);
+    if (!cacheHit) {
+      // No cache — fetch from backend pipeline
+      await fetchAllData(true);
+    }
+  }, [loadCachedSnapshot, fetchAllData]);
 
   // Handle save config
   const handleSaveConfig = async (newConfig) => {
@@ -363,10 +425,21 @@ export default function RenkoPage() {
       const data = await res.json();
 
       if (data.success) {
+        // Populate state from the warmup response (includes cached data)
+        if (data.bricks) setBricks(data.bricks);
+        if (data.classified) setClassified(data.classified);
+        if (data.signals) setSignals(data.signals);
+        if (data.trades) setTrades(data.trades);
+        if (data.stats) {
+          setStats(data.stats);
+          if (data.stats.state) setPipelineState(data.stats.state);
+          if (data.stats.config) setConfig(data.stats.config);
+        }
+
+        const cachedLabel = data.cached ? " (from cache)" : "";
         notifySuccess(
-          `Warm-up complete! ${data.prices_fed} prices fed → ${data.total_bricks} bricks, ${data.total_trades} trades`
+          `Warm-up complete!${cachedLabel} ${data.prices_fed} prices → ${data.total_bricks} bricks, ${data.total_trades} trades`
         );
-        await fetchAllData(true);
       } else {
         notifyError(`Warm-up failed: ${data.error || "Unknown error"}`);
       }
@@ -403,7 +476,7 @@ export default function RenkoPage() {
             <select
               className="select select-sm select-bordered font-mono"
               value={symbol}
-              onChange={(e) => setSymbol(e.target.value)}
+              onChange={(e) => handleSymbolChange(e.target.value)}
             >
               {SYMBOLS.map((s) => (
                 <option key={s} value={s}>
