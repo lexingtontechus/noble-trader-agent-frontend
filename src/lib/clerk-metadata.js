@@ -77,3 +77,36 @@ export async function hasAlpacaKeys() {
   const keys = await getAlpacaKeys();
   return !!(keys?.apiKey && keys?.secretKey);
 }
+
+/**
+ * Get the role of the authenticated user from Clerk private metadata.
+ *
+ * Roles are stored in: user.privateMetadata.role
+ * Valid roles: "admin", "trader", "viewer" (default: "authenticated")
+ *
+ * @returns {Promise<string>} — the user's role, or "authenticated" if none set
+ */
+export async function getUserRole() {
+  try {
+    const { userId } = await auth();
+    if (!userId) return "unauthenticated";
+
+    const client = await clerkClient();
+    const user = await client.users.getUser(userId);
+    const meta = user.privateMetadata || {};
+    return meta.role || "authenticated";
+  } catch (err) {
+    console.error("[clerk-metadata] getUserRole failed:", err.message);
+    return "unauthenticated";
+  }
+}
+
+/**
+ * Check if the authenticated user has admin role.
+ *
+ * @returns {Promise<boolean>}
+ */
+export async function isAdmin() {
+  const role = await getUserRole();
+  return role === "admin";
+}

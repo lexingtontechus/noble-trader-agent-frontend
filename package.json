@@ -9,7 +9,10 @@
     "lint": "next lint",
     "postinstall": "echo 'Using Supabase — skipping Prisma generate'",
     "db:push": "echo 'Using Supabase — no Prisma push needed'",
-    "db:migrate": "echo 'Using Supabase — run migrations via Supabase Dashboard'"
+    "db:migrate": "echo 'Using Supabase — run migrations via Supabase Dashboard'",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:coverage": "vitest run --coverage"
   },
   "dependencies": {
     "@clerk/nextjs": "^7.3.1",
@@ -34,13 +37,18 @@
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4",
+    "@testing-library/jest-dom": "^6.9.1",
+    "@testing-library/react": "^16.3.2",
     "@types/node": "25.6.0",
     "@types/react": "^19",
     "@types/react-dom": "^19",
+    "@vitejs/plugin-react": "^6.0.2",
     "eslint": "^10.3.0",
     "eslint-config-next": "^16.2.5",
+    "jsdom": "^29.1.1",
     "tailwindcss": "^4",
     "tw-animate-css": "^1.3.5",
-    "typescript": "^6.0.3"
+    "typescript": "^6.0.3",
+    "vitest": "^4.1.6"
   }
 }

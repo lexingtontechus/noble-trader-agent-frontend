@@ -22,16 +22,7 @@ const NAV_ITEMS = [
   { key: "admin", label: "Admin", icon: "⚙️", shortLabel: "Admin" },
 ];
 
-const EXTERNAL_ITEMS = [
-  {
-    key: "docs",
-    label: "Docs",
-    icon: "📖",
-    shortLabel: "Docs",
-    external: true,
-    href: "/docs.html",
-  },
-];
+// External nav items (docs link removed — no longer required)
 
 export default function Navbar({ activeView, setActiveView }) {
   const [backendHealthy, setBackendHealthy] = useState(null);
@@ -87,8 +78,8 @@ export default function Navbar({ activeView, setActiveView }) {
     };
   }, []);
 
-  // Combine nav items for desktop tabs (include external docs link)
-  const allDesktopItems = [...NAV_ITEMS, ...EXTERNAL_ITEMS];
+  // Desktop tabs use only NAV_ITEMS (docs link removed)
+  const allDesktopItems = NAV_ITEMS;
 
   return (
     <>
@@ -177,16 +168,7 @@ export default function Navbar({ activeView, setActiveView }) {
           </div>
 
           {/* Clerk UserButton */}
-          <UserButton afterSignOutUrl="/">
-            <UserButton.MenuItems>
-              <UserButton.Link
-                label="Docs"
-                labelIcon="📖"
-                href="/public/docs.html"
-                target="_blank"
-              />
-            </UserButton.MenuItems>
-          </UserButton>
+          <UserButton afterSignOutUrl="/" />
         </div>
       </div>
 
