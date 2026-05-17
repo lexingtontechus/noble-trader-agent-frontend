@@ -11,6 +11,7 @@ import SearchPage from "@/components/search/SearchPage";
 import SimulatePage from "@/components/simulation/SimulatePage";
 import PortfolioPage from "@/components/portfolio/PortfolioPage";
 import AdminPage from "@/components/admin/AdminPage";
+import RenkoPage from "@/components/renko/RenkoPage";
 import { StreamProvider } from "@/context/StreamContext";
 import NotificationToast from "@/components/shared/NotificationToast";
 
@@ -66,6 +67,9 @@ export default function Home() {
         setActiveView("search");
       } else if ((e.metaKey || e.ctrlKey) && e.key === "7") {
         e.preventDefault();
+        setActiveView("renko");
+      } else if ((e.metaKey || e.ctrlKey) && e.key === "8") {
+        e.preventDefault();
         setActiveView("admin");
       }
     };
@@ -88,6 +92,7 @@ export default function Home() {
                 {activeView === "search" && <SearchPage />}
                 {activeView === "simulate" && <SimulatePage />}
                 {activeView === "portfolio" && <PortfolioPage />}
+                {activeView === "renko" && <RenkoPage />}
                 {activeView === "admin" && <AdminPage />}
               </div>
             </main>
