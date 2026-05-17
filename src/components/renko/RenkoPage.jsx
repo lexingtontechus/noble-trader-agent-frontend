@@ -157,13 +157,14 @@ export default function RenkoPage() {
   const intervalRef = useRef(null);
 
   // ── Load cached snapshot from Supabase (fast, no backend call) ──────
+  // Returns: 'fresh' | 'stale' | false
   const loadCachedSnapshot = useCallback(async (sym) => {
     try {
       const res = await fetch(`/api/renko/warmup?symbol=${encodeURIComponent(sym)}`);
       if (res.ok) {
         const data = await res.json();
         if (data.cached) {
-          // Populate state from cached snapshot
+          // Populate state from cached snapshot (instant, even if stale)
           setBricks(Array.isArray(data.bricks) ? data.bricks : []);
           setClassified(Array.isArray(data.classified) ? data.classified : []);
           setSignals(Array.isArray(data.signals) ? data.signals : []);
@@ -183,7 +184,7 @@ export default function RenkoPage() {
             total_pnl_bricks: data.total_pnl_bricks || 0,
           });
           setLoading(false);
-          return true; // Cache hit
+          return data.stale ? "stale" : "fresh";
         }
       }
     } catch (e) {
@@ -287,10 +288,27 @@ export default function RenkoPage() {
   useEffect(() => {
     // Try loading from Supabase cache first (instant), then fall back to backend
     const initData = async () => {
-      const cacheHit = await loadCachedSnapshot(symbol);
-      if (!cacheHit) {
-        // No cache — fetch from backend (may be empty if not warmed)
+      const cacheStatus = await loadCachedSnapshot(symbol);
+      if (cacheStatus === "fresh") {
+        // Fresh cache — data is current, no warmup needed
+      } else if (cacheStatus === "stale") {
+        // Stale cache — show old data but trigger background refresh
+        warmUpSymbol(symbol); // Updates Supabase + live state when done
+      } else {
+        // No cache — fetch from backend pipeline, auto-warm if empty
         await fetchAllData(true);
+        // Check if backend pipeline is empty
+        try {
+          const checkRes = await fetch(`/api/renko/state?symbol=${encodeURIComponent(symbol)}`);
+          if (checkRes.ok) {
+            const stateData = await checkRes.json();
+            if (!stateData.brick_count || stateData.brick_count === 0) {
+              await warmUpSymbol(symbol);
+            }
+          }
+        } catch {
+          await warmUpSymbol(symbol);
+        }
       }
     };
     initData();
@@ -362,7 +380,7 @@ export default function RenkoPage() {
     }
   }, []);
 
-  // Handle symbol change — load cache, auto-warm-up if no data
+  // Handle symbol change — load cache, auto-warm-up if no data or stale
   const handleSymbolChange = useCallback(async (newSymbol) => {
     setSymbol(newSymbol);
     setLoading(true);
@@ -374,15 +392,20 @@ export default function RenkoPage() {
     setError(null);
 
     // Step 1: Try loading cached data for the new symbol (instant)
-    const cacheHit = await loadCachedSnapshot(newSymbol);
-    if (cacheHit) return; // Cache hit — done!
+    const cacheStatus = await loadCachedSnapshot(newSymbol);
+    if (cacheStatus === "fresh") {
+      return; // Fresh cache — done!
+    }
+    if (cacheStatus === "stale") {
+      // Show stale data but trigger background refresh
+      warmUpSymbol(newSymbol); // Non-blocking — updates state when complete
+      return;
+    }
 
     // Step 2: No cache — fetch from backend pipeline (may have been warmed this session)
     await fetchAllData(true, newSymbol);
 
     // Step 3: If backend pipeline is empty (no bricks), auto-trigger warm-up
-    // We use a ref to track if warm-up is needed after the async fetch completes
-    // Since we can't read state immediately, we check the backend response directly
     try {
       const checkRes = await fetch(`/api/renko/state?symbol=${encodeURIComponent(newSymbol)}`);
       if (checkRes.ok) {
