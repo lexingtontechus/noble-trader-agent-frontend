@@ -192,9 +192,11 @@ export default function RenkoPage() {
     return false; // Cache miss
   }, []);
 
-  // Fetch all data from backend
+  // Fetch all data from backend — accepts optional symbolOverride to avoid stale closure
   const fetchAllData = useCallback(
-    async (showLoading = true) => {
+    async (showLoading = true, symbolOverride = null) => {
+      const activeSymbol = symbolOverride || symbol;
+
       // Cancel any in-flight request
       if (abortControllerRef.current) {
         abortControllerRef.current.abort();
@@ -209,12 +211,12 @@ export default function RenkoPage() {
         // Fetch all endpoints in parallel via BFF
         const [stateData, bricksData, classifiedData, signalsData, tradesData, statsData] =
           await Promise.allSettled([
-            renkoApiFetch("state", { params: { symbol } }),
-            renkoApiFetch("bricks", { params: { symbol, last_n: "100" } }),
-            renkoApiFetch("classified", { params: { symbol, last_n: "100" } }),
-            renkoApiFetch("signals", { params: { symbol, last_n: "50" } }),
-            renkoApiFetch("trades", { params: { symbol, last_n: "50" } }),
-            renkoApiFetch("stats", { params: { symbol } }),
+            renkoApiFetch("state", { params: { symbol: activeSymbol } }),
+            renkoApiFetch("bricks", { params: { symbol: activeSymbol, last_n: "100" } }),
+            renkoApiFetch("classified", { params: { symbol: activeSymbol, last_n: "100" } }),
+            renkoApiFetch("signals", { params: { symbol: activeSymbol, last_n: "50" } }),
+            renkoApiFetch("trades", { params: { symbol: activeSymbol, last_n: "50" } }),
+            renkoApiFetch("stats", { params: { symbol: activeSymbol } }),
           ]);
 
         if (controller.signal.aborted) return;
@@ -323,7 +325,44 @@ export default function RenkoPage() {
       document.removeEventListener("visibilitychange", handleVisibility);
   }, [autoRefresh, fetchAllData]);
 
-  // Handle symbol change — load cache for new symbol
+  // Warm up a specific symbol (used by handleSymbolChange and handleWarmUp)
+  const warmUpSymbol = useCallback(async (sym) => {
+    setWarmingUp(true);
+    try {
+      const res = await fetch("/api/renko/warmup", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ symbol: sym, period: "6mo" }),
+      });
+
+      const data = await res.json();
+
+      if (data.success) {
+        if (data.bricks) setBricks(data.bricks);
+        if (data.classified) setClassified(data.classified);
+        if (data.signals) setSignals(data.signals);
+        if (data.trades) setTrades(data.trades);
+        if (data.stats) {
+          setStats(data.stats);
+          if (data.stats.state) setPipelineState(data.stats.state);
+          if (data.stats.config) setConfig(data.stats.config);
+        }
+
+        const cachedLabel = data.cached ? " (from cache)" : "";
+        notifySuccess(
+          `${sym} warm-up complete!${cachedLabel} ${data.prices_fed} prices → ${data.total_bricks} bricks, ${data.total_trades} trades`
+        );
+      } else {
+        notifyError(`${sym} warm-up failed: ${data.error || "Unknown error"}`);
+      }
+    } catch (e) {
+      notifyError(`${sym} warm-up failed: ${e.message}`);
+    } finally {
+      setWarmingUp(false);
+    }
+  }, []);
+
+  // Handle symbol change — load cache, auto-warm-up if no data
   const handleSymbolChange = useCallback(async (newSymbol) => {
     setSymbol(newSymbol);
     setLoading(true);
@@ -332,14 +371,32 @@ export default function RenkoPage() {
     setSignals([]);
     setTrades([]);
     setPipelineState(null);
+    setError(null);
 
-    // Try loading cached data for the new symbol
+    // Step 1: Try loading cached data for the new symbol (instant)
     const cacheHit = await loadCachedSnapshot(newSymbol);
-    if (!cacheHit) {
-      // No cache — fetch from backend pipeline
-      await fetchAllData(true);
+    if (cacheHit) return; // Cache hit — done!
+
+    // Step 2: No cache — fetch from backend pipeline (may have been warmed this session)
+    await fetchAllData(true, newSymbol);
+
+    // Step 3: If backend pipeline is empty (no bricks), auto-trigger warm-up
+    // We use a ref to track if warm-up is needed after the async fetch completes
+    // Since we can't read state immediately, we check the backend response directly
+    try {
+      const checkRes = await fetch(`/api/renko/state?symbol=${encodeURIComponent(newSymbol)}`);
+      if (checkRes.ok) {
+        const stateData = await checkRes.json();
+        if (!stateData.brick_count || stateData.brick_count === 0) {
+          // Pipeline is empty — auto warm-up this symbol
+          await warmUpSymbol(newSymbol);
+        }
+      }
+    } catch {
+      // If state check fails, try warm-up anyway
+      await warmUpSymbol(newSymbol);
     }
-  }, [loadCachedSnapshot, fetchAllData]);
+  }, [loadCachedSnapshot, fetchAllData, warmUpSymbol]);
 
   // Handle save config
   const handleSaveConfig = async (newConfig) => {
@@ -410,45 +467,11 @@ export default function RenkoPage() {
     }
   };
 
-  // Handle warm-up pipeline with historical data
+  // Warming-up state (used by warmUpSymbol)
   const [warmingUp, setWarmingUp] = useState(false);
 
-  const handleWarmUp = async () => {
-    setWarmingUp(true);
-    try {
-      const res = await fetch("/api/renko/warmup", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ symbol, period: "6mo" }),
-      });
-
-      const data = await res.json();
-
-      if (data.success) {
-        // Populate state from the warmup response (includes cached data)
-        if (data.bricks) setBricks(data.bricks);
-        if (data.classified) setClassified(data.classified);
-        if (data.signals) setSignals(data.signals);
-        if (data.trades) setTrades(data.trades);
-        if (data.stats) {
-          setStats(data.stats);
-          if (data.stats.state) setPipelineState(data.stats.state);
-          if (data.stats.config) setConfig(data.stats.config);
-        }
-
-        const cachedLabel = data.cached ? " (from cache)" : "";
-        notifySuccess(
-          `Warm-up complete!${cachedLabel} ${data.prices_fed} prices → ${data.total_bricks} bricks, ${data.total_trades} trades`
-        );
-      } else {
-        notifyError(`Warm-up failed: ${data.error || "Unknown error"}`);
-      }
-    } catch (e) {
-      notifyError(`Warm-up failed: ${e.message}`);
-    } finally {
-      setWarmingUp(false);
-    }
-  };
+  // Manual warm-up button handler (uses shared warmUpSymbol)
+  const handleWarmUp = () => warmUpSymbol(symbol);
 
   // Pipeline status
   const isActive = pipelineState?.brick_count > 0;

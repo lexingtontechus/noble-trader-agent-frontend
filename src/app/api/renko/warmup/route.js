@@ -157,7 +157,7 @@ export async function POST(request) {
       });
 
       try {
-        const batchRes = await fetch(`${RENKO_BASE}/tick/batch`, {
+        const batchRes = await fetch(`${RENKO_BASE}/tick/batch?symbol=${encodeURIComponent(symbol)}`, {
           method: "POST",
           headers: {
             ...authHeaders,
@@ -167,6 +167,7 @@ export async function POST(request) {
             prices: chunk,
             timestamps,
             regimes: Array(chunk.length).fill("low_vol_bull"),
+            symbol,  // Pass symbol in body so backend routes to correct pipeline
           }),
           signal: AbortSignal.timeout(30000),
         });
