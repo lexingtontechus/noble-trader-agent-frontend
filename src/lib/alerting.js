@@ -3,7 +3,8 @@
  *
  * Channels:
  *   1. In-app (Supabase ta_telegram_notification table — reused as general notification store)
- *   2. Telegram Bot API (when TELEGRAM_BOT_TOKEN is configured)
+ *   2. Discord Webhook API (when DISCORD_WEBHOOK_* URLs are configured)
+ *   3. Telegram Bot API (when TELEGRAM_BOT_TOKEN is configured — legacy)
  *
  * Alert types:
  *   - SIGNAL: New trading signal detected
@@ -22,10 +23,17 @@
 
 import { db } from "@/lib/supabase/db";
 
+// ── Environment variables ────────────────────────────────────────────────
+
 const TELEGRAM_BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN;
 const TELEGRAM_CHAT_ID = process.env.TELEGRAM_CHAT_ID;
 
-// ── Alert type definitions ──────────────────────────────────────────────────
+// Discord webhooks — one per channel for granular control
+const DISCORD_WEBHOOK_SIGNALS = process.env.DISCORD_WEBHOOK_SIGNALS;
+const DISCORD_WEBHOOK_EXECUTIONS = process.env.DISCORD_WEBHOOK_EXECUTIONS;
+const DISCORD_WEBHOOK_STATUS = process.env.DISCORD_WEBHOOK_STATUS;
+
+// ── Alert type definitions ──────────────────────────────────────────────
 
 export const ALERT_TYPES = {
   SIGNAL: "SIGNAL",
@@ -42,7 +50,154 @@ export const SEVERITY_LEVELS = {
   error: "error",
 };
 
-// ── Telegram Bot API ────────────────────────────────────────────────────────
+// ── Discord embed colors ────────────────────────────────────────────────
+
+const DISCORD_COLORS = {
+  info: 0x3498db,     // Blue
+  success: 0x2ecc71,  // Green
+  warning: 0xf39c12,  // Amber
+  error: 0xe74c3c,    // Red
+};
+
+const DIRECTION_COLORS = {
+  LONG: 0x2ecc71,     // Green
+  BUY: 0x2ecc71,
+  SHORT: 0xe74c3c,    // Red
+  SELL: 0xe74c3c,
+};
+
+const TYPE_EMOJI = {
+  SIGNAL: "📊",
+  TRADE: "💰",
+  RISK: "⚠️",
+  REGIME: "🔄",
+  SYSTEM: "🔧",
+};
+
+const SEVERITY_EMOJI = {
+  info: "ℹ️",
+  success: "✅",
+  warning: "⚠️",
+  error: "🚨",
+};
+
+// ── Discord Webhook API ─────────────────────────────────────────────────
+
+/**
+ * Get the appropriate Discord webhook URL for an alert type.
+ *
+ * @param {string} alertType - ALERT_TYPES value
+ * @returns {string|null} Webhook URL or null if not configured
+ */
+function getDiscordWebhookUrl(alertType) {
+  switch (alertType) {
+    case ALERT_TYPES.SIGNAL:
+      return DISCORD_WEBHOOK_SIGNALS;
+    case ALERT_TYPES.TRADE:
+      return DISCORD_WEBHOOK_EXECUTIONS;
+    case ALERT_TYPES.RISK:
+      return DISCORD_WEBHOOK_STATUS; // Risk alerts go to status channel
+    case ALERT_TYPES.REGIME:
+      return DISCORD_WEBHOOK_STATUS;
+    case ALERT_TYPES.SYSTEM:
+      return DISCORD_WEBHOOK_STATUS;
+    default:
+      return DISCORD_WEBHOOK_STATUS;
+  }
+}
+
+/**
+ * Build a Discord rich embed payload.
+ *
+ * @param {object} alert - Alert object
+ * @returns {object} Discord embed object
+ */
+function buildDiscordEmbed(alert) {
+  const emoji = TYPE_EMOJI[alert.type] || "🔔";
+  const sevEmoji = SEVERITY_EMOJI[alert.severity] || "";
+  const symbol = alert.symbol || "SYSTEM";
+
+  // Determine embed color
+  let color = DISCORD_COLORS[alert.severity] || DISCORD_COLORS.info;
+
+  // Override color for signal/trade based on direction
+  if (alert.type === ALERT_TYPES.SIGNAL && alert.data?.direction) {
+    color = DIRECTION_COLORS[alert.data.direction.toUpperCase()] || color;
+  }
+  if (alert.type === ALERT_TYPES.TRADE && alert.data?.direction) {
+    color = DIRECTION_COLORS[alert.data.direction.toUpperCase()] || color;
+  }
+
+  // Build fields from alert data
+  const fields = [];
+  if (alert.symbol && alert.symbol !== "system") {
+    fields.push({ name: "Symbol", value: alert.symbol, inline: true });
+  }
+  fields.push({ name: "Severity", value: `${sevEmoji} ${alert.severity}`, inline: true });
+
+  if (alert.data && typeof alert.data === "object") {
+    const skipKeys = new Set(["timestamp", "createdAt"]);
+    for (const [key, value] of Object.entries(alert.data)) {
+      if (skipKeys.has(key) || value === undefined || value === null) continue;
+      if (fields.length >= 8) break; // Discord max 25 fields, but 8 is readable
+      const label = key.replace(/_/g, " ").replace(/\b\w/g, c => c.toUpperCase());
+      fields.push({ name: label, value: String(value), inline: true });
+    }
+  }
+
+  const embed = {
+    title: `${emoji} [${alert.type}] ${symbol}`,
+    description: alert.message,
+    color,
+    fields,
+    footer: { text: "Noble Trader Agent" },
+    timestamp: new Date().toISOString(),
+  };
+
+  return embed;
+}
+
+/**
+ * Send a rich embed notification to Discord via webhook.
+ * Silently fails if Discord webhooks are not configured.
+ *
+ * @param {object} alert - Alert object
+ * @returns {Promise<boolean>} True if sent successfully
+ */
+export async function sendDiscordMessage(alert) {
+  const webhookUrl = getDiscordWebhookUrl(alert.type);
+  if (!webhookUrl) return false;
+
+  try {
+    const embed = buildDiscordEmbed(alert);
+    const res = await fetch(webhookUrl, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ embeds: [embed] }),
+      signal: AbortSignal.timeout(10000),
+    });
+
+    if (res.status === 204 || res.status === 200) {
+      return true;
+    }
+
+    if (res.status === 429) {
+      // Rate limited — extract retry-after
+      const retryAfter = res.headers.get("Retry-After") || "2";
+      console.warn(`[alerting] Discord rate limited, retry after ${retryAfter}s`);
+      return false;
+    }
+
+    const err = await res.text().catch(() => "");
+    console.error(`[alerting] Discord webhook error: ${res.status}`, err.substring(0, 200));
+    return false;
+  } catch (err) {
+    console.error("[alerting] Discord send failed:", err.message);
+    return false;
+  }
+}
+
+// ── Telegram Bot API ────────────────────────────────────────────────────
 
 /**
  * Send a message via Telegram Bot API.
@@ -83,22 +238,7 @@ export async function sendTelegramMessage(message) {
   }
 }
 
-// ── Format helpers ──────────────────────────────────────────────────────────
-
-const TYPE_EMOJI = {
-  SIGNAL: "📊",
-  TRADE: "💰",
-  RISK: "⚠️",
-  REGIME: "🔄",
-  SYSTEM: "🔧",
-};
-
-const SEVERITY_EMOJI = {
-  info: "ℹ️",
-  success: "✅",
-  warning: "⚠️",
-  error: "🚨",
-};
+// ── Format helpers ──────────────────────────────────────────────────────
 
 /**
  * Format an alert for Telegram display (HTML).
@@ -157,11 +297,11 @@ export function formatAlertMessage(alert) {
   };
 }
 
-// ── Main alert function ─────────────────────────────────────────────────────
+// ── Main alert function ─────────────────────────────────────────────────
 
 /**
  * Send an alert through all configured channels.
- * Always persists to Supabase; sends Telegram if configured.
+ * Always persists to Supabase; sends Discord + Telegram if configured.
  *
  * @param {object} params
  * @param {string} params.type - Alert type (SIGNAL | TRADE | RISK | REGIME | SYSTEM)
@@ -200,7 +340,14 @@ export async function sendAlert({ type, symbol, message, severity = "info", data
     };
   }
 
-  // Step 2: Send via Telegram (non-blocking, failures don't break anything)
+  // Step 2: Send via Discord (non-blocking, failures don't break anything)
+  try {
+    await sendDiscordMessage({ type, symbol, message, severity, data });
+  } catch (discordErr) {
+    console.error("[alerting] Discord send failed (non-critical):", discordErr.message);
+  }
+
+  // Step 3: Send via Telegram (non-blocking, failures don't break anything)
   try {
     const telegramMessage = formatAlertTelegram({ type, symbol, message, severity, data });
     await sendTelegramMessage(telegramMessage);
@@ -211,7 +358,7 @@ export async function sendAlert({ type, symbol, message, severity = "info", data
   return record;
 }
 
-// ── Query helpers ───────────────────────────────────────────────────────────
+// ── Query helpers ───────────────────────────────────────────────────────
 
 /**
  * Fetch recent alerts from Supabase.
@@ -255,4 +402,20 @@ export async function getRecentAlerts({ symbol, limit = 50, type } = {}) {
     console.error("[alerting] Failed to fetch alerts:", err.message);
     return [];
   }
+}
+
+// ── Discord channel check ───────────────────────────────────────────────
+
+/**
+ * Check which Discord channels are configured.
+ * Useful for UI display to show notification status.
+ *
+ * @returns {object} { signals, executions, status } — true if webhook URL is set
+ */
+export function getDiscordChannelStatus() {
+  return {
+    signals: !!DISCORD_WEBHOOK_SIGNALS,
+    executions: !!DISCORD_WEBHOOK_EXECUTIONS,
+    status: !!DISCORD_WEBHOOK_STATUS,
+  };
 }
