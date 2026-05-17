@@ -255,6 +255,26 @@ function createModelProxy(model) {
       if (error) throw new Error(`Supabase delete(${table}): ${error.message}`);
       return true;
     },
+
+    /**
+     * Upsert a record — insert or update on conflict.
+     * @param {Object} data - Row data to insert/update
+     * @param {Object} options
+     * @param {string|string[]} options.onConflict - Column(s) that define the conflict target
+     * @returns {Object} The upserted row
+     */
+    async upsert({ data, onConflict } = {}) {
+      if (!data) throw new Error("upsert requires data");
+      if (!onConflict) throw new Error("upsert requires onConflict (column name(s) for conflict target)");
+      const client = getAdminClient();
+      const { data: row, error } = await client
+        .from(table)
+        .upsert(data, { onConflict, ignoreDuplicates: false })
+        .select()
+        .single();
+      if (error) throw new Error(`Supabase upsert(${table}): ${error.message}`);
+      return row;
+    },
   };
 }
 

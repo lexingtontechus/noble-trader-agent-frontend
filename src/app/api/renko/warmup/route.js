@@ -26,8 +26,10 @@ export async function GET(request) {
     const symbol = url.searchParams.get("symbol") || "SPY";
     const brickSize = parseFloat(url.searchParams.get("brick_size") || "0.5");
 
+    // Use snake_case orderBy to match ta_renko_snapshot column names
     const snapshot = await db.renkoSnapshot.findFirst({
       where: { symbol, brick_size: brickSize },
+      orderBy: { created_at: "desc" },
     });
 
     if (!snapshot) {
@@ -79,6 +81,7 @@ export async function POST(request) {
       try {
         const existing = await db.renkoSnapshot.findFirst({
           where: { symbol, brick_size: brickSize },
+          orderBy: { created_at: "desc" },
         });
         if (existing) {
           const age = Date.now() - new Date(existing.updated_at).getTime();
@@ -212,7 +215,7 @@ export async function POST(request) {
     const config = stats?.config || {};
     const totalPnlBricks = stats?.state?.total_pnl_bricks || 0;
 
-    // Step 6: Save to Supabase (upsert by symbol + brick_size)
+    // Step 6: Save to Supabase using upsert (insert or update on conflict by symbol+brick_size)
     try {
       const snapshotData = {
         symbol,
@@ -235,23 +238,16 @@ export async function POST(request) {
         updated_at: new Date().toISOString(),
       };
 
-      // Try update first, then create
-      const existing = await db.renkoSnapshot.findFirst({
-        where: { symbol, brick_size: brickSize },
+      await db.renkoSnapshot.upsert({
+        data: snapshotData,
+        onConflict: "symbol,brick_size",
       });
-
-      if (existing) {
-        await db.renkoSnapshot.update({
-          where: { id: existing.id },
-          data: snapshotData,
-        });
-      } else {
-        await db.renkoSnapshot.create({ data: snapshotData });
-      }
 
       console.log(`[warmup] Saved snapshot for ${symbol}: ${totalBricks} bricks, ${totalTrades} trades`);
     } catch (dbErr) {
-      console.warn("[warmup] Failed to save to Supabase:", dbErr.message);
+      // Log full error details for debugging — this was silently failing before
+      console.error("[warmup] Failed to save to Supabase:", dbErr.message);
+      console.error("[warmup] Full error:", JSON.stringify(dbErr, null, 2));
       // Non-critical — still return the data
     }
 
