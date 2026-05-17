@@ -92,15 +92,128 @@ Tick → Brick Engine → Swing Classifier → Pattern Detector → Signal Filte
 
 ```
 src/
-├── lib/renko-client.js              # API client with retry/backoff
-├── app/api/renko/[action]/route.js  # BFF proxy route
+├── lib/
+│   ├── renko-client.js              # API client with retry/backoff
+│   └── supabase/db.js               # Prisma-like Supabase wrapper (with upsert)
+├── app/api/renko/
+│   ├── [action]/route.js            # BFF proxy route (auth, cold-start retry)
+│   └── warmup/route.js              # BFF warm-up (Yahoo Finance + Supabase upsert)
 └── components/renko/
-    ├── RenkoPage.jsx                # Main orchestrator (4 sub-tabs)
+    ├── RenkoPage.jsx                # Main orchestrator (4 sub-tabs, cache logic)
     ├── BrickChart.jsx               # CSS Renko brick chart
     ├── SignalsPanel.jsx             # Signals, filters, active position
     ├── TradesPanel.jsx              # Trade journal, equity curve
     └── ConfigPanel.jsx              # Pipeline configuration form
 ```
+
+## Data Persistence & Freshness
+
+### Supabase Cache (`ta_renko_snapshot`)
+
+Warm-up results are persisted to Supabase so returning visitors see data instantly without re-warming. Each row is keyed by `(symbol, brick_size)` and stores:
+
+| Column | Type | Contents |
+|--------|------|----------|
+| `bricks` | JSONB | Full Renko brick array |
+| `classified` | JSONB | Bricks with swing labels (HH/HL/LH/LL) |
+| `signals` | JSONB | Pattern signals |
+| `trades` | JSONB | Trade records |
+| `stats` | JSONB | Pipeline statistics |
+| `config` | JSONB | Pipeline configuration |
+| `price_range` | JSONB | Min/max prices from warm-up data |
+| `updated_at` | TIMESTAMPTZ | Last refresh timestamp |
+
+The Supabase write is handled by the BFF warm-up endpoint at `/api/renko/warmup`, which uses a native **upsert** on `(symbol, brick_size)` — a single atomic operation that inserts or updates without a separate find-first query.
+
+### Cache TTL: 4 Hours
+
+Staleness is calculated as `age = now - updated_at`. Data older than 4 hours is considered **stale**. The BFF GET endpoint returns `{ cached: true, stale: true/false, ... }` so the frontend can decide whether to trigger a background refresh.
+
+### Data Flow Decision Tree
+
+```
++---------------------------------------------------+
+|              Load Renko Data                       |
+|  (Page load / Symbol switch / Manual Warm Up)     |
++------------------------+--------------------------+
+                         |
+                         v
+              +----------------------+
+              | Supabase Cache Check |
+              | GET /api/renko/warmup|
+              +----------+-----------+
+                         |
+              +----------+----------+
+              |         |           |
+              v         v           v
+           FRESH       STALE     MISSING
+           (<4h)       (>4h)     (no row)
+              |         |           |
+              v         v           v
+        Show instantly  Show old    Backend fetch
+        DONE            data NOW   /renko/state
+                        + fire         |
+                        background     v
+                        warmup    +-----------+
+                       (non-      | Has data? |
+                        blocking) +-----+-----+
+                                        |
+                                 +------+------+
+                                 v             v
+                                YES           NO
+                                 |             |
+                                 v             v
+                           Show from      Auto-warmup
+                           pipeline       (Yahoo Finance
+                           DONE           -> feed pipeline
+                                          -> save Supabase)
+```
+
+### Trigger Behavior Matrix
+
+| Trigger | Fresh Cache (<4h) | Stale Cache (>4h) | No Cache |
+|---------|-------------------|-------------------|----------|
+| **Page Load** | Instant from Supabase | Old data shown + background refresh | Backend fetch -> auto-warm if empty |
+| **Symbol Switch** | Instant from Supabase | Old data shown + background refresh | Backend fetch -> auto-warm if empty |
+| **Warm Up Button** | Returns cached (skips Yahoo fetch) | Re-feeds Yahoo -> saves new snapshot | Feeds Yahoo -> saves snapshot |
+| **5s Auto-refresh** | Polls backend pipeline directly (bypasses Supabase) | Same | Same |
+
+### Key Design Choice: Stale = Show Now + Refresh Later
+
+When cached data is stale (>4 hours old), the UI does **not** block with a loading spinner. Instead:
+
+1. **Immediately** renders the stale Supabase snapshot so the user sees bricks, signals, and trades right away
+2. **Fires a background warm-up** request that re-fetches 6 months of Yahoo Finance data, feeds it through the pipeline, and upserts the new snapshot to Supabase
+3. When the warm-up completes, the UI **updates in place** with fresh data
+
+This avoids a blank screen during the 10-30 second warm-up process and provides the best user experience for returning visitors.
+
+## Warm-up Process
+
+The warm-up flow feeds 6 months of historical Yahoo Finance data through the pipeline so it has enough bricks to detect patterns and generate signals.
+
+### BFF Warm-up Endpoint (`/api/renko/warmup`)
+
+**POST** — Warm up pipeline + save to Supabase:
+1. Check Supabase for fresh cache (<4h) — if found, return it directly
+2. Fetch historical prices from Yahoo Finance (`yahoo-finance2`)
+3. Reset the backend pipeline for the target symbol
+4. Set regime to `low_vol_bull` (enables signal generation during warm-up)
+5. Feed prices in chunks of 150 via `POST /renko/tick/batch` (avoids Render timeout)
+6. Fetch full pipeline state (bricks, classified, signals, trades, stats)
+7. Upsert snapshot to Supabase `ta_renko_snapshot` on `(symbol, brick_size)`
+
+**GET** — Load cached snapshot:
+1. Query Supabase by `(symbol, brick_size)`
+2. Return `{ cached: true, stale: true/false, ... }` or `{ cached: false }`
+
+### Auto-warm-up Triggers
+
+Warm-up is automatically triggered when:
+- Page loads and no Supabase cache exists for the symbol
+- Page loads and Supabase cache is stale (>4h old) — background refresh
+- User switches to a new symbol with no cached data and empty backend pipeline
+- User clicks the **🔥 Warm Up** button manually
 
 ## Data Flow
 
