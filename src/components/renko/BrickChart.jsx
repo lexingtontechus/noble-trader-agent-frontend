@@ -17,7 +17,7 @@ const SWING_COLORS = {
 };
 
 function SingleBrick({ brick, classified, maxPrice, minPrice, priceRange }) {
-  const isUp = brick.direction === "UP";
+  const isUp = brick.direction?.toUpperCase() === "UP";
   const bgColor = isUp ? "bg-success/80" : "bg-error/80";
   const textColor = isUp ? "text-success" : "text-error";
   const arrow = isUp ? "▲" : "▼";
@@ -84,7 +84,7 @@ function SingleBrick({ brick, classified, maxPrice, minPrice, priceRange }) {
 }
 
 function CompactBrick({ brick, classified }) {
-  const isUp = brick.direction === "UP";
+  const isUp = brick.direction?.toUpperCase() === "UP";
   const bgColor = isUp ? "bg-success" : "bg-error";
   const arrow = isUp ? "▲" : "▼";
   const swingLabel = classified?.label || null;
@@ -174,8 +174,10 @@ export default function BrickChart({ bricks = [], classified = [] }) {
           <span className="text-4xl mb-3">🧱</span>
           <h3 className="text-lg font-bold mb-1">No Bricks Yet</h3>
           <p className="text-base-content/50 text-sm text-center max-w-md">
-            Feed ticks into the Renko pipeline to start generating bricks.
-            Use the process tick button or enable auto-refresh.
+            Click the <span className="badge badge-sm badge-secondary">🔥 Warm Up</span> button
+            to feed 6 months of historical data into the pipeline, or use
+            the <span className="badge badge-sm badge-primary">⚡ Tick</span> button
+            to process individual price ticks.
           </p>
         </div>
       </div>
@@ -184,6 +186,7 @@ export default function BrickChart({ bricks = [], classified = [] }) {
 
   // Last direction for color indicator
   const lastDirection = displayBricks[displayBricks.length - 1]?.direction;
+  const lastDirectionUp = lastDirection?.toUpperCase() === "UP";
 
   return (
     <div className="card bg-base-200 shadow-lg">
@@ -204,10 +207,10 @@ export default function BrickChart({ bricks = [], classified = [] }) {
             )}
             <span
               className={`badge badge-sm ${
-                lastDirection === "UP" ? "badge-success" : "badge-error"
+                lastDirectionUp ? "badge-success" : "badge-error"
               }`}
             >
-              {lastDirection === "UP" ? "▲ Bullish" : "▼ Bearish"}
+              {lastDirectionUp ? "▲ Bullish" : "▼ Bearish"}
             </span>
             <span className="text-xs text-base-content/40">
               {displayBricks.length} bricks

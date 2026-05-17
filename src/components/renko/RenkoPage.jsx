@@ -313,31 +313,67 @@ export default function RenkoPage() {
     }
   };
 
-  // Handle process tick (manual)
+  // Handle process tick (manual) — uses latest market price
   const handleProcessTick = async () => {
     try {
-      // Use last brick price + small random movement for demo
-      const lastPrice = pipelineState?.last_price || 500;
-      const randomDelta = (Math.random() - 0.5) * 2;
-      const tickPrice = lastPrice + randomDelta;
+      // Fetch the latest price from our BFF endpoint
+      const priceRes = await fetch(`/api/stream/latest-price?symbol=${encodeURIComponent(symbol)}`);
+      let tickPrice;
+      if (priceRes.ok) {
+        const priceData = await priceRes.json();
+        tickPrice = priceData.price || priceData.close || 500;
+      } else {
+        // Fallback: use last known price from pipeline state + small random
+        const lastPrice = bricks.length > 0 ? bricks[bricks.length - 1].close_price : 500;
+        tickPrice = lastPrice + (Math.random() - 0.5) * 1.0;
+      }
 
       const result = await renkoApiFetch("tick", {
         method: "POST",
-        body: { price: tickPrice, symbol },
+        body: { price: Math.round(tickPrice * 100) / 100, symbol },
       });
 
-      if (result?.bricks_created > 0) {
+      if (result?.bricks_created?.length > 0) {
         notifySuccess(
-          `Tick processed: ${result.bricks_created} brick(s) created, signal: ${result.signal || "none"}`
+          `Brick created! ${result.bricks_created.length} new, signal: ${result.signal?.pattern_type || "none"}`
         );
       } else {
-        notifySuccess("Tick processed: no new bricks");
+        notifySuccess("Tick processed: no new bricks (price didn't move enough)");
       }
 
       // Refresh data
       await fetchAllData(false);
     } catch (e) {
       notifyError(`Tick failed: ${e.message}`);
+    }
+  };
+
+  // Handle warm-up pipeline with historical data
+  const [warmingUp, setWarmingUp] = useState(false);
+
+  const handleWarmUp = async () => {
+    setWarmingUp(true);
+    try {
+      const res = await fetch("/api/renko/warmup", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ symbol, period: "6mo" }),
+      });
+
+      const data = await res.json();
+
+      if (data.success) {
+        notifySuccess(
+          `Warm-up complete! ${data.prices_fed} prices fed → ${data.total_bricks} bricks, ${data.total_trades} trades`
+        );
+        await fetchAllData(true);
+      } else {
+        notifyError(`Warm-up failed: ${data.error || "Unknown error"}`);
+      }
+    } catch (e) {
+      notifyError(`Warm-up failed: ${e.message}`);
+    } finally {
+      setWarmingUp(false);
     }
   };
 
@@ -389,10 +425,27 @@ export default function RenkoPage() {
               </label>
             </div>
 
+            {/* Warm Up button — feeds 6mo of historical data */}
+            <button
+              className={`btn btn-sm ${warmingUp ? "btn-disabled" : "btn-secondary"}`}
+              onClick={handleWarmUp}
+              disabled={warmingUp}
+            >
+              {warmingUp ? (
+                <>
+                  <span className="loading loading-spinner loading-xs" />
+                  Warming...
+                </>
+              ) : (
+                <>🔥 Warm Up</>
+              )}
+            </button>
+
             {/* Process tick button */}
             <button
               className="btn btn-sm btn-primary"
               onClick={handleProcessTick}
+              disabled={warmingUp}
             >
               ⚡ Tick
             </button>
@@ -478,13 +531,13 @@ export default function RenkoPage() {
                       lastDirection ? (
                         <span
                           className={
-                            lastDirection === "UP"
+                            lastDirection?.toUpperCase() === "UP"
                               ? "text-success"
                               : "text-error"
                           }
                         >
-                          {lastDirection === "UP" ? "▲" : "▼"}{" "}
-                          {lastDirection}
+                          {lastDirection?.toUpperCase() === "UP" ? "▲" : "▼"}{" "}
+                          {lastDirection?.toUpperCase()}
                         </span>
                       ) : (
                         "—"
