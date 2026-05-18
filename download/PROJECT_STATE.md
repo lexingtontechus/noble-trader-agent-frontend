@@ -1,7 +1,7 @@
 # Noble Trader Agent — Project State
 
-**Last Updated:** 2026-05-17
-**Version:** v5.0.0 (Renko HFT Pipeline)
+**Last Updated:** 2026-05-19
+**Version:** v5.2.0 (Renko HFT Pipeline + Backtesting)
 
 ---
 
@@ -136,6 +136,12 @@ Redis L1 (fastest, 4h TTL) → Supabase L2 (persistent, 4h TTL) → Yahoo Financ
 | `/optimise/full` | POST | Drawdown-controlled max-Sharpe |
 | `/strategy/signal` | POST | Strategy signal generation |
 | `/backtest/run` | POST | Backtest execution |
+| `/backtest/history` | GET | Paginated list of saved backtest results |
+| `/backtest/{id}` | GET | Full backtest result by ID |
+| `/backtest/compare` | POST | Side-by-side comparison of saved results |
+| `/backtest/optimize` | POST | Parameter grid sweep (max 50 combos) |
+| `/backtest/export` | POST | Export result as CSV/JSON |
+| `/backtest/{id}` | DELETE | Delete a saved backtest result |
 | `/tda/features` | POST | TDA feature extraction |
 | `/observation/build` | POST | 24-feature HMM observation vector |
 | `/stream/seed` | POST | Seed historical prices |
@@ -162,6 +168,12 @@ Redis L1 (fastest, 4h TTL) → Supabase L2 (persistent, 4h TTL) → Yahoo Financ
 | `/api/alerts` | GET/POST/DELETE | Alert history from Supabase |
 | `/api/clerk/alpaca-keys` | GET/POST | Alpaca API key management via Clerk `private.metadata` |
 | `/api/auth/clerk-*` | GET/POST | Clerk auth bridge to FastAPI |
+| `/api/backtest/run` | POST | Run walk-forward backtest (30+ metrics) |
+| `/api/backtest/history` | GET | Paginated list of saved backtest results |
+| `/api/backtest/detail/[id]` | GET/DELETE | Fetch or delete a backtest result |
+| `/api/backtest/compare` | POST | Side-by-side comparison of saved results |
+| `/api/backtest/optimize` | POST | Parameter grid sweep |
+| `/api/backtest/export` | POST | Export result as CSV/JSON |
 
 ---
 
@@ -226,6 +238,9 @@ CLERK_SECRET_KEY=
 | 7 | Wire notifications to pipeline | Discord notifications wired into renko/router.py | ✅ Implemented |
 | 8 | Notification delivery channel | Discord webhooks (3 channels: signals, executions, status) | ✅ Implemented |
 | 9 | Confirmed need for alerting | Full notification system built and verified | ✅ Implemented |
+| 15 | **Missing backtest endpoints** | Added /backtest/optimize (grid sweep), /backtest/export (CSV/JSON) | ✅ Implemented |
+| 16 | **Missing backtest BFF routes** | Added /api/backtest/optimize and /api/backtest/export BFF proxies | ✅ Implemented |
+| 17 | **Missing backtest client helpers** | Added 6 functions to fastapi-client.js (history, detail, compare, delete, optimize, export) | ✅ Implemented |
 
 ### Pending 🔲
 
@@ -410,3 +425,4 @@ The mode is determined entirely by the credentials passed, not by a config flag.
 | `MarketRegimeTrader_Backend_Project_Description.docx` | Backend-only project description |
 | `renko_snapshot_migration.sql` | Supabase migration SQL for ta_renko_snapshot table |
 | `noble-trader-project-20260507-085320.zip` | Full project snapshot archive |
+| `00000000000007_backtest_results.sql` | Supabase migration for ta_backtest_result table |

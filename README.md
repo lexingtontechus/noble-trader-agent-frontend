@@ -80,6 +80,7 @@ src/
 │   │   ├── stream/              # SSE streaming (session, tick, seed)
 │   │   ├── tda/                 # Topological Data Analysis (alerts, scan)
 │   │   ├── telegram/            # Telegram bot notifications
+│   │   ├── backtest/             # Backtest execution, history, comparison, optimization, export
 │   │   └── trading/             # Trading workflow (analyze, validate, approve, execute)
 │   ├── layout.js                # Root layout (ClerkProvider)
 │   ├── page.js                  # Home page (all views, keyboard shortcuts)
@@ -130,7 +131,8 @@ supabase/
     ├── 00000000000002_strategy_evolution.sql      # Evolution tables + seed
     ├── 00000000000003_evolution_cron.sql           # Evolution pg_cron jobs
     ├── 00000000000004_scheduled_orders.sql         # Scheduled orders tables
-    └── 00000000000005_scheduled_orders_cron.sql    # Scheduled orders pg_cron
+    ├── 00000000000005_scheduled_orders_cron.sql    # Scheduled orders pg_cron
+    └── 00000000000007_backtest_results.sql       # Backtest result persistence table
 ```
 
 ---
@@ -249,6 +251,7 @@ All data is stored in Supabase PostgreSQL with the `ta_` table prefix. Migration
 | `ta_strategy_performance` | Live/backtest performance per variant |
 | `ta_ab_test` | A/B test assignments and results |
 | `ta_evolution_log` | Strategy parameter change history |
+| `ta_backtest_result` | Saved backtest results with equity curves, trade logs, and 30+ metrics |
 
 ### Cron Jobs (pg_cron)
 | Job | Schedule | Purpose |
@@ -278,6 +281,32 @@ The NextJS API routes serve as a Backend-for-Frontend (BFF) layer, proxying requ
 | `/api/commentary` | POST | Generate AI market commentary |
 | `/api/prices` | POST | Fetch Yahoo Finance prices |
 | `/api/health` | GET | Backend health check |
+
+### Backtest Routes
+
+| Route | Method | Description |
+|-------|--------|-------------|
+| `/api/backtest/run` | POST | Run walk-forward backtest (30+ metrics, Supabase persistence) |
+| `/api/backtest/history` | GET | Paginated list of saved backtest results |
+| `/api/backtest/detail/[id]` | GET | Full backtest result by ID |
+| `/api/backtest/detail/[id]` | DELETE | Delete a saved backtest result |
+| `/api/backtest/compare` | POST | Side-by-side comparison of saved results |
+| `/api/backtest/optimize` | POST | Parameter grid sweep (max 50 combinations) |
+| `/api/backtest/export` | POST | Export result as CSV or JSON download |
+
+### Backtest Client Library (`src/lib/fastapi-client.js`)
+
+All backtest operations are available as importable async functions:
+
+| Function | Description |
+|----------|-------------|
+| `runBacktest(prices, symbol, options)` | Run walk-forward backtest via FastAPI |
+| `getBacktestHistory(options)` | Fetch paginated history from BFF |
+| `getBacktestDetail(id)` | Fetch single result by ID from BFF |
+| `compareBacktests(ids)` | Compare 2+ saved results via BFF |
+| `optimizeBacktest(prices, symbol, paramGrid, options)` | Grid search parameter sweep |
+| `deleteBacktest(id)` | Delete a saved result |
+| `exportBacktest(id, format, sections)` | Export as CSV/JSON download |
 
 ### Streaming Routes
 
