@@ -611,6 +611,131 @@ export async function runBacktest(prices, symbol = "UNKNOWN", options = {}) {
   return res.json();
 }
 
+// ── Backtest History / Detail / Compare / Delete (via BFF) ────────────────────
+
+/**
+ * Fetch paginated backtest history for the authenticated user.
+ * GET /api/backtest/history
+ *
+ * @param {object} options - Optional params (offset, limit)
+ * @returns {Promise<object>} BacktestHistoryResponse
+ */
+export async function getBacktestHistory(options = {}) {
+  const params = new URLSearchParams();
+  params.set("offset", String(options.offset ?? 0));
+  params.set("limit", String(options.limit ?? 20));
+
+  const res = await fetchWithRetry(`/api/backtest/history?${params.toString()}`, {
+    method: "GET",
+    headers: { "Content-Type": "application/json" },
+  });
+  return res.json();
+}
+
+/**
+ * Fetch a single saved backtest result by ID.
+ * GET /api/backtest/detail/{id}
+ *
+ * @param {string} id - Backtest result UUID
+ * @returns {Promise<object>} BacktestResponse
+ */
+export async function getBacktestDetail(id) {
+  const res = await fetchWithRetry(`/api/backtest/detail/${encodeURIComponent(id)}`, {
+    method: "GET",
+    headers: { "Content-Type": "application/json" },
+  });
+  return res.json();
+}
+
+/**
+ * Compare two or more saved backtest results side-by-side.
+ * POST /api/backtest/compare
+ *
+ * @param {string[]} ids - Array of backtest result UUIDs (min 2)
+ * @returns {Promise<object>} BacktestCompareResponse
+ */
+export async function compareBacktests(ids) {
+  const res = await fetchWithRetry(`/api/backtest/compare`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ ids }),
+  });
+  return res.json();
+}
+
+/**
+ * Delete a saved backtest result by ID.
+ * DELETE /api/backtest/detail/{id}
+ *
+ * @param {string} id - Backtest result UUID
+ * @returns {Promise<boolean>} True if deleted (204), false otherwise
+ */
+export async function deleteBacktest(id) {
+  const res = await fetchWithRetry(`/api/backtest/detail/${encodeURIComponent(id)}`, {
+    method: "DELETE",
+    headers: { "Content-Type": "application/json" },
+  });
+  return res.status === 204;
+}
+
+/**
+ * Run a parameter sweep (grid search) across backtest configurations.
+ * POST /api/backtest/optimize
+ *
+ * @param {number[]} prices - Close price series (min 81 bars)
+ * @param {string} symbol - Ticker symbol
+ * @param {object} paramGrid - Map of param name to array of values to sweep
+ * @param {object} options - Optional fixed params (window, kelly_fraction, etc.)
+ * @returns {Promise<object>} BacktestOptimizeResponse
+ */
+export async function optimizeBacktest(prices, symbol = "UNKNOWN", paramGrid = {}, options = {}) {
+  const body = {
+    prices,
+    symbol,
+    param_grid: paramGrid,
+    window: options.window ?? 200,
+    refit_every: options.refit_every ?? 50,
+    n_hmm_states: options.n_hmm_states ?? 4,
+    kelly_fraction: options.kelly_fraction ?? 0.5,
+    target_vol: options.target_vol ?? 0.15,
+    base_risk_limit: options.base_risk_limit ?? 0.02,
+    initial_equity: options.initial_equity ?? 100000,
+    commission_bps: options.commission_bps ?? 5.0,
+    slippage_bps: options.slippage_bps ?? 2.0,
+    max_position_pct: options.max_position_pct ?? 0.25,
+    risk_check: options.risk_check ?? true,
+    regime_gate: options.regime_gate ?? true,
+    save: options.save ?? false,
+  };
+
+  const res = await fetchWithRetry(`/api/backtest/optimize`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+    timeout: 300000, // 5 min for parameter sweeps
+    retries: 1,
+  });
+  return res.json();
+}
+
+/**
+ * Export a saved backtest result as CSV or JSON.
+ * POST /api/backtest/export
+ *
+ * @param {string} id - Backtest result UUID
+ * @param {"csv"|"json"} format - Export format
+ * @param {string[]} sections - Which sections to include (default: ["all"])
+ * @returns {Promise<Response>} Raw response for streaming download
+ */
+export async function exportBacktest(id, format = "json", sections = ["all"]) {
+  const res = await fetchWithRetry(`/api/backtest/export`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ id, format, sections }),
+  });
+  return res;
+}
+
 /**
  * Extract TDA features from price series (persistent homology).
  * POST /tda/features
