@@ -6,7 +6,6 @@
     "skipLibCheck": true,
     "strict": true,
     "noEmit": true,
-    "noImplicitAny": false,
     "esModuleInterop": true,
     "module": "esnext",
     "moduleResolution": "bundler",
@@ -29,9 +28,6 @@
     "**/*.tsx",
     ".next/types/**/*.ts",
     ".next/dev/types/**/*.ts",
-    "src/hooks/useStreamPrice.js",
-    "src/context/StreamContext.jsx",
-    "src/hooks/use-mobilejts",
   ],
-  "exclude": ["node_modules"],
+  "exclude": ["node_modules", "examples"],
 }
