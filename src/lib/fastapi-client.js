@@ -591,6 +591,14 @@ export async function runBacktest(prices, symbol = "UNKNOWN", options = {}) {
     risk_check: options.risk_check ?? true,
     regime_gate: options.regime_gate ?? true,
   };
+  // Optional: dates array for trade log date labels
+  if (options.dates) {
+    body.dates = options.dates;
+  }
+  // Optional: save to database (default true)
+  if (options.save !== undefined) {
+    body.save = options.save;
+  }
 
   const authHeaders = await getFastAPIAuthHeaders();
   const res = await fetchWithRetry(`${FASTAPI_BASE}/backtest/run`, {
