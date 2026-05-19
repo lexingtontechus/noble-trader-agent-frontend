@@ -387,3 +387,59 @@ export async function resetRenkoPipeline(symbol = "SPY") {
   );
   return res.json();
 }
+
+/**
+ * Run a backtest with Phase 2-7 parameters.
+ * POST /renko/backtest/run
+ */
+export async function runBacktest(params) {
+  const res = await renkoFetch("/backtest/run", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(params),
+    timeout: 120000,
+  });
+  return res.json();
+}
+
+/**
+ * Run backtest optimization across parameter combinations.
+ * POST /renko/backtest/optimize
+ */
+export async function optimizeBacktest(params) {
+  const res = await renkoFetch("/backtest/optimize", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(params),
+    timeout: 180000,
+  });
+  return res.json();
+}
+
+/**
+ * Run statistical rigor analysis (bootstrap CI, DSR).
+ * POST /renko/statistics/rigor
+ */
+export async function runStatisticalRigor(params) {
+  const res = await renkoFetch("/statistics/rigor", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(params),
+    timeout: 120000,
+  });
+  return res.json();
+}
+
+/**
+ * Run execution model simulation.
+ * POST /renko/execution/model
+ */
+export async function runExecutionModel(params) {
+  const res = await renkoFetch("/execution/model", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(params),
+    timeout: 120000,
+  });
+  return res.json();
+}

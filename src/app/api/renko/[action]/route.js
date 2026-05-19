@@ -17,6 +17,11 @@ const POST_ACTIONS = new Set([
   "equity",
   "config",
   "reset",
+  "backtest-run",
+  "backtest-stream",
+  "backtest-optimize",
+  "statistics-rigor",
+  "execution-model",
 ]);
 
 // Map action to backend path
@@ -36,6 +41,11 @@ function actionToPath(action) {
     equity: "/equity",
     config: "/config",
     reset: "/reset",
+    "backtest-run": "/backtest/run",
+    "backtest-stream": "/backtest/run/stream",
+    "backtest-optimize": "/backtest/optimize",
+    "statistics-rigor": "/statistics/rigor",
+    "execution-model": "/execution/model",
   };
   return mapping[action] || `/${action}`;
 }

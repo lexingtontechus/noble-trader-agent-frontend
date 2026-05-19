@@ -13,6 +13,7 @@ const ConfigPanel = dynamic(() => import("./ConfigPanel"), { ssr: false });
 const OrderTracker = dynamic(() => import("./OrderTracker"), { ssr: false });
 const RiskDashboard = dynamic(() => import("./RiskDashboard"), { ssr: false });
 const BacktestPanel = dynamic(() => import("./BacktestPanel"), { ssr: false });
+const BacktestResults = dynamic(() => import("./BacktestResults"), { ssr: false });
 
 // ── Error Boundary ─────────────────────────────────────────────────────────
 
@@ -78,7 +79,7 @@ const TABS = [
   { key: "orders", label: "📋 Orders", shortLabel: "Orders" },
   { key: "config", label: "⚙️ Config", shortLabel: "Config" },
   { key: "risk", label: "🛡️ Risk", shortLabel: "Risk" },
-  { key: "backtest", label: "🔬 Backtest", shortLabel: "Backtest" },
+  { key: "backtest", label: "🧪 Backtest", shortLabel: "Backtest" },
 ];
 
 // ── Metric Card ──────────────────────────────────────────────────────────────
@@ -159,6 +160,10 @@ export default function RenkoPage() {
   const [trades, setTrades] = useState([]);
   const [stats, setStats] = useState(null);
   const [config, setConfig] = useState({});
+
+  // Backtest state
+  const [backtestResult, setBacktestResult] = useState(null);
+  const [optimizeResult, setOptimizeResult] = useState(null);
 
   // ── Live Renko Stream ──────────────────────────────────────────────
   const renkoStream = useRenkoStream(symbol, {
@@ -873,7 +878,17 @@ export default function RenkoPage() {
             />
           )}
           {activeTab === "backtest" && (
-            <BacktestPanel symbol={symbol} />
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+              <BacktestPanel
+                bffFetch={renkoApiFetch}
+                onResult={setBacktestResult}
+                onOptimizeResult={setOptimizeResult}
+              />
+              <BacktestResults
+                result={backtestResult}
+                optimizeResult={optimizeResult}
+              />
+            </div>
           )}
         </div>
       </div>
