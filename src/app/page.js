@@ -12,6 +12,7 @@ import SimulatePage from "@/components/simulation/SimulatePage";
 import PortfolioPage from "@/components/portfolio/PortfolioPage";
 import AdminPage from "@/components/admin/AdminPage";
 import RenkoPage from "@/components/renko/RenkoPage";
+import OperationalPage from "@/components/operational/OperationalPage";
 import { StreamProvider } from "@/context/StreamContext";
 import NotificationToast from "@/components/shared/NotificationToast";
 
@@ -70,6 +71,9 @@ export default function Home() {
         setActiveView("renko");
       } else if ((e.metaKey || e.ctrlKey) && e.key === "8") {
         e.preventDefault();
+        setActiveView("ops");
+      } else if ((e.metaKey || e.ctrlKey) && e.key === "9") {
+        e.preventDefault();
         setActiveView("admin");
       }
     };
@@ -93,6 +97,7 @@ export default function Home() {
                 {activeView === "simulate" && <SimulatePage />}
                 {activeView === "portfolio" && <PortfolioPage />}
                 {activeView === "renko" && <RenkoPage />}
+                {activeView === "ops" && <OperationalPage />}
                 {activeView === "admin" && <AdminPage />}
               </div>
             </main>

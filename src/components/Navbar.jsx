@@ -19,6 +19,7 @@ const NAV_ITEMS = [
   { key: "simulate", label: "Simulate", icon: "🎲", shortLabel: "Sim" },
   { key: "portfolio", label: "Portfolio", icon: "📈", shortLabel: "Port" },
   { key: "search", label: "Search", icon: "🔍", shortLabel: "Search" },
+  { key: "ops", label: "Ops", icon: "🛡️", shortLabel: "Ops" },
   { key: "admin", label: "Admin", icon: "⚙️", shortLabel: "Admin" },
 ];
 
