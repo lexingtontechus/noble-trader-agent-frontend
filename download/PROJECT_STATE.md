@@ -1,7 +1,7 @@
 # Noble Trader Agent — Project State
 
 **Last Updated:** 2026-05-19
-**Version:** v5.2.0 (Renko HFT Pipeline + Backtesting)
+**Version:** v5.3.0 (Renko HFT Pipeline + Backtesting + Redis Caching)
 
 ---
 
