@@ -125,6 +125,9 @@ const DEFAULT_CONFIG = {
   max_consecutive_losses: 3,
   cooldown_seconds: 30.0,
   regime_gate: true,
+  slippage_bps: 2.0,
+  commission_bps: 5.0,
+  spread_bps: 1.0,
 };
 
 // ── Price Source Options ──────────────────────────────────────────────────
@@ -237,6 +240,9 @@ function ConfigForm({ config, onChange, prefix = "" }) {
       <ParamInput label="Max Consec. Losses" name="max_consecutive_losses" value={config.max_consecutive_losses} onChange={set} min={1} max={10} />
       <ParamInput label="Cooldown (sec)" name="cooldown_seconds" value={config.cooldown_seconds} onChange={set} step={5} min={0} />
       <ParamInput label="Regime Gate" name="regime_gate" value={config.regime_gate} onChange={set} type="toggle" help="HMM filter" />
+      <ParamInput label="Slippage (bps)" name="slippage_bps" value={config.slippage_bps} onChange={set} step={0.5} min={0} help="adverse fill" />
+      <ParamInput label="Commission (bps)" name="commission_bps" value={config.commission_bps} onChange={set} step={0.5} min={0} help="of notional" />
+      <ParamInput label="Spread (bps)" name="spread_bps" value={config.spread_bps} onChange={set} step={0.5} min={0} help="bid-ask" />
     </div>
   );
 }

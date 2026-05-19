@@ -33,6 +33,9 @@ export async function POST(request: Request) {
       maxConsecutiveLosses = 3,
       cooldownSeconds = 30.0,
       regimeGate = true,
+      slippageBps = 2.0,
+      commissionBps = 5.0,
+      spreadBps = 1.0,
       timestamps,
       regimes,
       signalConfidenceMin,
@@ -63,6 +66,9 @@ export async function POST(request: Request) {
       max_consecutive_losses: maxConsecutiveLosses,
       cooldown_seconds: cooldownSeconds,
       regime_gate: regimeGate,
+      slippage_bps: slippageBps,
+      commission_bps: commissionBps,
+      spread_bps: spreadBps,
     };
 
     if (timestamps) payload.timestamps = timestamps;

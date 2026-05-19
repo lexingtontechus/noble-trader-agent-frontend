@@ -60,6 +60,9 @@ export async function POST(request: Request) {
       max_daily_loss_bricks: options.max_daily_loss_bricks ?? 10.0,
       max_consecutive_losses: options.max_consecutive_losses ?? 3,
       regime_gate: options.regime_gate ?? true,
+      slippage_bps: options.slippage_bps ?? 2.0,
+      commission_bps: options.commission_bps ?? 5.0,
+      spread_bps: options.spread_bps ?? 1.0,
     };
 
     // ── Check Redis cache (L1) ──────────────────────────────────────────

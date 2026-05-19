@@ -177,6 +177,9 @@ export async function runRenkoBacktest(prices, symbol = "SPY", options = {}) {
     max_consecutive_losses: options.max_consecutive_losses ?? 3,
     cooldown_seconds: options.cooldown_seconds ?? 30.0,
     regime_gate: options.regime_gate ?? true,
+    slippage_bps: options.slippage_bps ?? 2.0,
+    commission_bps: options.commission_bps ?? 5.0,
+    spread_bps: options.spread_bps ?? 1.0,
   };
   if (options.timestamps) body.timestamps = options.timestamps;
   if (options.regimes) body.regimes = options.regimes;
@@ -250,6 +253,9 @@ export async function optimizeRenkoBacktest(prices, symbol = "SPY", paramGrid = 
     max_daily_loss_bricks: options.max_daily_loss_bricks ?? 10.0,
     max_consecutive_losses: options.max_consecutive_losses ?? 3,
     regime_gate: options.regime_gate ?? true,
+    slippage_bps: options.slippage_bps ?? 2.0,
+    commission_bps: options.commission_bps ?? 5.0,
+    spread_bps: options.spread_bps ?? 1.0,
   };
   if (options.timestamps) body.timestamps = options.timestamps;
   if (options.regimes) body.regimes = options.regimes;

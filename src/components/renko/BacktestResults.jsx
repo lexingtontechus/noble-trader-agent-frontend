@@ -546,7 +546,63 @@ export default function BacktestResults({ result, symbol = "SPY", streaming = fa
         </div>
       )}
 
-      {/* ── Section 7: Trade Log Table ────────────────────────────────────── */}
+      {/* ── Section 7: Transaction Cost Breakdown ──────────────────────────── */}
+      {(() => {
+        const costSummary = stats?.cost_summary || stats?.journal?.cost_summary;
+        if (!costSummary || !hasTrades) return null;
+        const { total_commission = 0, total_slippage_cost = 0, total_transaction_costs = 0,
+                total_gross_pnl_dollars = 0, total_net_pnl_dollars = 0, cost_drag_pct = 0,
+                avg_cost_per_trade = 0, by_exit_type = {} } = costSummary;
+        return (
+          <div className="card bg-base-200 shadow-lg">
+            <div className="card-body p-4">
+              <SectionHeader icon="💸" title="Transaction Costs" badge={`${formatNum(cost_drag_pct, 1)}% drag`} />
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-4">
+                <MetricCard label="Total Commission" value={`$${formatNum(total_commission, 2)}`} icon="🏦" colorClass="text-warning" subtext="Entry + exit" />
+                <MetricCard label="Total Slippage" value={`$${formatNum(total_slippage_cost, 2)}`} icon="📉" colorClass="text-warning" subtext="Entry + exit" />
+                <MetricCard label="Total Costs" value={`$${formatNum(total_transaction_costs, 2)}`} icon="💰" colorClass="text-error" subtext="Commission + slippage" />
+                <MetricCard label="Avg Cost/Trade" value={`$${formatNum(avg_cost_per_trade, 2)}`} icon="📊" colorClass="text-base-content/70" subtext={`Per trade avg`} />
+              </div>
+              {Object.keys(by_exit_type).length > 0 && (
+                <div className="overflow-x-auto">
+                  <table className="table table-sm">
+                    <thead>
+                      <tr>
+                        <th className="text-xs">Exit Type</th>
+                        <th className="text-xs">Count</th>
+                        <th className="text-xs">Commission</th>
+                        <th className="text-xs">Slippage</th>
+                        <th className="text-xs">Total Cost</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {Object.entries(by_exit_type).map(([exitType, data]) => (
+                        <tr key={exitType}>
+                          <td className="font-mono text-xs">{exitType.replace("closed_", "")}</td>
+                          <td className="font-mono text-xs">{data.count}</td>
+                          <td className="font-mono text-xs text-warning">${formatNum(data.commission, 2)}</td>
+                          <td className="font-mono text-xs text-warning">${formatNum(data.slippage, 2)}</td>
+                          <td className="font-mono text-xs text-error">${formatNum(data.total_cost, 2)}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+              {(total_gross_pnl_dollars !== 0 || total_net_pnl_dollars !== 0) && (
+                <div className="mt-3 flex items-center gap-4 text-xs">
+                  <span className="text-base-content/50">Gross P&L: <span className={`font-mono font-semibold ${total_gross_pnl_dollars >= 0 ? "text-success" : "text-error"}`}>${formatNum(total_gross_pnl_dollars, 2)}</span></span>
+                  <span className="text-base-content/30">→</span>
+                  <span className="text-base-content/50">Net P&L: <span className={`font-mono font-semibold ${total_net_pnl_dollars >= 0 ? "text-success" : "text-error"}`}>${formatNum(total_net_pnl_dollars, 2)}</span></span>
+                  <span className="text-base-content/30">(after ${formatNum(total_transaction_costs, 2)} costs)</span>
+                </div>
+              )}
+            </div>
+          </div>
+        );
+      })()}
+
+      {/* ── Section 8: Trade Log Table ────────────────────────────────────── */}
       <div className="card bg-base-200 shadow-lg">
         <div className="card-body p-4">
           <SectionHeader icon="📋" title="Trade Log" badge={`${closedTrades.length} trades`} />
@@ -565,6 +621,7 @@ export default function BacktestResults({ result, symbol = "SPY", streaming = fa
                     <th className="text-xs">Entry</th>
                     <th className="text-xs">Exit</th>
                     <th className="text-xs">P&L (br)</th>
+                    <th className="text-xs">Cost</th>
                     <th className="text-xs">Pattern</th>
                     <th className="text-xs">Reason</th>
                   </tr>
@@ -591,6 +648,9 @@ export default function BacktestResults({ result, symbol = "SPY", streaming = fa
                           <span className={`font-mono text-xs ${pnl >= 0 ? "text-success" : "text-error"}`}>
                             {pnl >= 0 ? "+" : ""}{pnl}
                           </span>
+                        </td>
+                        <td className="font-mono text-xs text-warning">
+                          {trade.total_cost ? `$${trade.total_cost.toFixed(2)}` : "—"}
                         </td>
                         <td className="text-xs text-base-content/50">{trade.pattern_type || trade.pattern || "—"}</td>
                         <td className="text-xs text-base-content/50">{trade.close_reason || "—"}</td>
