@@ -28,11 +28,19 @@ const DEFAULT_BACKTEST_CONFIG = {
 /**
  * BacktestPanel — Configure and run backtests with Phase 2-7 parameters.
  * Uses bffFetch prop (renkoApiFetch from RenkoPage) for API calls.
+ * Extended with Deep Analysis (Phase 6+7 dedicated endpoints).
  */
-export default function BacktestPanel({ bffFetch, onResult, onOptimizeResult }) {
+export default function BacktestPanel({
+  bffFetch,
+  onResult,
+  onOptimizeResult,
+  onSignificanceTests,
+  onExecutionModelDetail,
+}) {
   const [config, setConfig] = useState(DEFAULT_BACKTEST_CONFIG);
   const [running, setRunning] = useState(false);
   const [optimizing, setOptimizing] = useState(false);
+  const [analyzing, setAnalyzing] = useState(false);
   const [error, setError] = useState(null);
 
   const updateConfig = (key, value) => {
@@ -73,6 +81,51 @@ export default function BacktestPanel({ bffFetch, onResult, onOptimizeResult }) 
       setError(err.message);
     } finally {
       setOptimizing(false);
+    }
+  };
+
+  /**
+   * Deep Analysis — Calls dedicated Phase 6+7 endpoints for full statistical
+   * rigor and execution modeling detail. These return richer data than the
+   * inline backtest response.
+   */
+  const handleDeepAnalysis = async () => {
+    setAnalyzing(true);
+    setError(null);
+    try {
+      // Call both endpoints in parallel
+      const [rigorData, execData] = await Promise.allSettled([
+        bffFetch("statistics-rigor", {
+          method: "POST",
+          body: config,
+        }),
+        bffFetch("execution-model", {
+          method: "POST",
+          body: config,
+        }),
+      ]);
+
+      // Unwrap results — pass dedicated data to specialized callbacks
+      if (rigorData.status === "fulfilled" && rigorData.value) {
+        const rigor = rigorData.value;
+        if (onSignificanceTests) onSignificanceTests(rigor.significance_tests);
+      }
+
+      if (execData.status === "fulfilled" && execData.value) {
+        const exec = execData.value;
+        if (onExecutionModelDetail) onExecutionModelDetail(exec);
+      }
+
+      // Check for failures
+      if (rigorData.status === "rejected" && execData.status === "rejected") {
+        throw new Error(
+          `Deep analysis failed: ${rigorData.reason?.message || "Unknown error"}`
+        );
+      }
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setAnalyzing(false);
     }
   };
 
@@ -352,33 +405,51 @@ export default function BacktestPanel({ bffFetch, onResult, onOptimizeResult }) 
       </div>
 
       {/* Action Buttons */}
-      <div className="flex gap-3">
+      <div className="flex flex-col gap-2">
+        <div className="flex gap-3">
+          <button
+            className="btn btn-sm btn-primary flex-1"
+            onClick={handleRunBacktest}
+            disabled={running || optimizing || analyzing}
+          >
+            {running ? (
+              <>
+                <span className="loading loading-spinner loading-xs"></span>
+                Running...
+              </>
+            ) : (
+              <>▶ Run Backtest</>
+            )}
+          </button>
+          <button
+            className="btn btn-sm btn-secondary flex-1"
+            onClick={handleOptimize}
+            disabled={running || optimizing || analyzing}
+          >
+            {optimizing ? (
+              <>
+                <span className="loading loading-spinner loading-xs"></span>
+                Optimizing...
+              </>
+            ) : (
+              <>🔍 Optimize</>
+            )}
+          </button>
+        </div>
+
+        {/* Deep Analysis button — calls Phase 6+7 dedicated endpoints */}
         <button
-          className="btn btn-sm btn-primary flex-1"
-          onClick={handleRunBacktest}
-          disabled={running || optimizing}
+          className="btn btn-sm btn-outline w-full"
+          onClick={handleDeepAnalysis}
+          disabled={running || optimizing || analyzing}
         >
-          {running ? (
+          {analyzing ? (
             <>
               <span className="loading loading-spinner loading-xs"></span>
-              Running...
+              Analyzing...
             </>
           ) : (
-            <>▶ Run Backtest</>
-          )}
-        </button>
-        <button
-          className="btn btn-sm btn-secondary flex-1"
-          onClick={handleOptimize}
-          disabled={running || optimizing}
-        >
-          {optimizing ? (
-            <>
-              <span className="loading loading-spinner loading-xs"></span>
-              Optimizing...
-            </>
-          ) : (
-            <>🔍 Optimize</>
+            <>🔬 Deep Analysis (Significance + Execution)</>
           )}
         </button>
       </div>

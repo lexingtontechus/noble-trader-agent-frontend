@@ -164,6 +164,8 @@ export default function RenkoPage() {
   // Backtest state
   const [backtestResult, setBacktestResult] = useState(null);
   const [optimizeResult, setOptimizeResult] = useState(null);
+  const [significanceTests, setSignificanceTests] = useState(null);
+  const [executionModelDetail, setExecutionModelDetail] = useState(null);
 
   // ── Live Renko Stream ──────────────────────────────────────────────
   const renkoStream = useRenkoStream(symbol, {
@@ -883,10 +885,14 @@ export default function RenkoPage() {
                 bffFetch={renkoApiFetch}
                 onResult={setBacktestResult}
                 onOptimizeResult={setOptimizeResult}
+                onSignificanceTests={setSignificanceTests}
+                onExecutionModelDetail={setExecutionModelDetail}
               />
               <BacktestResults
                 result={backtestResult}
                 optimizeResult={optimizeResult}
+                significanceTests={significanceTests}
+                executionModelDetail={executionModelDetail}
               />
             </div>
           )}

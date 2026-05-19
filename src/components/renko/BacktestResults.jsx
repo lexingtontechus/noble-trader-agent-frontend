@@ -1,5 +1,9 @@
 "use client";
 
+import { useState } from "react";
+import StatisticalRigorPanel from "./StatisticalRigorPanel";
+import ExecutionModelingPanel from "./ExecutionModelingPanel";
+
 /**
  * MetricWithCI — Displays a metric value with optional confidence interval.
  */
@@ -80,11 +84,28 @@ function CostBreakdown({ costSummary }) {
   );
 }
 
+// ── Tab configuration ────────────────────────────────────────────────────
+
+const RESULT_TABS = [
+  { key: "overview", label: "Overview", icon: "📊" },
+  { key: "statistics", label: "Statistics", icon: "🔬" },
+  { key: "execution", label: "Execution", icon: "⚡" },
+];
+
 /**
  * BacktestResults — Display component for backtest results with Phase 6+7 metrics.
  * Handles both single backtest results and optimization results.
+ * Three tabs: Overview, Statistical Rigor, Execution Modeling.
  */
-export default function BacktestResults({ result, optimizeResult }) {
+export default function BacktestResults({
+  result,
+  optimizeResult,
+  significanceTests,
+  executionModelDetail,
+}) {
+  const [activeTab, setActiveTab] = useState("overview");
+
+  // ── Empty state ────────────────────────────────────────────────────────
   if (!result && !optimizeResult) {
     return (
       <div className="card bg-base-200 shadow-sm">
@@ -101,7 +122,7 @@ export default function BacktestResults({ result, optimizeResult }) {
     );
   }
 
-  // ── Optimization results ─────────────────────────────────────────────────
+  // ── Optimization results ───────────────────────────────────────────────
   if (optimizeResult) {
     return (
       <div className="space-y-4">
@@ -143,6 +164,35 @@ export default function BacktestResults({ result, optimizeResult }) {
               <div className="text-xs mb-3">
                 <span className="font-bold">Multiple Testing:</span>{" "}
                 {optimizeResult.multiple_testing.summary.interpretation}
+              </div>
+            )}
+
+            {/* Significance Tests (from deep analysis) */}
+            {significanceTests && (
+              <div className="mb-3">
+                <div className="flex items-center gap-1 mb-2">
+                  <span className="text-xs font-bold">Significance Tests</span>
+                </div>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                  {significanceTests.whites_reality_check && (
+                    <div className={`alert ${significanceTests.whites_reality_check.is_significant ? "alert-success" : "alert-warning"} alert-sm py-1`}>
+                      <div className="text-xs">
+                        <span className="font-bold">White&apos;s RC:</span>{" "}
+                        p={significanceTests.whites_reality_check.p_value?.toFixed(4)}
+                        {significanceTests.whites_reality_check.is_significant ? " ✓" : ""}
+                      </div>
+                    </div>
+                  )}
+                  {significanceTests.hansen_spa && (
+                    <div className={`alert ${significanceTests.hansen_spa.is_significant ? "alert-success" : "alert-warning"} alert-sm py-1`}>
+                      <div className="text-xs">
+                        <span className="font-bold">Hansen SPA:</span>{" "}
+                        p={significanceTests.hansen_spa.p_value?.toFixed(4)}
+                        {significanceTests.hansen_spa.is_significant ? " ✓" : ""}
+                      </div>
+                    </div>
+                  )}
+                </div>
               </div>
             )}
 
@@ -192,162 +242,219 @@ export default function BacktestResults({ result, optimizeResult }) {
             </div>
           </div>
         </div>
+
+        {/* Detailed Statistical Rigor for Optimization */}
+        {(optimizeResult.deflated_sharpe || optimizeResult.multiple_testing) && (
+          <StatisticalRigorPanel
+            dsr={optimizeResult.deflated_sharpe}
+            multipleTesting={optimizeResult.multiple_testing}
+            significanceTests={significanceTests}
+          />
+        )}
       </div>
     );
   }
 
-  // ── Single backtest results ──────────────────────────────────────────────
+  // ── Single backtest results (tabbed) ────────────────────────────────────
   const stats = result.stats?.journal || result.stats || {};
   const costSummary = stats.cost_summary || {};
   const fillStats = stats.fill_stats || {};
   const dollarStats = stats.dollar_stats || {};
-  const bootstrapCI = result.bootstrap_ci || {};
-  const dsr = result.deflated_sharpe || {};
+  const bootstrapCI = result.bootstrap_ci || result.bootstrap_cis || {};
+  const dsr = result.deflated_sharpe || result.deflated_sharpe_result || {};
+  const execModel = result.execution_modeling || result.execution_model || {};
+
+  // Extract detailed execution data (from deep analysis or inline response)
+  const marketImpactDetail =
+    executionModelDetail?.market_impact || result.market_impact;
+  const fillProbabilityDetail =
+    executionModelDetail?.fill_probability || result.fill_probability;
+  const financingCostsDetail =
+    executionModelDetail?.financing_costs || result.financing_costs;
 
   return (
-    <div className="space-y-4">
-      {/* Key Metrics */}
-      <div className="card bg-base-200 shadow-sm">
-        <div className="card-body p-4">
-          <div className="flex items-center gap-2 mb-3">
-            <div className="w-7 h-7 rounded-lg bg-success/15 flex items-center justify-center">
-              <span className="text-xs">📈</span>
-            </div>
-            <h4 className="font-semibold text-sm">Performance Metrics</h4>
-          </div>
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-            <div className="stat bg-base-100 rounded-lg p-2">
-              <div className="stat-title text-xs">Total Trades</div>
-              <div className="stat-value text-lg">{stats.total_trades || 0}</div>
-            </div>
-            <div className="stat bg-base-100 rounded-lg p-2">
-              <div className="stat-title text-xs">Win Rate</div>
-              <div className="stat-value text-lg">
-                <MetricWithCI
-                  value={((stats.win_rate || 0) * 100).toFixed(1)}
-                  unit="%"
-                  ci={bootstrapCI.win_rate?.percentile_ci}
-                />
-              </div>
-            </div>
-            <div className="stat bg-base-100 rounded-lg p-2">
-              <div className="stat-title text-xs">Sharpe Ratio</div>
-              <div className="stat-value text-lg">
-                <MetricWithCI
-                  value={(stats.sharpe_estimate || 0).toFixed(2)}
-                  ci={bootstrapCI.sharpe_ratio?.percentile_ci}
-                />
-              </div>
-            </div>
-            <div className="stat bg-base-100 rounded-lg p-2">
-              <div className="stat-title text-xs">Profit Factor</div>
-              <div className="stat-value text-lg">
-                <MetricWithCI
-                  value={(stats.profit_factor || 0).toFixed(2)}
-                  ci={bootstrapCI.profit_factor?.percentile_ci}
-                />
-              </div>
-            </div>
-            <div className="stat bg-base-100 rounded-lg p-2">
-              <div className="stat-title text-xs">Max Drawdown</div>
-              <div className="stat-value text-lg text-error">
-                <MetricWithCI
-                  value={(stats.max_drawdown_bricks || 0).toFixed(2)}
-                  ci={bootstrapCI.max_drawdown?.percentile_ci}
-                />
-              </div>
-            </div>
-            <div className="stat bg-base-100 rounded-lg p-2">
-              <div className="stat-title text-xs">Net Return</div>
-              <div className="stat-value text-lg">
-                {dollarStats.net_return_pct?.toFixed(2) || "0.00"}%
-              </div>
-            </div>
-            <div className="stat bg-base-100 rounded-lg p-2">
-              <div className="stat-title text-xs">Net P&amp;L</div>
-              <div
-                className={`stat-value text-lg ${
-                  dollarStats.net_pnl_dollars >= 0 ? "text-success" : "text-error"
-                }`}
-              >
-                ${dollarStats.net_pnl_dollars?.toFixed(2) || "0.00"}
-              </div>
-            </div>
-            <div className="stat bg-base-100 rounded-lg p-2">
-              <div className="stat-title text-xs">Total Bricks</div>
-              <div className="stat-value text-lg">{result.total_bricks || 0}</div>
-            </div>
-          </div>
-        </div>
+    <div className="space-y-3">
+      {/* Tab bar */}
+      <div className="tabs tabs-boxed bg-base-200 p-0.5">
+        {RESULT_TABS.map((tab) => (
+          <button
+            key={tab.key}
+            className={`tab tab-sm ${activeTab === tab.key ? "tab-active" : ""}`}
+            onClick={() => setActiveTab(tab.key)}
+          >
+            {tab.icon} {tab.label}
+          </button>
+        ))}
       </div>
 
-      {/* Deflated Sharpe Ratio */}
-      {dsr.dsr !== undefined && (
-        <div
-          className={`alert ${
-            dsr.is_significant
-              ? "alert-success"
-              : dsr.dsr > 0.75
-              ? "alert-warning"
-              : "alert-error"
-          } alert-sm`}
-        >
-          <div>
-            <div className="font-bold text-xs">
-              Deflated Sharpe Ratio: {dsr.dsr?.toFixed(4)}
-              {dsr.is_significant && " \u2713 Significant"}
-            </div>
-            <div className="text-xs">{dsr.interpretation}</div>
-            {dsr.n_trials > 1 && (
-              <div className="text-xs text-base-content/60">
-                Expected max Sharpe under null:{" "}
-                {dsr.expected_max_sharpe?.toFixed(4)} (across {dsr.n_trials}{" "}
-                trials)
+      {/* ── Overview Tab ─────────────────────────────────────────────────── */}
+      {activeTab === "overview" && (
+        <div className="space-y-4">
+          {/* Key Metrics */}
+          <div className="card bg-base-200 shadow-sm">
+            <div className="card-body p-4">
+              <div className="flex items-center gap-2 mb-3">
+                <div className="w-7 h-7 rounded-lg bg-success/15 flex items-center justify-center">
+                  <span className="text-xs">📈</span>
+                </div>
+                <h4 className="font-semibold text-sm">Performance Metrics</h4>
               </div>
-            )}
-          </div>
-        </div>
-      )}
-
-      {/* Cost Breakdown */}
-      {costSummary.total_all_costs > 0 && (
-        <div className="card bg-base-200 shadow-sm">
-          <div className="card-body p-4">
-            <div className="flex items-center gap-2 mb-3">
-              <div className="w-7 h-7 rounded-lg bg-warning/15 flex items-center justify-center">
-                <span className="text-xs">💸</span>
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                <div className="stat bg-base-100 rounded-lg p-2">
+                  <div className="stat-title text-xs">Total Trades</div>
+                  <div className="stat-value text-lg">{stats.total_trades || 0}</div>
+                </div>
+                <div className="stat bg-base-100 rounded-lg p-2">
+                  <div className="stat-title text-xs">Win Rate</div>
+                  <div className="stat-value text-lg">
+                    <MetricWithCI
+                      value={((stats.win_rate || 0) * 100).toFixed(1)}
+                      unit="%"
+                      ci={bootstrapCI.win_rate?.percentile_ci}
+                    />
+                  </div>
+                </div>
+                <div className="stat bg-base-100 rounded-lg p-2">
+                  <div className="stat-title text-xs">Sharpe Ratio</div>
+                  <div className="stat-value text-lg">
+                    <MetricWithCI
+                      value={(stats.sharpe_estimate || 0).toFixed(2)}
+                      ci={bootstrapCI.sharpe_ratio?.percentile_ci}
+                    />
+                  </div>
+                </div>
+                <div className="stat bg-base-100 rounded-lg p-2">
+                  <div className="stat-title text-xs">Profit Factor</div>
+                  <div className="stat-value text-lg">
+                    <MetricWithCI
+                      value={(stats.profit_factor || 0).toFixed(2)}
+                      ci={bootstrapCI.profit_factor?.percentile_ci}
+                    />
+                  </div>
+                </div>
+                <div className="stat bg-base-100 rounded-lg p-2">
+                  <div className="stat-title text-xs">Max Drawdown</div>
+                  <div className="stat-value text-lg text-error">
+                    <MetricWithCI
+                      value={(stats.max_drawdown_bricks || 0).toFixed(2)}
+                      ci={bootstrapCI.max_drawdown?.percentile_ci}
+                    />
+                  </div>
+                </div>
+                <div className="stat bg-base-100 rounded-lg p-2">
+                  <div className="stat-title text-xs">Net Return</div>
+                  <div className="stat-value text-lg">
+                    {dollarStats.net_return_pct?.toFixed(2) || "0.00"}%
+                  </div>
+                </div>
+                <div className="stat bg-base-100 rounded-lg p-2">
+                  <div className="stat-title text-xs">Net P&amp;L</div>
+                  <div
+                    className={`stat-value text-lg ${
+                      dollarStats.net_pnl_dollars >= 0 ? "text-success" : "text-error"
+                    }`}
+                  >
+                    ${dollarStats.net_pnl_dollars?.toFixed(2) || "0.00"}
+                  </div>
+                </div>
+                <div className="stat bg-base-100 rounded-lg p-2">
+                  <div className="stat-title text-xs">Total Bricks</div>
+                  <div className="stat-value text-lg">{result.total_bricks || 0}</div>
+                </div>
               </div>
-              <h4 className="font-semibold text-sm">Cost Breakdown</h4>
-              <span className="badge badge-sm badge-ghost">
-                ${costSummary.total_all_costs?.toFixed(2)} total
-              </span>
             </div>
-            <CostBreakdown costSummary={costSummary} />
           </div>
+
+          {/* Deflated Sharpe Ratio */}
+          {dsr.dsr !== undefined && (
+            <div
+              className={`alert ${
+                dsr.is_significant
+                  ? "alert-success"
+                  : dsr.dsr > 0.75
+                  ? "alert-warning"
+                  : "alert-error"
+              } alert-sm`}
+            >
+              <div>
+                <div className="font-bold text-xs">
+                  Deflated Sharpe Ratio: {dsr.dsr?.toFixed(4)}
+                  {dsr.is_significant && " \u2713 Significant"}
+                </div>
+                <div className="text-xs">{dsr.interpretation}</div>
+                {dsr.n_trials > 1 && (
+                  <div className="text-xs text-base-content/60">
+                    Expected max Sharpe under null:{" "}
+                    {dsr.expected_max_sharpe?.toFixed(4)} (across {dsr.n_trials}{" "}
+                    trials)
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+
+          {/* Cost Breakdown */}
+          {costSummary.total_all_costs > 0 && (
+            <div className="card bg-base-200 shadow-sm">
+              <div className="card-body p-4">
+                <div className="flex items-center gap-2 mb-3">
+                  <div className="w-7 h-7 rounded-lg bg-warning/15 flex items-center justify-center">
+                    <span className="text-xs">💸</span>
+                  </div>
+                  <h4 className="font-semibold text-sm">Cost Breakdown</h4>
+                  <span className="badge badge-sm badge-ghost">
+                    ${costSummary.total_all_costs?.toFixed(2)} total
+                  </span>
+                </div>
+                <CostBreakdown costSummary={costSummary} />
+              </div>
+            </div>
+          )}
+
+          {/* Fill Statistics */}
+          {fillStats.missed_fills > 0 && (
+            <div className="alert alert-warning alert-sm">
+              <div>
+                <div className="font-bold text-xs">Fill Statistics</div>
+                <div className="text-xs">
+                  Avg fill probability:{" "}
+                  {(fillStats.avg_fill_probability * 100).toFixed(1)}% | Missed
+                  fills: {fillStats.missed_fills} (
+                  {(fillStats.missed_fill_rate * 100).toFixed(1)}%)
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Data Lineage */}
+          {result.data_hash && (
+            <div className="text-xs text-base-content/40">
+              Data hash: {result.data_hash} | Ticks: {result.total_ticks} | Bricks:{" "}
+              {result.total_bricks}
+            </div>
+          )}
         </div>
       )}
 
-      {/* Fill Statistics */}
-      {fillStats.missed_fills > 0 && (
-        <div className="alert alert-warning alert-sm">
-          <div>
-            <div className="font-bold text-xs">Fill Statistics</div>
-            <div className="text-xs">
-              Avg fill probability:{" "}
-              {(fillStats.avg_fill_probability * 100).toFixed(1)}% | Missed
-              fills: {fillStats.missed_fills} (
-              {(fillStats.missed_fill_rate * 100).toFixed(1)}%)
-            </div>
-          </div>
-        </div>
+      {/* ── Statistics Tab ───────────────────────────────────────────────── */}
+      {activeTab === "statistics" && (
+        <StatisticalRigorPanel
+          bootstrapCI={bootstrapCI}
+          dsr={dsr}
+          significanceTests={significanceTests}
+        />
       )}
 
-      {/* Data Lineage */}
-      {result.data_hash && (
-        <div className="text-xs text-base-content/40">
-          Data hash: {result.data_hash} | Ticks: {result.total_ticks} | Bricks:{" "}
-          {result.total_bricks}
-        </div>
+      {/* ── Execution Tab ────────────────────────────────────────────────── */}
+      {activeTab === "execution" && (
+        <ExecutionModelingPanel
+          costSummary={costSummary}
+          fillStats={fillStats}
+          executionModeling={execModel}
+          marketImpact={marketImpactDetail}
+          fillProbability={fillProbabilityDetail}
+          financingCosts={financingCostsDetail}
+        />
       )}
     </div>
   );

@@ -288,10 +288,17 @@ export interface RenkoBacktestResponse {
   data_quality_warnings?: string[];
   look_ahead_audit_result?: LookAheadAuditResult | null;
   // Phase 6: Statistical Rigor
-  bootstrap_cis?: Record<string, BootstrapCIResult & { _display?: Record<string, string> }> | null;
+  bootstrap_ci?: Record<string, BootstrapCIMetric> | null;
+  bootstrap_cis?: Record<string, BootstrapCIMetric> | null;
+  deflated_sharpe?: DeflatedSharpeResult | null;
   deflated_sharpe_result?: DeflatedSharpeResult | null;
+  significance_tests?: SignificanceTestResults | null;
   // Phase 7: Execution Modeling
   execution_modeling?: ExecutionModelingSummary | null;
+  execution_model?: ExecutionModelingSummary | null;
+  market_impact?: MarketImpactResult | null;
+  fill_probability?: FillProbabilityResult | null;
+  financing_costs?: FinancingCostsResult | null;
 }
 
 export interface RenkoCompareConfig {
@@ -358,12 +365,31 @@ export interface RenkoBacktestOptimizeResponse {
   best_by_sharpe: OptimizeResultRow | null;
   best_by_return: OptimizeResultRow | null;
   n_combinations: number;
+  deflated_sharpe?: DeflatedSharpeResult | null;
   deflated_sharpe_result?: DeflatedSharpeResult | null;
+  multiple_testing?: MultipleTestingResults | null;
   multiple_testing_results?: MultipleTestingResults | null;
+  significance_tests?: SignificanceTestResults | null;
   significance_test_results?: Record<string, SignificanceTestResult> | null;
 }
 
 // ── Phase 6: Statistical Rigor ────────────────────────────────────────
+
+export interface BootstrapCIMethod {
+  lower: number;
+  upper: number;
+  se?: number;
+}
+
+export interface BootstrapCIMetric {
+  point_estimate: number;
+  percentile_ci?: BootstrapCIMethod;
+  percentile?: BootstrapCIMethod;
+  circular_block_ci?: BootstrapCIMethod;
+  circular_block?: BootstrapCIMethod;
+  confidence_level: number;
+  _display?: Record<string, string>;
+}
 
 export interface BootstrapCIResult {
   metric: string;
@@ -379,38 +405,86 @@ export interface DeflatedSharpeResult {
   dsr: number;
   observed_sharpe: number;
   expected_max_sharpe: number;
-  variance_of_sharpe: number;
+  variance_of_sharpe?: number;
   n_trials: number;
   sample_length: number;
-  skewness: number;
-  kurtosis: number;
+  skewness?: number;
+  kurtosis?: number;
   is_significant: boolean;
-  significance_level: number;
+  significance_level?: number;
+  p_value?: number;
+  interpretation?: string;
 }
 
 export interface MultipleTestingMethod {
   method: string;
-  corrected_p_values: number[];
-  significant_count: number;
+  corrected_p_values?: number[];
+  adjusted_p_values?: number[];
+  significant_count?: number;
+  n_significant?: number;
   alpha: number;
   n_tests: number;
+  is_significant?: boolean[];
+  fdr_threshold?: number;
+}
+
+export interface MultipleTestingSummary {
+  raw_significant: number;
+  bonferroni_significant: number;
+  holm_significant: number;
+  bh_fdr_significant: number;
+  interpretation?: string;
 }
 
 export interface MultipleTestingResults {
-  bonferroni: MultipleTestingMethod;
-  holm_bonferroni: MultipleTestingMethod;
-  benjamini_hochberg: MultipleTestingMethod;
+  bonferroni?: MultipleTestingMethod;
+  holm_bonferroni?: MultipleTestingMethod;
+  benjamini_hochberg?: MultipleTestingMethod;
+  corrections?: {
+    bonferroni?: MultipleTestingMethod;
+    holm_bonferroni?: MultipleTestingMethod;
+    benjamini_hochberg?: MultipleTestingMethod;
+  };
+  raw_p_values?: number[];
+  n_raw_significant?: number;
+  summary?: MultipleTestingSummary;
 }
 
 export interface SignificanceTestResult {
-  test_name: string;
-  statistic: number;
+  test_name?: string;
+  test?: string;
+  statistic?: number;
+  observed_statistic?: number;
   p_value: number;
   is_significant: boolean;
-  n_bootstrap: number;
+  n_bootstrap?: number;
+  n_strategies?: number;
+  n_periods?: number;
+  best_strategy_index?: number;
+  best_strategy_mean_excess?: number;
+  interpretation?: string;
+}
+
+export interface SignificanceTestResults {
+  whites_reality_check?: SignificanceTestResult;
+  hansen_spa?: SignificanceTestResult;
+  consensus?: {
+    both_significant: boolean;
+    either_significant: boolean;
+    recommendation?: string;
+  };
 }
 
 // ── Phase 7: Execution Modeling ───────────────────────────────────────
+
+export interface MarketImpactResult {
+  participation_rate?: number;
+  permanent_impact_bps?: number;
+  temporary_impact_bps?: number;
+  total_impact_bps?: number;
+  impact_cost_dollars?: number;
+  impact_cost_pct?: number;
+}
 
 export interface MarketImpactSummary {
   total_impact_cost_dollars: number;
@@ -418,9 +492,56 @@ export interface MarketImpactSummary {
   impact_enabled: boolean;
 }
 
+export interface FillProbabilityResult {
+  fill_probability?: number;
+  order_type?: string;
+  distance_from_mid_pct?: number;
+  distance_in_sigmas?: number;
+  expected_fill_price_offset_bps?: number;
+  interpretation?: string;
+}
+
 export interface FillProbabilitySummary {
   avg_fill_probability: number;
   fill_probability_enabled: boolean;
+}
+
+export interface BorrowCostResult {
+  daily_borrow_cost?: number;
+  total_borrow_cost?: number;
+  effective_annual_rate_bps?: number;
+  is_hard_to_borrow?: boolean;
+  holding_days?: number;
+  position_notional?: number;
+}
+
+export interface MarginCostResult {
+  daily_margin_cost?: number;
+  total_margin_cost?: number;
+  margin_rate_bps?: number;
+  holding_days?: number;
+  borrowed_amount?: number;
+}
+
+export interface DividendCostResult {
+  daily_dividend_cost?: number;
+  total_dividend_cost?: number;
+  dividend_yield_bps?: number;
+  prob_ex_dividend_during_hold?: number;
+}
+
+export interface FinancingCostsResult {
+  direction?: string;
+  position_notional?: number;
+  holding_days?: number;
+  total_financing_cost?: number;
+  daily_financing_cost?: number;
+  financing_cost_bps_daily?: number;
+  components?: {
+    borrow?: BorrowCostResult;
+    margin?: MarginCostResult;
+    dividend?: DividendCostResult;
+  };
 }
 
 export interface FinancingSummary {
@@ -439,6 +560,13 @@ export interface ExecutionModelingSummary {
   fill_probability: FillProbabilitySummary;
   financing: FinancingSummary;
   all_models_enabled: boolean;
+}
+
+export interface ExecutionModelDetail {
+  market_impact?: MarketImpactResult;
+  fill_probability?: FillProbabilityResult;
+  financing_costs?: FinancingCostsResult;
+  execution_modeling?: ExecutionModelingSummary;
 }
 
 // Walk-Forward
