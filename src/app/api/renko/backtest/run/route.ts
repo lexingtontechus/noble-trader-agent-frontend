@@ -47,6 +47,19 @@ export async function POST(request: Request) {
       indexName = null,
       priceAdjustment = "raw",
       lookAheadAudit = false,
+      // Phase 7: Execution Modeling
+      enableMarketImpact = false,
+      avgDailyVolume = 1000000,
+      impactGamma = 0.314,
+      impactEta = 0.142,
+      enableFillProbability = false,
+      enableBorrowCosts = false,
+      borrowRateAnnual = 0.005,
+      hardToBorrow = false,
+      htbPremiumRate = 0.10,
+      enableMarginCosts = false,
+      marginRateAnnual = 0.065,
+      marginRequirement = 0.50,
     } = body;
 
     if (!prices || !Array.isArray(prices) || prices.length < 50) {
@@ -83,6 +96,19 @@ export async function POST(request: Request) {
       universe_mode: universeMode,
       price_adjustment: priceAdjustment,
       look_ahead_audit: lookAheadAudit,
+      // Phase 7: Execution Modeling
+      enable_market_impact: enableMarketImpact,
+      avg_daily_volume: avgDailyVolume,
+      impact_gamma: impactGamma,
+      impact_eta: impactEta,
+      enable_fill_probability: enableFillProbability,
+      enable_borrow_costs: enableBorrowCosts,
+      borrow_rate_annual: borrowRateAnnual,
+      hard_to_borrow: hardToBorrow,
+      htb_premium_rate: htbPremiumRate,
+      enable_margin_costs: enableMarginCosts,
+      margin_rate_annual: marginRateAnnual,
+      margin_requirement: marginRequirement,
     };
 
     if (timestamps) payload.timestamps = timestamps;

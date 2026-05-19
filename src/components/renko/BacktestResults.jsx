@@ -22,16 +22,20 @@ import {
  *
  * Sections:
  *   1. Summary Metric Cards (total trades, win rate, profit factor, Sharpe, max DD, Kelly)
- *   2. Dollar P&L Metrics (from stats.dollar_stats)
- *   3. Equity Curve — cumulative P&L over trades
- *   4. Drawdown Underwater Plot
- *   5. Monthly Returns Heatmap — calendar-style grid
- *   6. Trade Distribution (win/loss histogram by P&L bucket)
- *   7. Per-Pattern Breakdown (if available)
- *   8. Transaction Cost Breakdown
- *   9. Regime-Conditional Performance (Phase 4D)
- *  10. Trade Log Table
- *  11. Config Used
+ *   2. Extra Brick Metrics
+ *   3. Dollar P&L Metrics (from stats.dollar_stats)
+ *   4. Equity Curve — cumulative P&L over trades
+ *   5. Drawdown Underwater Plot
+ *   6. Monthly Returns Heatmap — calendar-style grid
+ *   7. Trade Distribution (win/loss histogram by P&L bucket)
+ *   8. Per-Pattern Breakdown (if available)
+ *   9. Transaction Cost Breakdown
+ *  10. Regime-Conditional Performance (Phase 4D)
+ *  11. Data Quality (Phase 5)
+ *  12. Statistical Rigor (Phase 6)
+ *  13. Execution Modeling (Phase 7)
+ *  14. Trade Log Table
+ *  15. Config Used
  */
 
 // ── Exit Type Display Names ──────────────────────────────────────────────
@@ -950,6 +954,232 @@ export default function BacktestResults({ result, symbol = "SPY", streaming = fa
                       </ul>
                     )}
                   </div>
+                </div>
+              )}
+            </div>
+          </div>
+        );
+      })()}
+
+      {/* ── Statistical Rigor (Phase 6) ────────────────────────────────────── */}
+      {(() => {
+        const bootstrapCis = result.bootstrap_cis;
+        const dsrResult = result.deflated_sharpe_result;
+        const hasAny = (bootstrapCis && Object.keys(bootstrapCis).length > 0) || dsrResult;
+        if (!hasAny) return null;
+
+        // Extract display-formatted CIs if available
+        const ciDisplay = bootstrapCis?._display || {};
+        const ciMetrics = Object.entries(bootstrapCis || {}).filter(([k]) => k !== "_display");
+
+        return (
+          <div className="card bg-base-200 shadow-lg">
+            <div className="card-body p-4">
+              <SectionHeader icon="🔬" title="Statistical Rigor" badge="Phase 6" />
+
+              {/* 6A: Deflated Sharpe Ratio */}
+              {dsrResult && (
+                <div className="mb-4">
+                  <div className="text-xs font-semibold text-base-content/70 mb-2">Deflated Sharpe Ratio (DSR)</div>
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                    <MetricCard
+                      label="DSR"
+                      value={formatNum(dsrResult.dsr, 4)}
+                      colorClass={dsrResult.dsr >= 0.95 ? "text-success" : dsrResult.dsr >= 0.9 ? "text-warning" : "text-error"}
+                      subtext={dsrResult.is_significant ? "Significant at 5%" : "Not significant"}
+                    />
+                    <MetricCard
+                      label="Observed Sharpe"
+                      value={formatNum(dsrResult.observed_sharpe, 3)}
+                      subtext="Raw (uncorrected)"
+                    />
+                    <MetricCard
+                      label="Expected Max SR"
+                      value={formatNum(dsrResult.expected_max_sharpe, 3)}
+                      subtext={`From ${dsrResult.n_trials} trial(s)`}
+                    />
+                    <MetricCard
+                      label="Significance"
+                      value={dsrResult.is_significant ? "Yes" : "No"}
+                      colorClass={dsrResult.is_significant ? "text-success" : "text-error"}
+                      subtext={`p < ${(1 - dsrResult.dsr).toFixed(4)}`}
+                    />
+                  </div>
+                  <div className="mt-2 text-[10px] text-base-content/30">
+                    DSR adjusts Sharpe for multiple testing. DSR &ge; 0.95 = significant at 5% level.
+                    {dsrResult.n_trials === 1 && " (Single backtest: no multiple testing penalty applied.)"}
+                  </div>
+                </div>
+              )}
+
+              {/* 6B: Bootstrap Confidence Intervals */}
+              {ciMetrics.length > 0 && (
+                <div className="mb-4">
+                  <div className="text-xs font-semibold text-base-content/70 mb-2">Bootstrap Confidence Intervals (95%)</div>
+                  <div className="overflow-x-auto">
+                    <table className="table table-sm">
+                      <thead>
+                        <tr>
+                          <th className="text-xs">Metric</th>
+                          <th className="text-xs">Point Estimate</th>
+                          <th className="text-xs">95% CI</th>
+                          <th className="text-xs">Width</th>
+                          <th className="text-xs">Method</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {ciMetrics.map(([metricName, ciData]) => {
+                          const display = ciDisplay[metricName] || {};
+                          const width = (ciData.ci_upper ?? 0) - (ciData.ci_lower ?? 0);
+                          return (
+                            <tr key={metricName}>
+                              <td className="font-mono text-xs font-semibold">{metricName.replace(/_/g, " ")}</td>
+                              <td className="font-mono text-xs">
+                                <span className="font-bold">{display.point_estimate ?? formatNum(ciData.point_estimate, 3)}</span>
+                              </td>
+                              <td className="font-mono text-xs">
+                                <span className="text-base-content/60">[{display.ci_lower ?? formatNum(ciData.ci_lower, 3)}, {display.ci_upper ?? formatNum(ciData.ci_upper, 3)}]</span>
+                              </td>
+                              <td className="font-mono text-xs">
+                                <span className={width > Math.abs(ciData.point_estimate ?? 1) * 0.5 ? "text-warning" : "text-success"}>
+                                  {formatNum(width, 3)}
+                                </span>
+                              </td>
+                              <td className="font-mono text-[10px] text-base-content/40">{ciData.method || "—"}</td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                  <div className="mt-2 text-[10px] text-base-content/30">
+                    CIs computed via {ciMetrics[0]?.[1]?.n_resamples ?? 2000} bootstrap resamples. Wide CIs indicate noisy/unreliable estimates.
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+        );
+      })()}
+
+      {/* ── Execution Modeling (Phase 7) ────────────────────────────────────── */}
+      {(() => {
+        const em = result.execution_modeling;
+        if (!em) return null;
+
+        const hasAny = em.market_impact?.impact_enabled || em.fill_probability?.fill_probability_enabled || em.financing;
+        if (!hasAny) return null;
+
+        return (
+          <div className="card bg-base-200 shadow-lg">
+            <div className="card-body p-4">
+              <SectionHeader icon="⚡" title="Execution Modeling" badge="Phase 7" />
+
+              <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
+                {/* 7A: Market Impact */}
+                {em.market_impact?.impact_enabled && (
+                  <>
+                    <MetricCard
+                      label="Total Impact Cost"
+                      value={`$${formatNum(em.market_impact.total_impact_cost_dollars, 2)}`}
+                      icon="📉"
+                      colorClass="text-warning"
+                      subtext="Almgren-Chriss"
+                    />
+                    <MetricCard
+                      label="Avg Impact/Trade"
+                      value={`${formatNum(em.market_impact.avg_impact_bps_per_trade, 2)} bps`}
+                      icon="📊"
+                      colorClass={em.market_impact.avg_impact_bps_per_trade > 5 ? "text-error" : "text-warning"}
+                      subtext="Per trade impact"
+                    />
+                  </>
+                )}
+
+                {/* 7B: Fill Probability */}
+                {em.fill_probability?.fill_probability_enabled && (
+                  <MetricCard
+                    label="Avg Fill Probability"
+                    value={`${formatNum((em.fill_probability.avg_fill_probability ?? 1) * 100, 1)}%`}
+                    icon="🎰"
+                    colorClass={em.fill_probability.avg_fill_probability >= 0.95 ? "text-success" : em.fill_probability.avg_fill_probability >= 0.85 ? "text-warning" : "text-error"}
+                    subtext="Logit model"
+                  />
+                )}
+
+                {/* 7C: Financing Costs */}
+                {em.financing && (
+                  <>
+                    <MetricCard
+                      label="Total Financing"
+                      value={`$${formatNum(em.financing.total_financing_cost, 2)}`}
+                      icon="🏦"
+                      colorClass="text-warning"
+                      subtext="Borrow + margin + div"
+                    />
+                    <MetricCard
+                      label="Borrow Costs"
+                      value={`$${formatNum(em.financing.total_borrow_cost, 2)}`}
+                      icon="📕"
+                      colorClass="text-warning"
+                      subtext={`${em.financing.short_trades ?? 0} short trades`}
+                    />
+                    <MetricCard
+                      label="Margin Costs"
+                      value={`$${formatNum(em.financing.total_margin_cost, 2)}`}
+                      icon="💳"
+                      colorClass="text-warning"
+                      subtext="Leverage financing"
+                    />
+                    {em.financing.total_dividend_cost > 0 && (
+                      <MetricCard
+                        label="Dividend Costs"
+                        value={`$${formatNum(em.financing.total_dividend_cost, 2)}`}
+                        icon="💸"
+                        colorClass="text-warning"
+                        subtext="Short dividend payments"
+                      />
+                    )}
+                  </>
+                )}
+              </div>
+
+              {/* Financing detail table */}
+              {em.financing && (em.financing.total_financing_cost > 0) && (
+                <div className="mt-3 overflow-x-auto">
+                  <table className="table table-sm">
+                    <thead>
+                      <tr>
+                        <th className="text-xs">Direction</th>
+                        <th className="text-xs">Trades</th>
+                        <th className="text-xs">Borrow Cost</th>
+                        <th className="text-xs">Margin Cost</th>
+                        <th className="text-xs">Dividend Cost</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      <tr>
+                        <td className="font-mono text-xs font-semibold">Long</td>
+                        <td className="font-mono text-xs">{(em.financing.long_trades ?? 0)}</td>
+                        <td className="font-mono text-xs text-warning">${formatNum(0, 2)}</td>
+                        <td className="font-mono text-xs text-warning">${formatNum(em.financing.total_margin_cost * (em.financing.long_trades / ((em.financing.long_trades || 1) + (em.financing.short_trades || 1))), 2)}</td>
+                        <td className="font-mono text-xs">—</td>
+                      </tr>
+                      <tr>
+                        <td className="font-mono text-xs font-semibold">Short</td>
+                        <td className="font-mono text-xs">{(em.financing.short_trades ?? 0)}</td>
+                        <td className="font-mono text-xs text-warning">${formatNum(em.financing.total_borrow_cost, 2)}</td>
+                        <td className="font-mono text-xs text-warning">${formatNum(em.financing.total_margin_cost * (em.financing.short_trades / ((em.financing.long_trades || 1) + (em.financing.short_trades || 1))), 2)}</td>
+                        <td className="font-mono text-xs text-warning">${formatNum(em.financing.total_dividend_cost, 2)}</td>
+                      </tr>
+                    </tbody>
+                  </table>
+                </div>
+              )}
+
+              {em.all_models_enabled && (
+                <div className="mt-2">
+                  <span className="badge badge-xs badge-success">All execution models active</span>
                 </div>
               )}
             </div>

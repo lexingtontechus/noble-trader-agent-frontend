@@ -136,6 +136,19 @@ const DEFAULT_CONFIG = {
   indexName: '',
   priceAdjustment: 'raw',
   lookAheadAudit: false,
+  // Phase 7: Execution Modeling
+  enableMarketImpact: false,
+  avgDailyVolume: 1000000,
+  impactGamma: 0.314,
+  impactEta: 0.142,
+  enableFillProbability: false,
+  enableBorrowCosts: false,
+  borrowRateAnnual: 0.005,
+  hardToBorrow: false,
+  htbPremiumRate: 0.10,
+  enableMarginCosts: false,
+  marginRateAnnual: 0.065,
+  marginRequirement: 0.50,
 };
 
 // ── Price Source Options ──────────────────────────────────────────────────
@@ -274,6 +287,37 @@ function ConfigForm({ config, onChange, prefix = "" }) {
       )}
       <ParamInput label="Price Adjustment" name="priceAdjustment" value={config.priceAdjustment} onChange={set} type="select" min={[{ value: "raw", label: "Raw Prices" }, { value: "split_adjusted", label: "Split-Adjusted" }, { value: "fully_adjusted", label: "Fully Adjusted (incl. dividends)" }]} help="corporate actions" />
       <ParamInput label="Look-Ahead Audit" name="lookAheadAudit" value={config.lookAheadAudit} onChange={set} type="toggle" help="bias check" />
+
+      {/* ── Execution Modeling (Phase 7) ─────────────────────────────────── */}
+      <div className="col-span-2 sm:col-span-3 lg:col-span-4 mt-2">
+        <div className="divider text-xs text-base-content/40 before:bg-base-300 after:bg-base-300">Execution Modeling</div>
+      </div>
+      <ParamInput label="Market Impact" name="enableMarketImpact" value={config.enableMarketImpact} onChange={set} type="toggle" help="Almgren-Chiss" />
+      {config.enableMarketImpact && (
+        <>
+          <ParamInput label="Avg Daily Volume" name="avgDailyVolume" value={config.avgDailyVolume} onChange={set} step={100000} min={10000} help="shares" />
+          <ParamInput label="Impact Gamma" name="impactGamma" value={config.impactGamma} onChange={set} step={0.01} min={0} help="permanent impact" />
+          <ParamInput label="Impact Eta" name="impactEta" value={config.impactEta} onChange={set} step={0.01} min={0} help="temporary impact" />
+        </>
+      )}
+      <ParamInput label="Fill Probability" name="enableFillProbability" value={config.enableFillProbability} onChange={set} type="toggle" help="logit model" />
+      <ParamInput label="Borrow Costs" name="enableBorrowCosts" value={config.enableBorrowCosts} onChange={set} type="toggle" help="short borrow" />
+      {config.enableBorrowCosts && (
+        <>
+          <ParamInput label="Borrow Rate (annual)" name="borrowRateAnnual" value={config.borrowRateAnnual} onChange={set} step={0.001} min={0} help="0.005 = 0.5%" />
+          <ParamInput label="Hard to Borrow" name="hardToBorrow" value={config.hardToBorrow} onChange={set} type="toggle" help="HTB premium" />
+          {config.hardToBorrow && (
+            <ParamInput label="HTB Premium Rate" name="htbPremiumRate" value={config.htbPremiumRate} onChange={set} step={0.01} min={0} help="annual rate" />
+          )}
+        </>
+      )}
+      <ParamInput label="Margin Costs" name="enableMarginCosts" value={config.enableMarginCosts} onChange={set} type="toggle" help="financing" />
+      {config.enableMarginCosts && (
+        <>
+          <ParamInput label="Margin Rate (annual)" name="marginRateAnnual" value={config.marginRateAnnual} onChange={set} step={0.005} min={0} help="0.065 = 6.5%" />
+          <ParamInput label="Margin Requirement" name="marginRequirement" value={config.marginRequirement} onChange={set} step={0.05} min={0.1} max={1.0} help="Reg T = 0.50" />
+        </>
+      )}
     </div>
   );
 }
@@ -519,8 +563,29 @@ export default function BacktestPanel({ symbol = "SPY" }) {
     try {
       const prices = getPrices();
 
+      // Map camelCase config to snake_case for backend
+      const requestConfig = {
+        ...config,
+        enable_market_impact: config.enableMarketImpact,
+        avg_daily_volume: config.avgDailyVolume,
+        impact_gamma: config.impactGamma,
+        impact_eta: config.impactEta,
+        enable_fill_probability: config.enableFillProbability,
+        enable_borrow_costs: config.enableBorrowCosts,
+        borrow_rate_annual: config.borrowRateAnnual,
+        hard_to_borrow: config.hardToBorrow,
+        htb_premium_rate: config.htbPremiumRate,
+        enable_margin_costs: config.enableMarginCosts,
+        margin_rate_annual: config.marginRateAnnual,
+        margin_requirement: config.marginRequirement,
+        universe_mode: config.universeMode,
+        index_name: config.indexName,
+        price_adjustment: config.priceAdjustment,
+        look_ahead_audit: config.lookAheadAudit,
+      };
+
       await bffFetchStream(
-        { prices, symbol, ...config },
+        { prices, symbol, ...requestConfig },
         {
           onProgress: (event) => {
             // Update progress bar
@@ -541,6 +606,9 @@ export default function BacktestPanel({ symbol = "SPY" }) {
               trades: event.trades_so_far || [],
               config_used: config,
               _streaming: true, // Flag to indicate partial data
+              bootstrap_cis: event.bootstrap_cis,
+              deflated_sharpe_result: event.deflated_sharpe_result,
+              execution_modeling: event.execution_modeling,
             });
           },
           onComplete: (event) => {
@@ -555,6 +623,9 @@ export default function BacktestPanel({ symbol = "SPY" }) {
               config_used: event.config_used || config,
               cached: event.cached || false,
               _streaming: false,
+              bootstrap_cis: event.bootstrap_cis,
+              deflated_sharpe_result: event.deflated_sharpe_result,
+              execution_modeling: event.execution_modeling,
             });
           },
           signal: controller.signal,
@@ -591,8 +662,27 @@ export default function BacktestPanel({ symbol = "SPY" }) {
     try {
       const prices = getPrices();
       const configs = compareConfigs.map((c) => {
-        const { label, ...params } = c;
-        return { label, ...params };
+        const { label, enableMarketImpact, avgDailyVolume, impactGamma, impactEta, enableFillProbability, enableBorrowCosts, borrowRateAnnual, hardToBorrow, htbPremiumRate, enableMarginCosts, marginRateAnnual, marginRequirement, universeMode, indexName, priceAdjustment, lookAheadAudit, ...params } = c;
+        return {
+          label,
+          ...params,
+          enable_market_impact: enableMarketImpact,
+          avg_daily_volume: avgDailyVolume,
+          impact_gamma: impactGamma,
+          impact_eta: impactEta,
+          enable_fill_probability: enableFillProbability,
+          enable_borrow_costs: enableBorrowCosts,
+          borrow_rate_annual: borrowRateAnnual,
+          hard_to_borrow: hardToBorrow,
+          htb_premium_rate: htbPremiumRate,
+          enable_margin_costs: enableMarginCosts,
+          margin_rate_annual: marginRateAnnual,
+          margin_requirement: marginRequirement,
+          universe_mode: universeMode,
+          index_name: indexName,
+          price_adjustment: priceAdjustment,
+          look_ahead_audit: lookAheadAudit,
+        };
       });
       const result = await bffFetch("compare", { prices, symbol, configs }, 180000);
       setCompareResult(result);
@@ -610,7 +700,26 @@ export default function BacktestPanel({ symbol = "SPY" }) {
     setOptimizeResult(null);
     try {
       const prices = getPrices();
-      const result = await bffFetch("optimize", { prices, symbol, param_grid: paramGrid, ...config }, 300000);
+      const requestConfig = {
+        ...config,
+        enable_market_impact: config.enableMarketImpact,
+        avg_daily_volume: config.avgDailyVolume,
+        impact_gamma: config.impactGamma,
+        impact_eta: config.impactEta,
+        enable_fill_probability: config.enableFillProbability,
+        enable_borrow_costs: config.enableBorrowCosts,
+        borrow_rate_annual: config.borrowRateAnnual,
+        hard_to_borrow: config.hardToBorrow,
+        htb_premium_rate: config.htbPremiumRate,
+        enable_margin_costs: config.enableMarginCosts,
+        margin_rate_annual: config.marginRateAnnual,
+        margin_requirement: config.marginRequirement,
+        universe_mode: config.universeMode,
+        index_name: config.indexName,
+        price_adjustment: config.priceAdjustment,
+        look_ahead_audit: config.lookAheadAudit,
+      };
+      const result = await bffFetch("optimize", { prices, symbol, param_grid: paramGrid, ...requestConfig }, 300000);
       setOptimizeResult(result);
     } catch (e) {
       setError(e.message || "Optimize failed");
@@ -626,10 +735,29 @@ export default function BacktestPanel({ symbol = "SPY" }) {
     setWalkForwardResult(null);
     try {
       const prices = getPrices();
+      const requestConfig = {
+        ...config,
+        enable_market_impact: config.enableMarketImpact,
+        avg_daily_volume: config.avgDailyVolume,
+        impact_gamma: config.impactGamma,
+        impact_eta: config.impactEta,
+        enable_fill_probability: config.enableFillProbability,
+        enable_borrow_costs: config.enableBorrowCosts,
+        borrow_rate_annual: config.borrowRateAnnual,
+        hard_to_borrow: config.hardToBorrow,
+        htb_premium_rate: config.htbPremiumRate,
+        enable_margin_costs: config.enableMarginCosts,
+        margin_rate_annual: config.marginRateAnnual,
+        margin_requirement: config.marginRequirement,
+        universe_mode: config.universeMode,
+        index_name: config.indexName,
+        price_adjustment: config.priceAdjustment,
+        look_ahead_audit: config.lookAheadAudit,
+      };
       const result = await bffFetch("walk-forward", {
         prices,
         symbol,
-        ...config,
+        ...requestConfig,
         trainWindow: wfConfig.trainWindow,
         testWindow: wfConfig.testWindow,
         minTradesForStats: wfConfig.minTradesForStats,
@@ -649,10 +777,29 @@ export default function BacktestPanel({ symbol = "SPY" }) {
     setMonteCarloResult(null);
     try {
       const prices = getPrices();
+      const requestConfig = {
+        ...config,
+        enable_market_impact: config.enableMarketImpact,
+        avg_daily_volume: config.avgDailyVolume,
+        impact_gamma: config.impactGamma,
+        impact_eta: config.impactEta,
+        enable_fill_probability: config.enableFillProbability,
+        enable_borrow_costs: config.enableBorrowCosts,
+        borrow_rate_annual: config.borrowRateAnnual,
+        hard_to_borrow: config.hardToBorrow,
+        htb_premium_rate: config.htbPremiumRate,
+        enable_margin_costs: config.enableMarginCosts,
+        margin_rate_annual: config.marginRateAnnual,
+        margin_requirement: config.marginRequirement,
+        universe_mode: config.universeMode,
+        index_name: config.indexName,
+        price_adjustment: config.priceAdjustment,
+        look_ahead_audit: config.lookAheadAudit,
+      };
       const result = await bffFetch("monte-carlo", {
         prices,
         symbol,
-        ...config,
+        ...requestConfig,
         nSimulations: mcConfig.nSimulations,
       }, 300000);
       setMonteCarloResult(result);

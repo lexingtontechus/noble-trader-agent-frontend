@@ -187,6 +187,25 @@ export async function runRenkoBacktest(prices, symbol = "SPY", options = {}) {
     body.signal_confidence_min = options.signal_confidence_min;
   }
 
+  // Phase 7: Execution Modeling
+  if (options.enable_market_impact !== undefined) body.enable_market_impact = options.enable_market_impact;
+  if (options.avg_daily_volume !== undefined) body.avg_daily_volume = options.avg_daily_volume;
+  if (options.impact_gamma !== undefined) body.impact_gamma = options.impact_gamma;
+  if (options.impact_eta !== undefined) body.impact_eta = options.impact_eta;
+  if (options.enable_fill_probability !== undefined) body.enable_fill_probability = options.enable_fill_probability;
+  if (options.enable_borrow_costs !== undefined) body.enable_borrow_costs = options.enable_borrow_costs;
+  if (options.borrow_rate_annual !== undefined) body.borrow_rate_annual = options.borrow_rate_annual;
+  if (options.hard_to_borrow !== undefined) body.hard_to_borrow = options.hard_to_borrow;
+  if (options.htb_premium_rate !== undefined) body.htb_premium_rate = options.htb_premium_rate;
+  if (options.enable_margin_costs !== undefined) body.enable_margin_costs = options.enable_margin_costs;
+  if (options.margin_rate_annual !== undefined) body.margin_rate_annual = options.margin_rate_annual;
+  if (options.margin_requirement !== undefined) body.margin_requirement = options.margin_requirement;
+  // Phase 5: Data Quality
+  if (options.universe_mode) body.universe_mode = options.universe_mode;
+  if (options.index_name) body.index_name = options.index_name;
+  if (options.price_adjustment) body.price_adjustment = options.price_adjustment;
+  if (options.look_ahead_audit !== undefined) body.look_ahead_audit = options.look_ahead_audit;
+
   const res = await renkoFetch(`/backtest/run`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -259,6 +278,20 @@ export async function optimizeRenkoBacktest(prices, symbol = "SPY", paramGrid = 
   };
   if (options.timestamps) body.timestamps = options.timestamps;
   if (options.regimes) body.regimes = options.regimes;
+
+  // Phase 7: Execution Modeling
+  if (options.enable_market_impact !== undefined) body.enable_market_impact = options.enable_market_impact;
+  if (options.avg_daily_volume !== undefined) body.avg_daily_volume = options.avg_daily_volume;
+  if (options.impact_gamma !== undefined) body.impact_gamma = options.impact_gamma;
+  if (options.impact_eta !== undefined) body.impact_eta = options.impact_eta;
+  if (options.enable_fill_probability !== undefined) body.enable_fill_probability = options.enable_fill_probability;
+  if (options.enable_borrow_costs !== undefined) body.enable_borrow_costs = options.enable_borrow_costs;
+  if (options.borrow_rate_annual !== undefined) body.borrow_rate_annual = options.borrow_rate_annual;
+  if (options.hard_to_borrow !== undefined) body.hard_to_borrow = options.hard_to_borrow;
+  if (options.htb_premium_rate !== undefined) body.htb_premium_rate = options.htb_premium_rate;
+  if (options.enable_margin_costs !== undefined) body.enable_margin_costs = options.enable_margin_costs;
+  if (options.margin_rate_annual !== undefined) body.margin_rate_annual = options.margin_rate_annual;
+  if (options.margin_requirement !== undefined) body.margin_requirement = options.margin_requirement;
 
   const res = await renkoFetch(`/backtest/optimize`, {
     method: "POST",

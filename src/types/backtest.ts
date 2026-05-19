@@ -257,6 +257,19 @@ export interface RenkoBacktestRequest {
   index_name?: string | null;
   price_adjustment?: PriceAdjustment;
   look_ahead_audit?: boolean;
+  // Phase 7: Execution Modeling
+  enable_market_impact?: boolean;
+  avg_daily_volume?: number;
+  impact_gamma?: number;
+  impact_eta?: number;
+  enable_fill_probability?: boolean;
+  enable_borrow_costs?: boolean;
+  borrow_rate_annual?: number;
+  hard_to_borrow?: boolean;
+  htb_premium_rate?: number;
+  enable_margin_costs?: boolean;
+  margin_rate_annual?: number;
+  margin_requirement?: number;
 }
 
 export interface RenkoBacktestResponse {
@@ -274,6 +287,11 @@ export interface RenkoBacktestResponse {
   price_adjustments_applied?: CorporateActionAdjustment[];
   data_quality_warnings?: string[];
   look_ahead_audit_result?: LookAheadAuditResult | null;
+  // Phase 6: Statistical Rigor
+  bootstrap_cis?: Record<string, BootstrapCIResult & { _display?: Record<string, string> }> | null;
+  deflated_sharpe_result?: DeflatedSharpeResult | null;
+  // Phase 7: Execution Modeling
+  execution_modeling?: ExecutionModelingSummary | null;
 }
 
 export interface RenkoCompareConfig {
@@ -332,6 +350,7 @@ export interface OptimizeResultRow {
   profit_factor: number;
   max_drawdown_bricks: number;
   total_trades: number;
+  raw_p_value?: number;
 }
 
 export interface RenkoBacktestOptimizeResponse {
@@ -339,6 +358,87 @@ export interface RenkoBacktestOptimizeResponse {
   best_by_sharpe: OptimizeResultRow | null;
   best_by_return: OptimizeResultRow | null;
   n_combinations: number;
+  deflated_sharpe_result?: DeflatedSharpeResult | null;
+  multiple_testing_results?: MultipleTestingResults | null;
+  significance_test_results?: Record<string, SignificanceTestResult> | null;
+}
+
+// ── Phase 6: Statistical Rigor ────────────────────────────────────────
+
+export interface BootstrapCIResult {
+  metric: string;
+  point_estimate: number;
+  ci_lower: number;
+  ci_upper: number;
+  confidence_level: number;
+  method: string;
+  n_resamples: number;
+}
+
+export interface DeflatedSharpeResult {
+  dsr: number;
+  observed_sharpe: number;
+  expected_max_sharpe: number;
+  variance_of_sharpe: number;
+  n_trials: number;
+  sample_length: number;
+  skewness: number;
+  kurtosis: number;
+  is_significant: boolean;
+  significance_level: number;
+}
+
+export interface MultipleTestingMethod {
+  method: string;
+  corrected_p_values: number[];
+  significant_count: number;
+  alpha: number;
+  n_tests: number;
+}
+
+export interface MultipleTestingResults {
+  bonferroni: MultipleTestingMethod;
+  holm_bonferroni: MultipleTestingMethod;
+  benjamini_hochberg: MultipleTestingMethod;
+}
+
+export interface SignificanceTestResult {
+  test_name: string;
+  statistic: number;
+  p_value: number;
+  is_significant: boolean;
+  n_bootstrap: number;
+}
+
+// ── Phase 7: Execution Modeling ───────────────────────────────────────
+
+export interface MarketImpactSummary {
+  total_impact_cost_dollars: number;
+  avg_impact_bps_per_trade: number;
+  impact_enabled: boolean;
+}
+
+export interface FillProbabilitySummary {
+  avg_fill_probability: number;
+  fill_probability_enabled: boolean;
+}
+
+export interface FinancingSummary {
+  total_borrow_cost: number;
+  total_margin_cost: number;
+  total_dividend_cost: number;
+  total_financing_cost: number;
+  long_trades: number;
+  short_trades: number;
+  avg_borrow_rate_annual: number;
+  avg_margin_rate_annual: number;
+}
+
+export interface ExecutionModelingSummary {
+  market_impact: MarketImpactSummary;
+  fill_probability: FillProbabilitySummary;
+  financing: FinancingSummary;
+  all_models_enabled: boolean;
 }
 
 // Walk-Forward

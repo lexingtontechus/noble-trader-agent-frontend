@@ -65,6 +65,19 @@ export async function POST(request: Request) {
       commission_bps: options.commission_bps ?? 5.0,
       spread_bps: options.spread_bps ?? 1.0,
       oco_priority: options.oco_priority ?? "sl_first",
+      // Phase 7: Execution Modeling
+      enable_market_impact: options.enable_market_impact ?? false,
+      avg_daily_volume: options.avg_daily_volume ?? 1000000,
+      impact_gamma: options.impact_gamma ?? 0.314,
+      impact_eta: options.impact_eta ?? 0.142,
+      enable_fill_probability: options.enable_fill_probability ?? false,
+      enable_borrow_costs: options.enable_borrow_costs ?? false,
+      borrow_rate_annual: options.borrow_rate_annual ?? 0.005,
+      hard_to_borrow: options.hard_to_borrow ?? false,
+      htb_premium_rate: options.htb_premium_rate ?? 0.10,
+      enable_margin_costs: options.enable_margin_costs ?? false,
+      margin_rate_annual: options.margin_rate_annual ?? 0.065,
+      margin_requirement: options.margin_requirement ?? 0.50,
     };
 
     // ── Check Redis cache (L1) ──────────────────────────────────────────

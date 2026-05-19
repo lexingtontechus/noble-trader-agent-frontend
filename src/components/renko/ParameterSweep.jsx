@@ -340,6 +340,130 @@ export default function ParameterSweep({ result, symbol = "SPY", config = {} }) 
         </div>
       )}
 
+      {/* ── Phase 6: Statistical Rigor ────────────────────────────────────── */}
+      {(() => {
+        const dsrResult = result.deflated_sharpe_result;
+        const mtResults = result.multiple_testing_results;
+        const sigResults = result.significance_test_results;
+        const hasAny = dsrResult || mtResults || sigResults;
+        if (!hasAny) return null;
+
+        return (
+          <div className="card bg-base-200 shadow-lg">
+            <div className="card-body p-4">
+              <SectionHeader icon="🔬" title="Statistical Rigor" badge="Phase 6" />
+
+              {/* DSR */}
+              {dsrResult && (
+                <div className="mb-4">
+                  <div className="text-xs font-semibold text-base-content/70 mb-2">Deflated Sharpe Ratio</div>
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                    <div className="bg-base-300/30 rounded p-2">
+                      <div className="text-[9px] text-base-content/30 uppercase">DSR</div>
+                      <div className={`font-mono font-bold text-lg ${dsrResult.dsr >= 0.95 ? "text-success" : dsrResult.dsr >= 0.9 ? "text-warning" : "text-error"}`}>
+                        {formatNum(dsrResult.dsr, 4)}
+                      </div>
+                    </div>
+                    <div className="bg-base-300/30 rounded p-2">
+                      <div className="text-[9px] text-base-content/30 uppercase">Observed SR</div>
+                      <div className="font-mono font-bold text-lg">{formatNum(dsrResult.observed_sharpe, 3)}</div>
+                    </div>
+                    <div className="bg-base-300/30 rounded p-2">
+                      <div className="text-[9px] text-base-content/30 uppercase">Expected Max SR</div>
+                      <div className="font-mono font-bold text-lg">{formatNum(dsrResult.expected_max_sharpe, 3)}</div>
+                    </div>
+                    <div className="bg-base-300/30 rounded p-2">
+                      <div className="text-[9px] text-base-content/30 uppercase">Verdict</div>
+                      <div className={`font-mono font-bold text-lg ${dsrResult.is_significant ? "text-success" : "text-error"}`}>
+                        {dsrResult.is_significant ? "Significant" : "Not Significant"}
+                      </div>
+                    </div>
+                  </div>
+                  <div className="text-[10px] text-base-content/30 mt-1">
+                    {dsrResult.n_trials} independent trials tested. DSR adjusts the best observed Sharpe for the expected maximum from {dsrResult.n_trials} random draws.
+                  </div>
+                </div>
+              )}
+
+              {/* Multiple Testing Correction */}
+              {mtResults && (
+                <div className="mb-4">
+                  <div className="text-xs font-semibold text-base-content/70 mb-2">Multiple Testing Correction</div>
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                    {["bonferroni", "holm_bonferroni", "benjamini_hochberg"].map((method) => {
+                      const data = mtResults[method];
+                      if (!data) return null;
+                      const label = method === "bonferroni" ? "Bonferroni" : method === "holm_bonferroni" ? "Holm-Bonferroni" : "Benjamini-Hochberg";
+                      return (
+                        <div key={method} className="bg-base-300/30 rounded p-3">
+                          <div className="text-xs font-semibold mb-1">{label}</div>
+                          <div className="text-[10px] text-base-content/40 mb-2">
+                            {method === "benjamini_hochberg" ? "Controls FDR" : "Controls FWER"}
+                          </div>
+                          <div className="grid grid-cols-2 gap-2 text-xs">
+                            <div>
+                              <div className="text-base-content/30 text-[9px] uppercase">Tests</div>
+                              <div className="font-mono font-bold">{data.n_tests}</div>
+                            </div>
+                            <div>
+                              <div className="text-base-content/30 text-[9px] uppercase">Significant</div>
+                              <div className={`font-mono font-bold ${data.significant_count > 0 ? "text-success" : "text-error"}`}>
+                                {data.significant_count}/{data.n_tests}
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+
+              {/* Significance Tests */}
+              {sigResults && Object.keys(sigResults).length > 0 && (
+                <div>
+                  <div className="text-xs font-semibold text-base-content/70 mb-2">Strategy Significance Tests</div>
+                  <div className="overflow-x-auto">
+                    <table className="table table-sm">
+                      <thead>
+                        <tr>
+                          <th className="text-xs">Test</th>
+                          <th className="text-xs">Statistic</th>
+                          <th className="text-xs">P-Value</th>
+                          <th className="text-xs">Significant</th>
+                          <th className="text-xs">Bootstraps</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {Object.entries(sigResults).map(([testName, testData]) => (
+                          <tr key={testName}>
+                            <td className="font-mono text-xs font-semibold">{testName.replace(/_/g, " ")}</td>
+                            <td className="font-mono text-xs">{formatNum(testData.statistic, 4)}</td>
+                            <td className="font-mono text-xs">
+                              <span className={testData.p_value < 0.05 ? "text-success" : "text-error"}>
+                                {formatNum(testData.p_value, 4)}
+                              </span>
+                            </td>
+                            <td className="font-mono text-xs">
+                              {testData.is_significant ? (
+                                <span className="badge badge-xs badge-success">Yes</span>
+                              ) : (
+                                <span className="badge badge-xs badge-error">No</span>
+                              )}
+                            </td>
+                            <td className="font-mono text-xs text-base-content/40">{testData.n_bootstrap}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+        );
+      })()}
+
       {/* ── Section 4: Full Results Table ──────────────────────────────────── */}
       <div className="card bg-base-200 shadow-lg">
         <div className="card-body p-4">
@@ -358,6 +482,7 @@ export default function ParameterSweep({ result, symbol = "SPY", config = {} }) 
                   <th className="text-xs">PF</th>
                   <th className="text-xs">Max DD</th>
                   <th className="text-xs">Trades</th>
+                  <th className="text-xs">P-Value</th>
                 </tr>
               </thead>
               <tbody>
@@ -404,6 +529,11 @@ export default function ParameterSweep({ result, symbol = "SPY", config = {} }) 
                         {formatNum(r.max_drawdown_bricks ?? 0, 1)}
                       </td>
                       <td className="font-mono text-xs">{r.total_trades ?? "—"}</td>
+                      <td className="font-mono text-xs">
+                        <span className={(r.raw_p_value ?? 1) < 0.05 ? "text-success" : "text-base-content/40"}>
+                          {formatNum(r.raw_p_value ?? 1, 3)}
+                        </span>
+                      </td>
                     </tr>
                   );
                 })}
