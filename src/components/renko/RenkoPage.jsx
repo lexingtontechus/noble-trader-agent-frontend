@@ -12,6 +12,7 @@ const TradesPanel = dynamic(() => import("./TradesPanel"), { ssr: false });
 const ConfigPanel = dynamic(() => import("./ConfigPanel"), { ssr: false });
 const OrderTracker = dynamic(() => import("./OrderTracker"), { ssr: false });
 const RiskDashboard = dynamic(() => import("./RiskDashboard"), { ssr: false });
+const BacktestPanel = dynamic(() => import("./BacktestPanel"), { ssr: false });
 
 // ── Error Boundary ─────────────────────────────────────────────────────────
 
@@ -77,6 +78,7 @@ const TABS = [
   { key: "orders", label: "📋 Orders", shortLabel: "Orders" },
   { key: "config", label: "⚙️ Config", shortLabel: "Config" },
   { key: "risk", label: "🛡️ Risk", shortLabel: "Risk" },
+  { key: "backtest", label: "🔬 Backtest", shortLabel: "Backtest" },
 ];
 
 // ── Metric Card ──────────────────────────────────────────────────────────────
@@ -869,6 +871,9 @@ export default function RenkoPage() {
               config={config}
               bricks={bricks}
             />
+          )}
+          {activeTab === "backtest" && (
+            <BacktestPanel symbol={symbol} />
           )}
         </div>
       </div>
