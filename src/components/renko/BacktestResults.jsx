@@ -808,6 +808,155 @@ export default function BacktestResults({ result, symbol = "SPY", streaming = fa
         </div>
       )}
 
+      {/* ── Data Quality (Phase 5) ─────────────────────────────────────────── */}
+      {(() => {
+        const sb = result.survivorship_bias;
+        const dqWarnings = result.data_quality_warnings;
+        const dp = result.data_provenance;
+        const ca = result.price_adjustments_applied;
+        const la = result.look_ahead_audit_result;
+
+        const hasAny = (sb?.warning) || (dqWarnings?.length > 0) || (dp?.data_hash) || (ca?.length > 0) || (la);
+        if (!hasAny) return null;
+
+        return (
+          <div className="card bg-base-200 shadow-lg">
+            <div className="card-body p-4">
+              <SectionHeader icon="🛡️" title="Data Quality" badge="Phase 5" />
+
+              {/* a) Survivorship Bias Warning */}
+              {sb?.warning && (
+                <div className="alert alert-warning alert-sm mb-3">
+                  <svg xmlns="http://www.w3.org/2000/svg" className="stroke-current shrink-0 h-4 w-4" fill="none" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4.5c-.77-.833-2.694-.833-3.464 0L3.34 16.5c-.77.833.192 2.5 1.732 2.5z" />
+                  </svg>
+                  <div>
+                    <span className="text-xs font-semibold">Survivorship Bias Detected</span>
+                    <p className="text-xs mt-0.5">{sb.message}</p>
+                    {sb.index_name && (
+                      <span className="badge badge-xs badge-warning mt-1">Index: {sb.index_name}</span>
+                    )}
+                  </div>
+                </div>
+              )}
+
+              {/* b) Data Quality Warnings */}
+              {dqWarnings?.length > 0 && (
+                <div className="alert alert-error alert-sm mb-3">
+                  <svg xmlns="http://www.w3.org/2000/svg" className="stroke-current shrink-0 h-4 w-4" fill="none" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M10 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2m7-2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                  </svg>
+                  <div>
+                    <span className="text-xs font-semibold">Data Quality Warnings ({dqWarnings.length})</span>
+                    <ul className="list-disc list-inside text-xs mt-1 space-y-0.5">
+                      {dqWarnings.map((w, i) => (
+                        <li key={i}>{typeof w === "string" ? w : w.message || JSON.stringify(w)}</li>
+                      ))}
+                    </ul>
+                  </div>
+                </div>
+              )}
+
+              {/* c) Data Provenance */}
+              {dp?.data_hash && (
+                <div className="card bg-base-300/30 shadow-sm mb-3">
+                  <div className="card-body p-3">
+                    <div className="flex items-center gap-2 mb-2">
+                      <span className="text-xs font-semibold text-base-content/70">Data Provenance</span>
+                      <span className="badge badge-xs badge-info">verified</span>
+                    </div>
+                    <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 text-xs">
+                      <div>
+                        <div className="text-base-content/40 text-[10px] uppercase">Data Hash</div>
+                        <div className="font-mono font-semibold">{dp.data_hash.slice(0, 16)}…</div>
+                      </div>
+                      <div>
+                        <div className="text-base-content/40 text-[10px] uppercase">Source</div>
+                        <div className="font-mono">{dp.source || "—"}</div>
+                      </div>
+                      <div>
+                        <div className="text-base-content/40 text-[10px] uppercase">Price Count</div>
+                        <div className="font-mono">{dp.price_count ?? "—"}</div>
+                      </div>
+                      <div>
+                        <div className="text-base-content/40 text-[10px] uppercase">Adjustment</div>
+                        <div className="font-mono">{dp.adjustment_mode || "—"}</div>
+                      </div>
+                      <div>
+                        <div className="text-base-content/40 text-[10px] uppercase">Universe</div>
+                        <div className="font-mono">{dp.universe_mode || "—"}</div>
+                      </div>
+                      <div>
+                        <div className="text-base-content/40 text-[10px] uppercase">Fetch Date</div>
+                        <div className="font-mono">{dp.fetch_date || "—"}</div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* d) Corporate Actions Applied */}
+              {ca?.length > 0 && (
+                <div className="mb-3">
+                  <div className="text-xs font-semibold text-base-content/70 mb-2">Corporate Actions Applied ({ca.length})</div>
+                  <div className="overflow-x-auto">
+                    <table className="table table-sm">
+                      <thead>
+                        <tr>
+                          <th className="text-xs">Type</th>
+                          <th className="text-xs">Ex-Date</th>
+                          <th className="text-xs">Description</th>
+                          <th className="text-xs">Prices Affected</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {ca.map((action, i) => (
+                          <tr key={i}>
+                            <td><span className="badge badge-xs badge-info">{action.type || "—"}</span></td>
+                            <td className="font-mono text-xs">{action.ex_date || action.exDate || "—"}</td>
+                            <td className="text-xs">{action.description || "—"}</td>
+                            <td className="font-mono text-xs">{action.prices_affected ?? action.pricesAffected ?? "—"}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              )}
+
+              {/* e) Look-Ahead Audit */}
+              {la && (
+                <div className={`alert ${la.clean ? "alert-success" : "alert-error"} alert-sm`}>
+                  <svg xmlns="http://www.w3.org/2000/svg" className="stroke-current shrink-0 h-4 w-4" fill="none" viewBox="0 0 24 24">
+                    {la.clean ? (
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                    ) : (
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M10 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2m7-2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                    )}
+                  </svg>
+                  <div>
+                    <span className="text-xs font-semibold">
+                      {la.clean ? "Look-Ahead Audit: Clean" : "Look-Ahead Audit: Warnings Detected"}
+                    </span>
+                    {la.message && <p className="text-xs mt-0.5">{la.message}</p>}
+                    {la.warnings?.length > 0 && (
+                      <ul className="list-disc list-inside text-xs mt-1 space-y-0.5">
+                        {la.warnings.slice(0, 5).map((w, i) => (
+                          <li key={i}>{typeof w === "string" ? w : w.message || JSON.stringify(w)}</li>
+                        ))}
+                        {la.warnings.length > 5 && (
+                          <li className="text-base-content/40">…and {la.warnings.length - 5} more</li>
+                        )}
+                      </ul>
+                    )}
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+        );
+      })()}
+
       {/* ── Section 9: Trade Log Table ────────────────────────────────────── */}
       <div className="card bg-base-200 shadow-lg">
         <div className="card-body p-4">

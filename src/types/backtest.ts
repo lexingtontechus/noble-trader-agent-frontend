@@ -3,6 +3,50 @@
 // and the Next.js BFF/frontend. They mirror the Pydantic models in
 // renko/router.py and the dataclasses in renko/trade_journal.py.
 
+export type UniverseMode = "current_constituents" | "pit_constituents";
+export type PriceAdjustment = "raw" | "split_adjusted" | "fully_adjusted";
+
+export interface SurvivorshipBiasInfo {
+  mode: UniverseMode;
+  warning: boolean;
+  message: string;
+  index_name?: string | null;
+}
+
+export interface CorporateActionAdjustment {
+  type: "split" | "dividend" | "spinoff";
+  ex_date: string;
+  factor?: number;
+  amount?: number;
+  description: string;
+  indices_affected: number;
+}
+
+export interface LookAheadAuditResult {
+  enabled: boolean;
+  clean: boolean;
+  warning_count: number;
+  warnings: Array<{
+    data_name: string;
+    current_tick: number;
+    accessed_tick: number;
+    look_ahead_by: number;
+    context: string;
+  }>;
+  access_count: number;
+  message: string;
+}
+
+export interface DataSourceMetadata {
+  source: string;
+  symbol: string;
+  price_count: number;
+  price_adjustment: PriceAdjustment;
+  universe_mode: UniverseMode;
+  index_name?: string | null;
+  fetch_date: string;
+}
+
 // ── Enums ──────────────────────────────────────────────────────────────
 
 export type BrickSizeMode = "fixed" | "atr" | "dynamic";
@@ -208,6 +252,11 @@ export interface RenkoBacktestRequest {
   timestamps?: number[] | null;
   regimes?: string[] | null;
   signal_confidence_min?: number | null;
+  // Phase 5: Data Quality
+  universe_mode?: UniverseMode;
+  index_name?: string | null;
+  price_adjustment?: PriceAdjustment;
+  look_ahead_audit?: boolean;
 }
 
 export interface RenkoBacktestResponse {
@@ -218,6 +267,13 @@ export interface RenkoBacktestResponse {
   stats: BacktestJournalStats;
   trades: TradeRecord[];
   cached: boolean;
+  // Phase 5: Data Quality
+  data_hash?: string | null;
+  data_source?: DataSourceMetadata;
+  survivorship_bias?: SurvivorshipBiasInfo | null;
+  price_adjustments_applied?: CorporateActionAdjustment[];
+  data_quality_warnings?: string[];
+  look_ahead_audit_result?: LookAheadAuditResult | null;
 }
 
 export interface RenkoCompareConfig {

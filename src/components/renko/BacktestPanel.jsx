@@ -132,6 +132,10 @@ const DEFAULT_CONFIG = {
   spread_bps: 1.0,
   oco_priority: "sl_first",
   initial_capital: 100000.0,
+  universeMode: 'current_constituents',
+  indexName: '',
+  priceAdjustment: 'raw',
+  lookAheadAudit: false,
 };
 
 // ── Price Source Options ──────────────────────────────────────────────────
@@ -219,6 +223,14 @@ function ParamInput({ label, name, value, onChange, type = "number", min, max, s
           checked={value}
           onChange={(e) => onChange(name, e.target.checked)}
         />
+      ) : type === "text" ? (
+        <input
+          type="text"
+          className="input input-sm input-bordered font-mono w-full"
+          value={value}
+          onChange={(e) => onChange(name, e.target.value)}
+          placeholder={help}
+        />
       ) : null}
     </div>
   );
@@ -251,6 +263,17 @@ function ConfigForm({ config, onChange, prefix = "" }) {
       <ParamInput label="Spread (bps)" name="spread_bps" value={config.spread_bps} onChange={set} step={0.5} min={0} help="bid-ask" />
       <ParamInput label="OCO Priority" name="oco_priority" value={config.oco_priority} onChange={set} type="select" min={[{ value: "sl_first", label: "SL First (Conservative)" }, { value: "tp_first", label: "TP First (Optimistic)" }, { value: "worst_case", label: "Worst Case" }]} help="OCA order" />
       <ParamInput label="Initial Capital ($)" name="initial_capital" value={config.initial_capital} onChange={set} step={10000} min={1000} help="starting capital" />
+
+      {/* ── Data Quality (Phase 5) ────────────────────────────────────────── */}
+      <div className="col-span-2 sm:col-span-3 lg:col-span-4 mt-2">
+        <div className="divider text-xs text-base-content/40 before:bg-base-300 after:bg-base-300">Data Quality</div>
+      </div>
+      <ParamInput label="Universe Mode" name="universeMode" value={config.universeMode} onChange={set} type="select" min={[{ value: "current_constituents", label: "Current Constituents" }, { value: "pit_constituents", label: "Point-in-Time (Survivorship Bias Free)" }]} help="stock universe" />
+      {config.universeMode === 'pit_constituents' && (
+        <ParamInput label="Index Name" name="indexName" value={config.indexName} onChange={set} type="text" help="e.g. sp500" />
+      )}
+      <ParamInput label="Price Adjustment" name="priceAdjustment" value={config.priceAdjustment} onChange={set} type="select" min={[{ value: "raw", label: "Raw Prices" }, { value: "split_adjusted", label: "Split-Adjusted" }, { value: "fully_adjusted", label: "Fully Adjusted (incl. dividends)" }]} help="corporate actions" />
+      <ParamInput label="Look-Ahead Audit" name="lookAheadAudit" value={config.lookAheadAudit} onChange={set} type="toggle" help="bias check" />
     </div>
   );
 }

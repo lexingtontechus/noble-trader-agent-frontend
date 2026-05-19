@@ -42,6 +42,11 @@ export async function POST(request: Request) {
       timestamps,
       regimes,
       signalConfidenceMin,
+      // Phase 5: Data Quality
+      universeMode = "current_constituents",
+      indexName = null,
+      priceAdjustment = "raw",
+      lookAheadAudit = false,
     } = body;
 
     if (!prices || !Array.isArray(prices) || prices.length < 50) {
@@ -74,11 +79,16 @@ export async function POST(request: Request) {
       spread_bps: spreadBps,
       oco_priority: ocoPriority,
       initial_capital: initialCapital,
+      // Phase 5: Data Quality
+      universe_mode: universeMode,
+      price_adjustment: priceAdjustment,
+      look_ahead_audit: lookAheadAudit,
     };
 
     if (timestamps) payload.timestamps = timestamps;
     if (regimes) payload.regimes = regimes;
     if (signalConfidenceMin !== undefined) payload.signal_confidence_min = signalConfidenceMin;
+    if (indexName) payload.index_name = indexName;
 
     // ── Check Redis cache (L1) ──────────────────────────────────────────
     const { prices: _omitPrices, ...cacheConfig } = payload;
