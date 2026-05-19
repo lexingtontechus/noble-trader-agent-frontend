@@ -22,6 +22,7 @@ export const CACHE_TTL = {
     SNAPSHOT: 14_400,   // 4h  (same as Supabase TTL)
     PRICE: 15,          // 15s
     REGIME: 300,        // 5min
+    BACKTEST: 3_600,    // 1h  (backtest results for identical configs)
   },
 };
 

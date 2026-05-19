@@ -3,8 +3,12 @@
  *
  * BFF proxy: runs a Renko pipeline backtest via the FastAPI backend.
  * Uses an isolated pipeline instance (never affects the live pipeline).
+ *
+ * Redis L1 cache: Results for identical configs are cached with 1h TTL.
+ * Cache key is a deterministic hash of symbol + all config params.
  */
 import { getFastAPIAuthHeaders } from "@/lib/fastapi-auth";
+import { redis } from "@/lib/redis";
 
 const FASTAPI_URL = process.env.NEXT_PUBLIC_FASTAPI_URL || "http://localhost:8000";
 
@@ -65,6 +69,18 @@ export async function POST(request: Request) {
     if (regimes) payload.regimes = regimes;
     if (signalConfidenceMin !== undefined) payload.signal_confidence_min = signalConfidenceMin;
 
+    // ── Check Redis cache (L1) ──────────────────────────────────────────
+    const cacheConfig = { ...payload };
+    // Don't include prices array in cache key hash (too large) — use length + first/last as fingerprint
+    delete cacheConfig.prices;
+    cacheConfig._price_fingerprint = `${prices.length}:${prices[0]}:${prices[prices.length - 1]}`;
+
+    const cached = await redis.getBacktestCache(symbol, cacheConfig);
+    if (cached) {
+      return Response.json({ ...cached, _cached: true, _cache_ttl: "1h" });
+    }
+
+    // ── Cache miss: call FastAPI ────────────────────────────────────────
     const authHeaders = await getFastAPIAuthHeaders();
 
     const resp = await fetch(`${FASTAPI_URL}/renko/backtest/run`, {
@@ -86,6 +102,12 @@ export async function POST(request: Request) {
     }
 
     const data = await resp.json();
+
+    // ── Save to Redis cache (fire-and-forget, never blocks) ─────────────
+    redis.setBacktestCache(symbol, cacheConfig, data).catch(() => {
+      // Cache write failure is non-critical
+    });
+
     return Response.json(data);
   } catch (error) {
     console.error("[renko/backtest/run] Error:", error);

@@ -3,8 +3,11 @@
  *
  * BFF proxy: compare multiple Renko pipeline configs side-by-side
  * via the FastAPI backend.
+ *
+ * Redis L1 cache: Results for identical configs are cached with 1h TTL.
  */
 import { getFastAPIAuthHeaders } from "@/lib/fastapi-auth";
+import { redis } from "@/lib/redis";
 
 const FASTAPI_URL = process.env.NEXT_PUBLIC_FASTAPI_URL || "http://localhost:8000";
 
@@ -36,6 +39,16 @@ export async function POST(request: Request) {
     if (timestamps) payload.timestamps = timestamps;
     if (regimes) payload.regimes = regimes;
 
+    // ── Check Redis cache (L1) ──────────────────────────────────────────
+    const cacheConfig = { symbol, configs };
+    cacheConfig._price_fingerprint = `${prices.length}:${prices[0]}:${prices[prices.length - 1]}`;
+
+    const cached = await redis.getBacktestCache(`${symbol}:compare`, cacheConfig);
+    if (cached) {
+      return Response.json({ ...cached, _cached: true, _cache_ttl: "1h" });
+    }
+
+    // ── Cache miss: call FastAPI ────────────────────────────────────────
     const authHeaders = await getFastAPIAuthHeaders();
 
     const resp = await fetch(`${FASTAPI_URL}/renko/backtest/compare`, {
@@ -57,6 +70,10 @@ export async function POST(request: Request) {
     }
 
     const data = await resp.json();
+
+    // ── Save to Redis cache (fire-and-forget) ───────────────────────────
+    redis.setBacktestCache(`${symbol}:compare`, cacheConfig, data).catch(() => {});
+
     return Response.json(data);
   } catch (error) {
     console.error("[renko/backtest/compare] Error:", error);

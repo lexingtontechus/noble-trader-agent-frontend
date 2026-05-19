@@ -165,6 +165,45 @@ async function setRegime(symbol, regime, ttlSeconds = CACHE_TTL.REDIS.REGIME) {
   return set(key, regime, ttlSeconds);
 }
 
+// ── Convenience: Backtest results ──────────────────────────────────────────
+
+/**
+ * Build a deterministic cache key from a backtest config.
+ * Uses a hash of the sorted config params to ensure identical configs
+ * produce the same key regardless of key ordering.
+ */
+function backtestCacheKey(symbol, config) {
+  // Sort keys for determinism
+  const sorted = Object.keys(config)
+    .sort()
+    .map((k) => `${k}=${JSON.stringify(config[k])}`)
+    .join("&");
+  // Simple hash (djb2)
+  let hash = 5381;
+  for (let i = 0; i < sorted.length; i++) {
+    hash = ((hash << 5) + hash + sorted.charCodeAt(i)) & 0xffffffff;
+  }
+  return `renko:backtest:${symbol}:${hash.toString(36)}`;
+}
+
+/**
+ * Get a cached backtest result from Redis.
+ * Returns null on cache miss, error, or if Redis is unavailable.
+ */
+async function getBacktestCache(symbol, config) {
+  const key = backtestCacheKey(symbol, config);
+  return get(key);
+}
+
+/**
+ * Save a backtest result to Redis with 1h TTL.
+ * Returns false on error or if Redis is unavailable.
+ */
+async function setBacktestCache(symbol, config, data, ttlSeconds = CACHE_TTL.REDIS.BACKTEST) {
+  const key = backtestCacheKey(symbol, config);
+  return set(key, data, ttlSeconds);
+}
+
 // ── Availability check ───────────────────────────────────────────────────────
 
 /**
@@ -190,5 +229,7 @@ export const redis = {
   setPrice,
   getRegime,
   setRegime,
+  getBacktestCache,
+  setBacktestCache,
   isAvailable,
 };

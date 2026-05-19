@@ -24,10 +24,11 @@ import {
  *   1. Summary Metric Cards (total trades, win rate, profit factor, Sharpe, max DD, Kelly)
  *   2. Equity Curve — cumulative P&L over trades
  *   3. Drawdown Underwater Plot
- *   4. Trade Distribution (win/loss histogram by P&L bucket)
- *   5. Per-Pattern Breakdown (if available)
- *   6. Trade Log Table
- *   7. Config Used
+ *   4. Monthly Returns Heatmap — calendar-style grid
+ *   5. Trade Distribution (win/loss histogram by P&L bucket)
+ *   6. Per-Pattern Breakdown (if available)
+ *   7. Trade Log Table
+ *   8. Config Used
  */
 
 // ── Helper Functions ──────────────────────────────────────────────────────
@@ -68,6 +69,165 @@ function formatNum(n, decimals = 2) {
   if (n === null || n === undefined || isNaN(n)) return "—";
   if (n === Infinity) return "∞";
   return n.toFixed(decimals);
+}
+
+// ── Monthly Returns Heatmap ──────────────────────────────────────────────
+
+const MONTH_LABELS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+
+/**
+ * Compute monthly P&L from trade list.
+ * Trades without timestamps are distributed evenly across the backtest period.
+ * Returns a Map<"YYYY-MM", number> of cumulative P&L per month.
+ */
+function calcMonthlyReturns(trades) {
+  const monthly = new Map();
+
+  if (!trades.length) return monthly;
+
+  // If trades have timestamps, use them
+  const hasTimestamps = trades.some((t) => t.timestamp || t.entry_time || t.open_time);
+
+  trades.forEach((t, i) => {
+    const pnl = t.pnl_bricks || 0;
+    let monthKey;
+
+    if (hasTimestamps) {
+      const ts = t.timestamp || t.entry_time || t.open_time;
+      const d = new Date(typeof ts === "number" ? ts * 1000 : ts);
+      if (!isNaN(d.getTime())) {
+        monthKey = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+      }
+    }
+
+    // Fallback: distribute trades evenly across a synthetic 12-month window
+    if (!monthKey) {
+      const year = 2024;
+      const month = Math.floor((i / trades.length) * 12);
+      monthKey = `${year}-${String(Math.min(month + 1, 12)).padStart(2, "0")}`;
+    }
+
+    monthly.set(monthKey, (monthly.get(monthKey) || 0) + pnl);
+  });
+
+  return monthly;
+}
+
+/**
+ * Heatmap color for a P&L value. Green for positive, red for negative, grey for zero/empty.
+ * Opacity scales with magnitude relative to the max absolute value.
+ */
+function pnlHeatmapStyle(value, maxAbs) {
+  if (value === null || value === undefined) {
+    return { backgroundColor: "oklch(var(--b3))", opacity: 0.3 };
+  }
+  if (maxAbs === 0) {
+    return { backgroundColor: "oklch(var(--b3))" };
+  }
+  const intensity = Math.min(Math.abs(value) / maxAbs, 1);
+  if (value >= 0) {
+    return { backgroundColor: `oklch(0.72 0.19 155 / ${0.15 + intensity * 0.7})` };
+  } else {
+    return { backgroundColor: `oklch(0.63 0.21 25 / ${0.15 + intensity * 0.7})` };
+  }
+}
+
+function MonthlyReturnsHeatmap({ trades }) {
+  const { yearRows, maxAbs } = useMemo(() => {
+    const monthly = calcMonthlyReturns(trades);
+    if (!monthly.size) return { yearRows: [], maxAbs: 0 };
+
+    // Organize into year → month structure
+    const byYear = new Map();
+    let maxAbsVal = 0;
+
+    monthly.forEach((pnl, key) => {
+      const [yearStr, monthStr] = key.split("-");
+      const year = parseInt(yearStr, 10);
+      const month = parseInt(monthStr, 10) - 1; // 0-indexed
+      if (!byYear.has(year)) byYear.set(year, new Array(12).fill(null));
+      byYear.get(year)[month] = pnl;
+      maxAbsVal = Math.max(maxAbsVal, Math.abs(pnl));
+    });
+
+    const rows = Array.from(byYear.entries())
+      .sort(([a], [b]) => a - b)
+      .map(([year, months]) => ({ year, months }));
+
+    return { yearRows: rows, maxAbs: maxAbsVal };
+  }, [trades]);
+
+  if (!yearRows.length) {
+    return (
+      <div className="text-center py-8">
+        <span className="text-base-content/30 text-sm">No trades to compute monthly returns</span>
+      </div>
+    );
+  }
+
+  // Compute annual totals
+  const annualTotals = yearRows.map((row) =>
+    row.months.reduce((sum, val) => sum + (val || 0), 0)
+  );
+
+  return (
+    <div className="overflow-x-auto">
+      <table className="table table-sm w-full">
+        <thead>
+          <tr>
+            <th className="text-xs font-mono w-14">Year</th>
+            {MONTH_LABELS.map((m) => (
+              <th key={m} className="text-xs text-center font-mono px-1">{m}</th>
+            ))}
+            <th className="text-xs font-mono text-center">Total</th>
+          </tr>
+        </thead>
+        <tbody>
+          {yearRows.map((row, ri) => (
+            <tr key={row.year}>
+              <td className="font-mono text-xs font-semibold">{row.year}</td>
+              {row.months.map((val, mi) => (
+                <td key={mi} className="text-center px-1 py-1">
+                  <div
+                    className="rounded px-1 py-0.5 font-mono text-[10px] font-bold min-w-[32px] transition-colors"
+                    style={pnlHeatmapStyle(val, maxAbs)}
+                    title={val !== null ? `${MONTH_LABELS[mi]} ${row.year}: ${formatNum(val, 1)} bricks` : ""}
+                  >
+                    {val !== null ? (val >= 0 ? "+" : "") + formatNum(val, 1) : "—"}
+                  </div>
+                </td>
+              ))}
+              <td className="text-center">
+                <span className={`font-mono text-xs font-bold ${annualTotals[ri] >= 0 ? "text-success" : "text-error"}`}>
+                  {annualTotals[ri] >= 0 ? "+" : ""}{formatNum(annualTotals[ri], 1)}
+                </span>
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+
+      {/* Color legend */}
+      <div className="flex items-center gap-2 mt-3 justify-center">
+        <span className="text-[10px] text-base-content/30">Loss</span>
+        <div className="flex h-3 rounded-full overflow-hidden" style={{ width: 100 }}>
+          {[0.8, 0.6, 0.4, 0.2, 0.1, 0.1, 0.2, 0.4, 0.6, 0.8].map((op, i) => (
+            <div
+              key={i}
+              className="flex-1"
+              style={{
+                backgroundColor: i < 5
+                  ? `oklch(0.63 0.21 25 / ${op})`
+                  : `oklch(0.72 0.19 155 / ${op})`,
+              }}
+            />
+          ))}
+        </div>
+        <span className="text-[10px] text-base-content/30">Profit</span>
+        <span className="text-[10px] text-base-content/20 ml-2">(bricks)</span>
+      </div>
+    </div>
+  );
 }
 
 // ── Custom Tooltips ───────────────────────────────────────────────────────
@@ -301,7 +461,15 @@ export default function BacktestResults({ result, symbol = "SPY" }) {
         </div>
       </div>
 
-      {/* ── Section 4: Trade Distribution ─────────────────────────────────── */}
+      {/* ── Section 4: Monthly Returns Heatmap ─────────────────────────────── */}
+      <div className="card bg-base-200 shadow-lg">
+        <div className="card-body p-4">
+          <SectionHeader icon="🗓️" title="Monthly Returns" badge="Calendar heatmap" />
+          <MonthlyReturnsHeatmap trades={closedTrades} />
+        </div>
+      </div>
+
+      {/* ── Section 5: Trade Distribution ─────────────────────────────────── */}
       <div className="card bg-base-200 shadow-lg">
         <div className="card-body p-4">
           <SectionHeader icon="📊" title="Trade Distribution" badge="Win/Loss by P&L bucket" />
@@ -325,7 +493,7 @@ export default function BacktestResults({ result, symbol = "SPY" }) {
         </div>
       </div>
 
-      {/* ── Section 5: Per-Pattern Breakdown ──────────────────────────────── */}
+      {/* ── Section 6: Per-Pattern Breakdown ──────────────────────────────── */}
       {Object.keys(metrics.byPattern).length > 0 && (
         <div className="card bg-base-200 shadow-lg">
           <div className="card-body p-4">
@@ -370,7 +538,7 @@ export default function BacktestResults({ result, symbol = "SPY" }) {
         </div>
       )}
 
-      {/* ── Section 6: Trade Log Table ────────────────────────────────────── */}
+      {/* ── Section 7: Trade Log Table ────────────────────────────────────── */}
       <div className="card bg-base-200 shadow-lg">
         <div className="card-body p-4">
           <SectionHeader icon="📋" title="Trade Log" badge={`${closedTrades.length} trades`} />
@@ -428,7 +596,7 @@ export default function BacktestResults({ result, symbol = "SPY" }) {
         </div>
       </div>
 
-      {/* ── Section 7: Config Used ────────────────────────────────────────── */}
+      {/* ── Section 8: Config Used ────────────────────────────────────────── */}
       <div className="card bg-base-200 shadow-sm">
         <div className="card-body p-4">
           <SectionHeader icon="⚙️" title="Configuration Used" badge={symbol} />
