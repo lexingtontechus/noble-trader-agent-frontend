@@ -63,6 +63,7 @@ export async function POST(request: Request) {
       slippage_bps: options.slippage_bps ?? 2.0,
       commission_bps: options.commission_bps ?? 5.0,
       spread_bps: options.spread_bps ?? 1.0,
+      oco_priority: options.oco_priority ?? "sl_first",
     };
 
     // ── Check Redis cache (L1) ──────────────────────────────────────────

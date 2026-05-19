@@ -128,6 +128,7 @@ const DEFAULT_CONFIG = {
   slippage_bps: 2.0,
   commission_bps: 5.0,
   spread_bps: 1.0,
+  oco_priority: "sl_first",
 };
 
 // ── Price Source Options ──────────────────────────────────────────────────
@@ -243,6 +244,7 @@ function ConfigForm({ config, onChange, prefix = "" }) {
       <ParamInput label="Slippage (bps)" name="slippage_bps" value={config.slippage_bps} onChange={set} step={0.5} min={0} help="adverse fill" />
       <ParamInput label="Commission (bps)" name="commission_bps" value={config.commission_bps} onChange={set} step={0.5} min={0} help="of notional" />
       <ParamInput label="Spread (bps)" name="spread_bps" value={config.spread_bps} onChange={set} step={0.5} min={0} help="bid-ask" />
+      <ParamInput label="OCO Priority" name="oco_priority" value={config.oco_priority} onChange={set} type="select" min={[{ value: "sl_first", label: "SL First (Conservative)" }, { value: "tp_first", label: "TP First (Optimistic)" }, { value: "worst_case", label: "Worst Case" }]} help="OCA order" />
     </div>
   );
 }

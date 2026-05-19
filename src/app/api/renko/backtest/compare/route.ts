@@ -34,6 +34,7 @@ export async function POST(request: Request) {
       prices,
       symbol,
       configs,
+      oco_priority: body.oco_priority || "sl_first",
     };
 
     if (timestamps) payload.timestamps = timestamps;

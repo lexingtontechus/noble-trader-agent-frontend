@@ -38,6 +38,7 @@ export async function POST(request: Request) {
       slippageBps = 2.0,
       commissionBps = 5.0,
       spreadBps = 1.0,
+      ocoPriority = "sl_first",
       timestamps,
       regimes,
       signalConfidenceMin,
@@ -71,6 +72,7 @@ export async function POST(request: Request) {
       slippage_bps: slippageBps,
       commission_bps: commissionBps,
       spread_bps: spreadBps,
+      oco_priority: ocoPriority,
     };
 
     if (timestamps) payload.timestamps = timestamps;

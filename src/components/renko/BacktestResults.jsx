@@ -31,6 +31,24 @@ import {
  *   8. Config Used
  */
 
+// ── Exit Type Display Names ──────────────────────────────────────────────
+
+const EXIT_TYPE_LABELS = {
+  closed_sl: "SL",
+  closed_tp: "TP",
+  closed_trail: "Trail",
+  closed_sl_gap: "Gap SL",
+  closed_oco_sl: "OCO SL",
+  closed_oco_tp: "OCO TP",
+  closed_session: "Session",
+  closed_signal: "Signal",
+};
+
+function exitTypeLabel(raw) {
+  if (!raw) return "—";
+  return EXIT_TYPE_LABELS[raw] || raw.replace(/^closed_/, "");
+}
+
 // ── Helper Functions ──────────────────────────────────────────────────────
 
 function calcEquityCurve(trades) {
@@ -578,7 +596,7 @@ export default function BacktestResults({ result, symbol = "SPY", streaming = fa
                     <tbody>
                       {Object.entries(by_exit_type).map(([exitType, data]) => (
                         <tr key={exitType}>
-                          <td className="font-mono text-xs">{exitType.replace("closed_", "")}</td>
+                          <td className="font-mono text-xs">{exitTypeLabel(exitType)}</td>
                           <td className="font-mono text-xs">{data.count}</td>
                           <td className="font-mono text-xs text-warning">${formatNum(data.commission, 2)}</td>
                           <td className="font-mono text-xs text-warning">${formatNum(data.slippage, 2)}</td>
@@ -653,7 +671,7 @@ export default function BacktestResults({ result, symbol = "SPY", streaming = fa
                           {trade.total_cost ? `$${trade.total_cost.toFixed(2)}` : "—"}
                         </td>
                         <td className="text-xs text-base-content/50">{trade.pattern_type || trade.pattern || "—"}</td>
-                        <td className="text-xs text-base-content/50">{trade.close_reason || "—"}</td>
+                        <td className="text-xs text-base-content/50">{exitTypeLabel(trade.close_reason || trade.status)}</td>
                       </tr>
                     );
                   })}
