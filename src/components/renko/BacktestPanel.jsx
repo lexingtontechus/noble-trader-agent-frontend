@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useCallback } from "react";
+import { useState, useCallback, useRef } from "react";
 import BacktestResults from "./BacktestResults";
 import BacktestComparison from "./BacktestComparison";
 import ParameterSweep from "./ParameterSweep";
@@ -24,6 +24,77 @@ async function bffFetch(path, body, timeoutMs = 120000) {
 }
 
 /**
+ * SSE streaming fetch — reads chunked backtest events from the BFF stream route.
+ * Uses fetch() + ReadableStream (not EventSource) because it's a POST request.
+ *
+ * @param {Object} body - Request body (prices, config, etc.)
+ * @param {Function} onProgress - Called with each "progress" event
+ * @param {Function} onComplete - Called with the final "complete" event
+ * @param {AbortSignal} signal - For cancellation support
+ */
+async function bffFetchStream(body, { onProgress, onComplete, signal }) {
+  const res = await fetch("/api/renko/backtest/run/stream", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+    signal,
+  });
+
+  if (!res.ok) {
+    const text = await res.text();
+    let detail;
+    try { detail = JSON.parse(text); } catch { detail = text; }
+    throw new Error(detail?.error || detail?.detail || `HTTP ${res.status}`);
+  }
+
+  if (!res.body) {
+    throw new Error("No response body from streaming endpoint");
+  }
+
+  const reader = res.body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = "";
+
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+
+      buffer += decoder.decode(value, { stream: true });
+
+      // Parse SSE lines — events are separated by double newlines
+      const lines = buffer.split("\n");
+      buffer = lines.pop() || ""; // Keep incomplete line in buffer
+
+      for (const line of lines) {
+        if (!line.startsWith("data: ")) continue;
+        const jsonStr = line.slice(6).trim();
+        if (!jsonStr) continue;
+
+        try {
+          const event = JSON.parse(jsonStr);
+
+          if (event.type === "progress") {
+            onProgress(event);
+          } else if (event.type === "complete") {
+            onComplete(event);
+          } else if (event.type === "error") {
+            throw new Error(event.message || "Streaming backtest error");
+          }
+        } catch (parseErr) {
+          // Skip malformed SSE lines
+          if (parseErr.message && !parseErr.message.includes("JSON")) {
+            throw parseErr;
+          }
+        }
+      }
+    }
+  } finally {
+    reader.releaseLock();
+  }
+}
+
+/**
  * BacktestPanel — 7th tab of the Renko HFT Pipeline.
  *
  * Sections:
@@ -31,6 +102,9 @@ async function bffFetch(path, body, timeoutMs = 120000) {
  *   2. Configuration Form — all tunable Renko parameters
  *   3. Action Buttons — trigger backtest via BFF route
  *   4. Results Display — delegates to BacktestResults / BacktestComparison / ParameterSweep
+ *
+ * "Run" mode uses SSE streaming for progressive/chunked loading.
+ * "Compare" and "Optimize" use standard request/response (no streaming yet).
  */
 
 // ── Default config values (match backend RenkoConfig) ──────────────────────
@@ -170,7 +244,6 @@ function ConfigForm({ config, onChange, prefix = "" }) {
 // ── Compare Config Slot ──────────────────────────────────────────────────
 
 function CompareSlot({ index, config, onChange, onRemove, canRemove }) {
-  const label = config.label || `Config ${String.fromCharCode(65 + index)}`;
   return (
     <div className="bg-base-300/30 rounded-lg p-3">
       <div className="flex items-center justify-between mb-2">
@@ -285,6 +358,38 @@ function ParamGridEditor({ paramGrid, onChange }) {
   );
 }
 
+// ── Progress Bar Component ──────────────────────────────────────────────────
+
+function StreamingProgressBar({ progress }) {
+  if (!progress) return null;
+  const { chunk, total_chunks, percent, bricks_so_far, ticks_so_far } = progress;
+
+  return (
+    <div className="card bg-base-200 shadow-sm">
+      <div className="card-body p-3 space-y-2">
+        <div className="flex items-center justify-between">
+          <span className="text-xs font-semibold text-base-content/70">
+            Streaming backtest...
+          </span>
+          <span className="text-xs font-mono text-base-content/50">
+            chunk {chunk}/{total_chunks}
+          </span>
+        </div>
+        <progress
+          className="progress progress-primary w-full"
+          value={percent}
+          max="100"
+        />
+        <div className="flex items-center gap-4 text-[10px] text-base-content/40 font-mono">
+          <span>{ticks_so_far} ticks</span>
+          <span>{bricks_so_far} bricks</span>
+          <span>{percent}%</span>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ── Main Component ───────────────────────────────────────────────────────
 
 export default function BacktestPanel({ symbol = "SPY" }) {
@@ -297,6 +402,12 @@ export default function BacktestPanel({ symbol = "SPY" }) {
   const [runResult, setRunResult] = useState(null);
   const [compareResult, setCompareResult] = useState(null);
   const [optimizeResult, setOptimizeResult] = useState(null);
+
+  // Streaming progress state
+  const [streamProgress, setStreamProgress] = useState(null);
+
+  // AbortController ref for cancellation
+  const abortRef = useRef(null);
 
   // Config state
   const [config, setConfig] = useState({ ...DEFAULT_CONFIG });
@@ -320,21 +431,82 @@ export default function BacktestPanel({ symbol = "SPY" }) {
     }
   }, [priceSource]);
 
-  // ── Run backtest ──────────────────────────────────────────────────────
+  // ── Run backtest (SSE streaming) ──────────────────────────────────────
   const handleRun = useCallback(async () => {
     setLoading(true);
     setError(null);
     setRunResult(null);
+    setStreamProgress(null);
+
+    const controller = new AbortController();
+    abortRef.current = controller;
+
     try {
       const prices = getPrices();
-      const result = await bffFetch("run", { prices, symbol, ...config });
-      setRunResult(result);
+
+      await bffFetchStream(
+        { prices, symbol, ...config },
+        {
+          onProgress: (event) => {
+            // Update progress bar
+            setStreamProgress({
+              chunk: event.chunk,
+              total_chunks: event.total_chunks,
+              percent: event.percent,
+              bricks_so_far: event.bricks_so_far,
+              ticks_so_far: event.ticks_so_far,
+            });
+
+            // Render partial results in real-time
+            setRunResult({
+              symbol,
+              total_ticks: event.ticks_so_far,
+              total_bricks: event.bricks_so_far,
+              stats: event.stats_so_far || {},
+              trades: event.trades_so_far || [],
+              config_used: config,
+              _streaming: true, // Flag to indicate partial data
+            });
+          },
+          onComplete: (event) => {
+            // Final result — normalize to match BacktestResults expected shape
+            const journalStats = event.stats?.journal || event.stats || {};
+            setRunResult({
+              symbol,
+              total_ticks: event.total_ticks,
+              total_bricks: event.total_bricks,
+              stats: journalStats,
+              trades: event.trades || [],
+              config_used: event.config_used || config,
+              cached: event.cached || false,
+              _streaming: false,
+            });
+          },
+          signal: controller.signal,
+        }
+      );
     } catch (e) {
-      setError(e.message || "Backtest failed");
+      if (e.name === "AbortError") {
+        // User cancelled — keep partial results if any
+      } else {
+        setError(e.message || "Backtest failed");
+      }
     } finally {
       setLoading(false);
+      setStreamProgress(null);
+      abortRef.current = null;
     }
   }, [config, symbol, getPrices]);
+
+  // ── Cancel streaming backtest ──────────────────────────────────────────
+  const handleCancel = useCallback(() => {
+    if (abortRef.current) {
+      abortRef.current.abort();
+      abortRef.current = null;
+    }
+    setLoading(false);
+    setStreamProgress(null);
+  }, []);
 
   // ── Compare backtests ────────────────────────────────────────────────
   const handleCompare = useCallback(async () => {
@@ -374,10 +546,16 @@ export default function BacktestPanel({ symbol = "SPY" }) {
 
   // ── Reset ────────────────────────────────────────────────────────────
   const handleReset = () => {
+    if (abortRef.current) {
+      abortRef.current.abort();
+      abortRef.current = null;
+    }
     setRunResult(null);
     setCompareResult(null);
     setOptimizeResult(null);
     setError(null);
+    setStreamProgress(null);
+    setLoading(false);
   };
 
   const hasResult = runResult || compareResult || optimizeResult;
@@ -504,11 +682,18 @@ export default function BacktestPanel({ symbol = "SPY" }) {
       {/* Action Buttons */}
       <div className="flex items-center gap-3">
         <button
-          className={`btn btn-primary ${loading ? "btn-disabled" : ""}`}
+          className={`btn btn-primary ${loading && mode !== "run" ? "btn-disabled" : ""}`}
           onClick={mode === "run" ? handleRun : mode === "compare" ? handleCompare : handleOptimize}
-          disabled={loading}
+          disabled={loading && mode !== "run"}
         >
-          {loading ? (
+          {loading && mode === "run" ? (
+            <>
+              <span className="loading loading-spinner loading-xs" />
+              {streamProgress
+                ? `Chunk ${streamProgress.chunk}/${streamProgress.total_chunks}...`
+                : "Starting..."}
+            </>
+          ) : loading ? (
             <>
               <span className="loading loading-spinner loading-xs" />
               Running...
@@ -521,12 +706,25 @@ export default function BacktestPanel({ symbol = "SPY" }) {
             </>
           )}
         </button>
-        {hasResult && (
+
+        {/* Cancel button (visible during streaming) */}
+        {loading && mode === "run" && (
+          <button className="btn btn-error btn-sm" onClick={handleCancel}>
+            ✕ Cancel
+          </button>
+        )}
+
+        {hasResult && !loading && (
           <button className="btn btn-ghost btn-sm" onClick={handleReset}>
             Clear Results
           </button>
         )}
       </div>
+
+      {/* Streaming Progress Bar */}
+      {streamProgress && mode === "run" && (
+        <StreamingProgressBar progress={streamProgress} />
+      )}
 
       {/* Error Display */}
       {error && (
@@ -539,7 +737,7 @@ export default function BacktestPanel({ symbol = "SPY" }) {
       )}
 
       {/* Cache Indicator */}
-      {(runResult?._cached || compareResult?._cached || optimizeResult?._cached) && (
+      {(runResult?.cached || compareResult?._cached || optimizeResult?._cached) && (
         <div className="alert alert-info alert-sm py-1">
           <svg xmlns="http://www.w3.org/2000/svg" className="stroke-current shrink-0 h-4 w-4" fill="none" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
@@ -550,7 +748,7 @@ export default function BacktestPanel({ symbol = "SPY" }) {
 
       {/* Results Display */}
       {mode === "run" && runResult && (
-        <BacktestResults result={runResult} symbol={symbol} />
+        <BacktestResults result={runResult} symbol={symbol} streaming={runResult._streaming} />
       )}
       {mode === "compare" && compareResult && (
         <BacktestComparison result={compareResult} symbol={symbol} />

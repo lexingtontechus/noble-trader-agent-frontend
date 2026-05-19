@@ -295,7 +295,7 @@ function MetricCard({ label, value, icon, colorClass = "", subtext }) {
 
 // ── Main Component ────────────────────────────────────────────────────────
 
-export default function BacktestResults({ result, symbol = "SPY" }) {
+export default function BacktestResults({ result, symbol = "SPY", streaming = false }) {
   const { stats = {}, trades = [], total_ticks = 0, total_bricks = 0, config_used = {} } = result;
 
   const closedTrades = useMemo(
@@ -346,6 +346,14 @@ export default function BacktestResults({ result, symbol = "SPY" }) {
 
   return (
     <div className="space-y-4">
+      {/* Streaming indicator — shows when results are partial/in-progress */}
+      {streaming && (
+        <div className="alert alert-warning alert-sm py-1">
+          <span className="loading loading-spinner loading-xs" />
+          <span className="text-xs">Streaming results — equity curve and stats updating in real-time...</span>
+        </div>
+      )}
+
       {/* ── Section 1: Summary Metric Cards ──────────────────────────────── */}
       <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
         <MetricCard
