@@ -1,7 +1,7 @@
 # Noble Trader Agent — Project State
 
 **Last Updated:** 2026-05-19
-**Version:** v5.3.0 (Renko HFT Pipeline + Backtesting + Redis Caching)
+**Version:** v5.4.0 (Renko HFT Pipeline + Backtesting + Redis Caching + SSE Streaming)
 
 ---
 
@@ -120,6 +120,7 @@ Redis L1 (fastest, 4h TTL) → Supabase L2 (persistent, 4h TTL) → Yahoo Financ
 | `/renko/config` | POST | Update pipeline configuration (resets pipeline) |
 | `/renko/reset` | POST | Reset pipeline for a symbol |
 | `/renko/backtest/stats` | GET | Backtest/trading statistics from journal |
+| `/renko/backtest/run/stream` | POST | SSE streaming backtest with progressive chunked results |
 | `/health` | GET | Health check + Discord status |
 
 ### v2.x-v4.0 Regime Platform Endpoints (also deployed)
@@ -162,6 +163,7 @@ Redis L1 (fastest, 4h TTL) → Supabase L2 (persistent, 4h TTL) → Yahoo Financ
 |-------|---------|-------------|
 | `/api/renko/[action]` | GET/POST | Proxy to FastAPI `/renko/*` (state, bricks, signals, tick, config, reset...) |
 | `/api/renko/warmup` | GET/POST | Cache-aware warmup: Redis L1 → Supabase L2 → Yahoo Finance |
+| `/api/renko/backtest/run/stream` | POST | SSE streaming backtest with progressive chunked results (pipes FastAPI stream) |
 | `/api/renko/signal-alert` | POST | Signal/trade/risk alert dispatch (Supabase + Discord + Telegram) |
 | `/api/renko/orders` | GET/POST/DELETE | Alpaca order management with bracket orders |
 | `/api/renko/tick-stream` | POST | Batch tick feeding from Finnhub WebSocket |
