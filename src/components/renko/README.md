@@ -62,6 +62,130 @@ Tick → Brick Engine → Swing Classifier → Pattern Detector → Signal Filte
 | `/renko/reset` | POST | Reset pipeline for symbol |
 | `/renko/backtest/stats` | GET | Backtest/trading statistics |
 
+### Backtest Endpoints (Isolated — Never Affect Live Pipeline)
+
+These endpoints create standalone `RenkoPipeline` instances for each request. They never read from or write to the live pipeline registry, making them safe for experimentation and parameter tuning.
+
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/renko/backtest/run` | POST | Run a full Renko pipeline backtest on historical prices |
+| `/renko/backtest/compare` | POST | Compare 2–10 Renko configs side-by-side on the same price data |
+| `/renko/backtest/optimize` | POST | Grid-search parameter sweep for Renko pipeline optimisation (max 50 combos) |
+
+All three endpoints are rate-limited and require authentication. Backtest runs execute in thread pools on the backend to avoid blocking the event loop.
+
+## BFF Backtest Routes
+
+The frontend Next.js app provides BFF (Backend-For-Frontend) routes that proxy to the backend Renko backtest endpoints with auth header forwarding, cold-start retry, and error handling:
+
+| BFF Route | Method | Proxies To |
+|-----------|--------|------------|
+| `/api/renko/backtest/run` | POST | `POST /renko/backtest/run` |
+| `/api/renko/backtest/compare` | POST | `POST /renko/backtest/compare` |
+| `/api/renko/backtest/optimize` | POST | `POST /renko/backtest/optimize` |
+
+### BFF Route Details
+
+**POST /api/renko/backtest/run**
+
+Proxies to the backend's isolated Renko backtest runner. Accepts `RenkoBacktestRequest` body (prices + pipeline config) and returns `RenkoBacktestResponse` with stats and trade records.
+
+**POST /api/renko/backtest/compare**
+
+Proxies to the backend's config comparison endpoint. Accepts `RenkoBacktestCompareRequest` body (prices + 2–10 labelled configs) and returns `RenkoBacktestCompareResponse` with per-config results and a diff summary.
+
+**POST /api/renko/backtest/optimize**
+
+Proxies to the backend's grid-search optimizer. Accepts `RenkoBacktestOptimizeRequest` body (prices + param_grid + fixed defaults) and returns `RenkoBacktestOptimizeResponse` with results per combination and best-by highlights.
+
+## Client Helpers
+
+The `src/lib/renko-client.js` module provides typed async functions for calling the Renko backtest BFF routes:
+
+### `runRenkoBacktest(params)`
+
+Run a full isolated Renko pipeline backtest.
+
+```javascript
+import { runRenkoBacktest } from '@/lib/renko-client';
+
+const result = await runRenkoBacktest({
+  prices: [450.10, 451.20, 449.80, ...],
+  symbol: 'SPY',
+  brick_size: 0.50,
+  sl_bricks: 3,
+  tp_bricks: 5,
+  trailing_stop: true,
+  regime_gate: true,
+  // ... other RenkoConfig params
+  timestamps: [1709500000, 1709500060, ...],  // optional
+  regimes: ['low_vol_bull', 'low_vol_bull', ...],  // optional
+  signal_confidence_min: 0.5,  // optional
+});
+
+// result: { symbol, total_ticks, total_bricks, config_used, stats, trades }
+```
+
+### `compareRenkoBacktests(params)`
+
+Compare multiple Renko pipeline configurations side-by-side.
+
+```javascript
+import { compareRenkoBacktests } from '@/lib/renko-client';
+
+const result = await compareRenkoBacktests({
+  prices: [450.10, 451.20, 449.80, ...],
+  symbol: 'SPY',
+  configs: [
+    {
+      label: 'conservative',
+      brick_size: 0.50,
+      sl_bricks: 4,
+      tp_bricks: 6,
+      regime_gate: true,
+    },
+    {
+      label: 'aggressive',
+      brick_size: 0.25,
+      sl_bricks: 2,
+      tp_bricks: 4,
+      regime_gate: false,
+    },
+  ],
+  timestamps: [1709500000, 1709500060, ...],  // optional
+  regimes: ['low_vol_bull', 'low_vol_bull', ...],  // optional
+});
+
+// result: { comparisons: [...RenkoBacktestResponse], diff: {...} }
+```
+
+### `optimizeRenkoBacktest(params)`
+
+Grid-search parameter sweep for Renko pipeline optimisation.
+
+```javascript
+import { optimizeRenkoBacktest } from '@/lib/renko-client';
+
+const result = await optimizeRenkoBacktest({
+  prices: [450.10, 451.20, 449.80, ...],
+  symbol: 'SPY',
+  param_grid: {
+    brick_size: [0.25, 0.50, 1.00],
+    sl_bricks: [2, 3],
+    tp_bricks: [4, 5, 6],
+  },
+  // Fixed defaults for params not in the grid:
+  brick_size: 0.50,  // overridden by grid for those combos
+  trailing_stop: true,
+  regime_gate: true,
+  // ... other fixed params
+  timestamps: [1709500000, 1709500060, ...],  // optional
+  regimes: ['low_vol_bull', 'low_vol_bull', ...],  // optional
+});
+
+// result: { results: [...], best_by_sharpe: {...}, best_by_return: {...}, n_combinations: 18 }
+```
+
 ## Key Parameters
 
 | Parameter | Default | Description |
