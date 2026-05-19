@@ -22,13 +22,16 @@ import {
  *
  * Sections:
  *   1. Summary Metric Cards (total trades, win rate, profit factor, Sharpe, max DD, Kelly)
- *   2. Equity Curve — cumulative P&L over trades
- *   3. Drawdown Underwater Plot
- *   4. Monthly Returns Heatmap — calendar-style grid
- *   5. Trade Distribution (win/loss histogram by P&L bucket)
- *   6. Per-Pattern Breakdown (if available)
- *   7. Trade Log Table
- *   8. Config Used
+ *   2. Dollar P&L Metrics (from stats.dollar_stats)
+ *   3. Equity Curve — cumulative P&L over trades
+ *   4. Drawdown Underwater Plot
+ *   5. Monthly Returns Heatmap — calendar-style grid
+ *   6. Trade Distribution (win/loss histogram by P&L bucket)
+ *   7. Per-Pattern Breakdown (if available)
+ *   8. Transaction Cost Breakdown
+ *   9. Regime-Conditional Performance (Phase 4D)
+ *  10. Trade Log Table
+ *  11. Config Used
  */
 
 // ── Exit Type Display Names ──────────────────────────────────────────────
@@ -42,6 +45,8 @@ const EXIT_TYPE_LABELS = {
   closed_oco_tp: "OCO TP",
   closed_session: "Session",
   closed_signal: "Signal",
+  closed_time: "Time",
+  closed_manual: "Manual",
 };
 
 function exitTypeLabel(raw) {
@@ -278,6 +283,20 @@ function BarTooltipContent({ active, payload, label: tooltipLabel }) {
   );
 }
 
+function RegimeBarTooltip({ active, payload, label: tooltipLabel }) {
+  if (!active || !payload) return null;
+  return (
+    <div className="bg-base-200 border border-base-300 rounded-lg px-3 py-2 shadow-lg text-xs">
+      <div className="text-base-content/50 mb-1 font-semibold">{tooltipLabel}</div>
+      {payload.map((entry, i) => (
+        <div key={i} className="font-mono" style={{ color: entry.color }}>
+          {entry.name}: ${formatNum(entry.value, 2)}
+        </div>
+      ))}
+    </div>
+  );
+}
+
 // ── Section Header ────────────────────────────────────────────────────────
 
 function SectionHeader({ icon, title, badge }) {
@@ -313,11 +332,15 @@ function MetricCard({ label, value, icon, colorClass = "", subtext }) {
 
 // ── Main Component ────────────────────────────────────────────────────────
 
+/**
+ * @param {{ result: import("@/types/backtest").RenkoBacktestResponse, symbol?: string, streaming?: boolean }} props
+ */
 export default function BacktestResults({ result, symbol = "SPY", streaming = false }) {
   const { stats = {}, trades = [], total_ticks = 0, total_bricks = 0, config_used = {} } = result;
 
+  // BUG FIX: Use startsWith("closed") to match all closed status variants
   const closedTrades = useMemo(
-    () => (Array.isArray(trades) ? trades.filter((t) => t.status === "closed" || !t.status) : []),
+    () => (Array.isArray(trades) ? trades.filter((t) => t.status?.startsWith("closed") || !t.status) : []),
     [trades]
   );
 
@@ -342,6 +365,12 @@ export default function BacktestResults({ result, symbol = "SPY", streaming = fa
     // Per-pattern breakdown (if available)
     const byPattern = journal.by_pattern || {};
 
+    // Dollar-denominated stats (Phase 4)
+    const dollarStats = journal.dollar_stats || stats?.dollar_stats || {};
+
+    // Regime-conditional performance (Phase 4D)
+    const byRegime = journal.by_regime || stats?.by_regime || {};
+
     return {
       equityCurve,
       drawdownData,
@@ -357,10 +386,31 @@ export default function BacktestResults({ result, symbol = "SPY", streaming = fa
       avgWinBricks,
       avgLossBricks,
       byPattern,
+      dollarStats,
+      byRegime,
     };
   }, [closedTrades, stats]);
 
   const hasTrades = closedTrades.length > 0;
+
+  // Dollar stats helpers
+  const ds = metrics.dollarStats;
+  const hasDollarStats = ds && Object.keys(ds).length > 0;
+
+  // Regime data helpers
+  const byRegime = metrics.byRegime;
+  const hasRegimeData = byRegime && Object.keys(byRegime).length > 0;
+
+  // Prepare regime bar chart data
+  const regimeChartData = useMemo(() => {
+    if (!hasRegimeData) return [];
+    return Object.entries(byRegime).map(([regime, data]) => ({
+      regime,
+      pnl_dollars: data.pnl_dollars ?? 0,
+      trades: data.count ?? 0,
+      win_rate: data.win_rate ?? 0,
+    }));
+  }, [byRegime, hasRegimeData]);
 
   return (
     <div className="space-y-4">
@@ -417,13 +467,60 @@ export default function BacktestResults({ result, symbol = "SPY", streaming = fa
         />
       </div>
 
-      {/* Extra metrics row */}
+      {/* Extra metrics row (brick-denominated) */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
         <MetricCard label="Total P&L" value={`${metrics.totalPnlBricks >= 0 ? "+" : ""}${formatNum(metrics.totalPnlBricks, 1)} br`} icon="💰" colorClass={metrics.totalPnlBricks >= 0 ? "text-success" : "text-error"} />
         <MetricCard label="Avg P&L/Trade" value={`${formatNum(metrics.avgPnlBricks, 2)} br`} icon="📊" colorClass={metrics.avgPnlBricks >= 0 ? "text-success" : "text-error"} />
         <MetricCard label="Avg Win" value={`+${formatNum(metrics.avgWinBricks, 2)} br`} icon="✅" colorClass="text-success" />
         <MetricCard label="Avg Loss" value={`${formatNum(metrics.avgLossBricks, 2)} br`} icon="❌" colorClass="text-error" />
       </div>
+
+      {/* ── Dollar P&L Metrics Row ──────────────────────────────────────── */}
+      {hasDollarStats && (
+        <div className="card bg-base-200 shadow-sm">
+          <div className="card-body p-4">
+            <SectionHeader icon="💵" title="Dollar P&L Metrics" badge={`Initial: $${formatNum(ds.initial_capital, 0)}`} />
+            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
+              <MetricCard
+                label="Total P&L ($)"
+                value={`$${formatNum(ds.total_pnl_dollars, 2)}`}
+                colorClass={(ds.total_pnl_dollars ?? 0) >= 0 ? "text-success" : "text-error"}
+                subtext="Net profit"
+              />
+              <MetricCard
+                label="Return %"
+                value={`${formatNum(ds.return_pct, 2)}%`}
+                colorClass={(ds.return_pct ?? 0) >= 0 ? "text-success" : "text-error"}
+                subtext="On initial capital"
+              />
+              <MetricCard
+                label="Dollar Sharpe"
+                value={formatNum(ds.sharpe_dollars)}
+                colorClass={(ds.sharpe_dollars ?? 0) >= 1 ? "text-success" : (ds.sharpe_dollars ?? 0) >= 0 ? "text-warning" : "text-error"}
+                subtext="Risk-adj ($)"
+              />
+              <MetricCard
+                label="Dollar Max DD"
+                value={`$${formatNum(ds.max_drawdown_dollars, 2)}`}
+                colorClass="text-error"
+                subtext="Peak-to-trough"
+              />
+              <MetricCard
+                label="Avg P&L/Trade ($)"
+                value={`$${formatNum(ds.avg_pnl_dollars, 2)}`}
+                colorClass={(ds.avg_pnl_dollars ?? 0) >= 0 ? "text-success" : "text-error"}
+                subtext="Per trade"
+              />
+              <MetricCard
+                label="Dollar Profit Factor"
+                value={formatNum(ds.profit_factor_dollars)}
+                colorClass={(ds.profit_factor_dollars ?? 0) >= 1 ? "text-success" : "text-error"}
+                subtext="Gross win/loss ($)"
+              />
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* ── Section 2: Equity Curve ──────────────────────────────────────── */}
       <div className="card bg-base-200 shadow-lg">
@@ -620,7 +717,98 @@ export default function BacktestResults({ result, symbol = "SPY", streaming = fa
         );
       })()}
 
-      {/* ── Section 8: Trade Log Table ────────────────────────────────────── */}
+      {/* ── Section 8: Regime-Conditional Performance (Phase 4D) ──────────── */}
+      {hasRegimeData && (
+        <div className="card bg-base-200 shadow-lg">
+          <div className="card-body p-4">
+            <SectionHeader icon="🧭" title="Regime-Conditional Performance" badge={`${Object.keys(byRegime).length} regimes`} />
+            <div className="overflow-x-auto">
+              <table className="table table-sm">
+                <thead>
+                  <tr>
+                    <th className="text-xs">Regime</th>
+                    <th className="text-xs">Trades</th>
+                    <th className="text-xs">Win Rate</th>
+                    <th className="text-xs">P&L ($)</th>
+                    <th className="text-xs">Return %</th>
+                    <th className="text-xs">Avg P&L ($)</th>
+                    <th className="text-xs">Cost ($)</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {Object.entries(byRegime).map(([regime, data]) => (
+                    <tr key={regime}>
+                      <td className="font-mono text-xs font-semibold">{regime}</td>
+                      <td className="font-mono text-xs">{data.count ?? "—"}</td>
+                      <td className="font-mono text-xs">
+                        <span className={(data.win_rate ?? 0) >= 50 ? "text-success" : "text-error"}>
+                          {formatNum((data.win_rate ?? 0) * 100, 1)}%
+                        </span>
+                      </td>
+                      <td className="font-mono text-xs">
+                        <span className={(data.pnl_dollars ?? 0) >= 0 ? "text-success" : "text-error"}>
+                          ${formatNum(data.pnl_dollars ?? 0, 2)}
+                        </span>
+                      </td>
+                      <td className="font-mono text-xs">
+                        <span className={(data.return_pct ?? 0) >= 0 ? "text-success" : "text-error"}>
+                          {formatNum(data.return_pct ?? 0, 2)}%
+                        </span>
+                      </td>
+                      <td className="font-mono text-xs">
+                        <span className={(data.avg_pnl_dollars ?? 0) >= 0 ? "text-success" : "text-error"}>
+                          ${formatNum(data.avg_pnl_dollars ?? 0, 2)}
+                        </span>
+                      </td>
+                      <td className="font-mono text-xs text-warning">
+                        ${formatNum(data.total_cost ?? 0, 2)}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+
+            {/* Regime P&L Bar Chart */}
+            {regimeChartData.length > 1 && (
+              <div className="mt-4">
+                <ResponsiveContainer width="100%" height={250}>
+                  <BarChart data={regimeChartData}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="currentColor" opacity={0.1} />
+                    <XAxis dataKey="regime" tick={{ fontSize: 10 }} stroke="currentColor" opacity={0.3} />
+                    <YAxis tick={{ fontSize: 10 }} stroke="currentColor" opacity={0.3} />
+                    <Tooltip content={<RegimeBarTooltip />} />
+                    <ReferenceLine y={0} stroke="currentColor" strokeOpacity={0.2} />
+                    <Bar
+                      dataKey="pnl_dollars"
+                      name="P&L ($)"
+                      radius={[4, 4, 0, 0]}
+                      fill="#8884d8"
+                      // Color bars based on positive/negative
+                      shape={({ payload, ...rest }) => {
+                        const { x, y, width, height } = rest;
+                        const color = payload.pnl_dollars >= 0 ? "#22c55e" : "#ef4444";
+                        return (
+                          <rect
+                            x={x}
+                            y={payload.pnl_dollars >= 0 ? y : y}
+                            width={width}
+                            height={Math.abs(height)}
+                            fill={color}
+                            rx={4}
+                          />
+                        );
+                      }}
+                    />
+                  </BarChart>
+                </ResponsiveContainer>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* ── Section 9: Trade Log Table ────────────────────────────────────── */}
       <div className="card bg-base-200 shadow-lg">
         <div className="card-body p-4">
           <SectionHeader icon="📋" title="Trade Log" badge={`${closedTrades.length} trades`} />
@@ -682,7 +870,7 @@ export default function BacktestResults({ result, symbol = "SPY", streaming = fa
         </div>
       </div>
 
-      {/* ── Section 8: Config Used ────────────────────────────────────────── */}
+      {/* ── Section 10: Config Used ────────────────────────────────────────── */}
       <div className="card bg-base-200 shadow-sm">
         <div className="card-body p-4">
           <SectionHeader icon="⚙️" title="Configuration Used" badge={symbol} />

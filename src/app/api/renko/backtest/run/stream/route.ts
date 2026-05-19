@@ -11,6 +11,7 @@
  */
 
 import { getFastAPIAuthHeaders } from "@/lib/fastapi-auth";
+import type { RenkoBacktestRequest, RenkoBacktestResponse } from "@/types/backtest";
 
 const FASTAPI_URL = process.env.NEXT_PUBLIC_FASTAPI_URL || "http://localhost:8000";
 
@@ -39,6 +40,7 @@ export async function POST(request: Request) {
       commissionBps = 5.0,
       spreadBps = 1.0,
       ocoPriority = "sl_first",
+      initialCapital = 100000.0,
       timestamps,
       regimes,
       signalConfidenceMin,
@@ -51,7 +53,7 @@ export async function POST(request: Request) {
       );
     }
 
-    const payload: Record<string, unknown> = {
+    const payload: RenkoBacktestRequest = {
       prices,
       symbol,
       brick_size: brickSize,
@@ -73,6 +75,7 @@ export async function POST(request: Request) {
       commission_bps: commissionBps,
       spread_bps: spreadBps,
       oco_priority: ocoPriority,
+      initial_capital: initialCapital,
     };
 
     if (timestamps) payload.timestamps = timestamps;
@@ -81,11 +84,10 @@ export async function POST(request: Request) {
 
     // ── Check Redis L1 cache first — if HIT, return as a single SSE complete event ──
     const { redis } = await import("@/lib/redis");
-    const cacheConfig = { ...payload };
-    delete cacheConfig.prices;
-    (cacheConfig as Record<string, unknown>)._price_fingerprint = `${prices.length}:${prices[0]}:${prices[prices.length - 1]}`;
+    const { prices: _omitPrices, ...cacheConfigRest } = payload;
+    const cacheKey = { ...cacheConfigRest, _price_fingerprint: `${prices.length}:${prices[0]}:${prices[prices.length - 1]}` } as Record<string, unknown>;
 
-    const cached = await redis.getBacktestCache(symbol, cacheConfig);
+    const cached = await redis.getBacktestCache(symbol, cacheKey);
     if (cached) {
       // Return a single SSE event with the cached result
       const sseData = `data: ${JSON.stringify({ type: "complete", ...cached, cached: true })}\n\n`;
@@ -132,7 +134,7 @@ export async function POST(request: Request) {
     const encoder = new TextEncoder();
 
     let buffer = ""; // Accumulate partial SSE data
-    let finalResult: Record<string, unknown> | null = null;
+    let finalResult: RenkoBacktestResponse | null = null;
 
     const stream = new ReadableStream({
       async pull(controller) {
@@ -142,7 +144,7 @@ export async function POST(request: Request) {
           if (done) {
             // Stream ended — cache the final result if we captured one
             if (finalResult) {
-              redis.setBacktestCache(symbol, cacheConfig, finalResult).catch(() => {
+              redis.setBacktestCache(symbol, cacheKey, finalResult).catch(() => {
                 // Cache write failure is non-critical
               });
             }
@@ -173,6 +175,7 @@ export async function POST(request: Request) {
                     config_used: eventData.config_used,
                     stats: eventData.stats?.journal || eventData.stats,
                     trades: eventData.trades,
+                    cached: false,
                   };
                 }
               } catch {

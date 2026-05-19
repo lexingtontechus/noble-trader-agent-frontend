@@ -8,6 +8,7 @@
  */
 import { getFastAPIAuthHeaders } from "@/lib/fastapi-auth";
 import { redis } from "@/lib/redis";
+import type { RenkoBacktestCompareRequest, RenkoBacktestCompareResponse } from "@/types/backtest";
 
 const FASTAPI_URL = process.env.NEXT_PUBLIC_FASTAPI_URL || "http://localhost:8000";
 
@@ -30,18 +31,17 @@ export async function POST(request: Request) {
       );
     }
 
-    const payload: Record<string, unknown> = {
+    const payload: RenkoBacktestCompareRequest = {
       prices,
       symbol,
       configs,
-      oco_priority: body.oco_priority || "sl_first",
     };
 
     if (timestamps) payload.timestamps = timestamps;
     if (regimes) payload.regimes = regimes;
 
     // ── Check Redis cache (L1) ──────────────────────────────────────────
-    const cacheConfig = { symbol, configs };
+    const cacheConfig = { symbol, configs } as Record<string, unknown>;
     cacheConfig._price_fingerprint = `${prices.length}:${prices[0]}:${prices[prices.length - 1]}`;
 
     const cached = await redis.getBacktestCache(`${symbol}:compare`, cacheConfig);
@@ -70,7 +70,7 @@ export async function POST(request: Request) {
       );
     }
 
-    const data = await resp.json();
+    const data: RenkoBacktestCompareResponse = await resp.json();
 
     // ── Save to Redis cache (fire-and-forget) ───────────────────────────
     redis.setBacktestCache(`${symbol}:compare`, cacheConfig, data).catch(() => {});

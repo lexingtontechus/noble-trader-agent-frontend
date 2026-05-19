@@ -8,6 +8,7 @@
  */
 import { getFastAPIAuthHeaders } from "@/lib/fastapi-auth";
 import { redis } from "@/lib/redis";
+import type { RenkoBacktestOptimizeRequest, RenkoBacktestOptimizeResponse } from "@/types/backtest";
 
 const FASTAPI_URL = process.env.NEXT_PUBLIC_FASTAPI_URL || "http://localhost:8000";
 
@@ -42,7 +43,7 @@ export async function POST(request: Request) {
       );
     }
 
-    const payload = {
+    const payload: RenkoBacktestOptimizeRequest = {
       prices,
       symbol,
       param_grid,
@@ -67,8 +68,7 @@ export async function POST(request: Request) {
     };
 
     // ── Check Redis cache (L1) ──────────────────────────────────────────
-    const cacheConfig = { symbol, param_grid, brick_size: payload.brick_size, sl_bricks: payload.sl_bricks, tp_bricks: payload.tp_bricks, regime_gate: payload.regime_gate };
-    cacheConfig._price_fingerprint = `${prices.length}:${prices[0]}:${prices[prices.length - 1]}`;
+    const cacheConfig = { symbol, param_grid, brick_size: payload.brick_size, sl_bricks: payload.sl_bricks, tp_bricks: payload.tp_bricks, regime_gate: payload.regime_gate, _price_fingerprint: `${prices.length}:${prices[0]}:${prices[prices.length - 1]}` } as Record<string, unknown>;
 
     const cached = await redis.getBacktestCache(`${symbol}:optimize`, cacheConfig);
     if (cached) {
@@ -96,7 +96,7 @@ export async function POST(request: Request) {
       );
     }
 
-    const data = await resp.json();
+    const data: RenkoBacktestOptimizeResponse = await resp.json();
 
     // ── Save to Redis cache (fire-and-forget) ───────────────────────────
     redis.setBacktestCache(`${symbol}:optimize`, cacheConfig, data).catch(() => {});

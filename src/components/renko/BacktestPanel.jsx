@@ -4,6 +4,8 @@ import { useState, useCallback, useRef } from "react";
 import BacktestResults from "./BacktestResults";
 import BacktestComparison from "./BacktestComparison";
 import ParameterSweep from "./ParameterSweep";
+import WalkForwardResults from "./WalkForwardResults";
+import MonteCarloResults from "./MonteCarloResults";
 
 // ── BFF fetch helpers (avoids importing renko-client.js which pulls in server-only Clerk) ──
 
@@ -98,13 +100,13 @@ async function bffFetchStream(body, { onProgress, onComplete, signal }) {
  * BacktestPanel — 7th tab of the Renko HFT Pipeline.
  *
  * Sections:
- *   1. Mode selector (Run / Compare / Optimize)
+ *   1. Mode selector (Run / Compare / Optimize / Walk-Forward / Monte Carlo)
  *   2. Configuration Form — all tunable Renko parameters
  *   3. Action Buttons — trigger backtest via BFF route
- *   4. Results Display — delegates to BacktestResults / BacktestComparison / ParameterSweep
+ *   4. Results Display — delegates to specialized result components
  *
  * "Run" mode uses SSE streaming for progressive/chunked loading.
- * "Compare" and "Optimize" use standard request/response (no streaming yet).
+ * "Compare", "Optimize", "Walk-Forward", and "Monte Carlo" use standard request/response.
  */
 
 // ── Default config values (match backend RenkoConfig) ──────────────────────
@@ -129,6 +131,7 @@ const DEFAULT_CONFIG = {
   commission_bps: 5.0,
   spread_bps: 1.0,
   oco_priority: "sl_first",
+  initial_capital: 100000.0,
 };
 
 // ── Price Source Options ──────────────────────────────────────────────────
@@ -172,6 +175,8 @@ const MODES = [
   { key: "run", label: "Run Backtest", icon: "🚀", desc: "Run a single backtest with your config" },
   { key: "compare", label: "Compare", icon: "⚖️", desc: "Compare 2-3 configs side-by-side" },
   { key: "optimize", label: "Optimize", icon: "🔍", desc: "Grid search over parameter ranges" },
+  { key: "walk_forward", label: "Walk-Forward", icon: "🔄", desc: "Walk-forward validation (IS/OOS)" },
+  { key: "monte_carlo", label: "Monte Carlo", icon: "🎲", desc: "Monte Carlo permutation test" },
 ];
 
 // ── Parameter Input ──────────────────────────────────────────────────────
@@ -245,6 +250,7 @@ function ConfigForm({ config, onChange, prefix = "" }) {
       <ParamInput label="Commission (bps)" name="commission_bps" value={config.commission_bps} onChange={set} step={0.5} min={0} help="of notional" />
       <ParamInput label="Spread (bps)" name="spread_bps" value={config.spread_bps} onChange={set} step={0.5} min={0} help="bid-ask" />
       <ParamInput label="OCO Priority" name="oco_priority" value={config.oco_priority} onChange={set} type="select" min={[{ value: "sl_first", label: "SL First (Conservative)" }, { value: "tp_first", label: "TP First (Optimistic)" }, { value: "worst_case", label: "Worst Case" }]} help="OCA order" />
+      <ParamInput label="Initial Capital ($)" name="initial_capital" value={config.initial_capital} onChange={set} step={10000} min={1000} help="starting capital" />
     </div>
   );
 }
@@ -366,6 +372,30 @@ function ParamGridEditor({ paramGrid, onChange }) {
   );
 }
 
+// ── Walk-Forward Config ─────────────────────────────────────────────────
+
+function WalkForwardConfig({ wfConfig, onChange }) {
+  const set = (name, val) => onChange({ ...wfConfig, [name]: val });
+  return (
+    <div className="grid grid-cols-2 sm:grid-cols-3 gap-x-4 gap-y-2">
+      <ParamInput label="Train Window" name="trainWindow" value={wfConfig.trainWindow} onChange={set} min={50} max={1000} step={50} help="ticks for IS" />
+      <ParamInput label="Test Window" name="testWindow" value={wfConfig.testWindow} onChange={set} min={10} max={500} step={10} help="ticks for OOS" />
+      <ParamInput label="Min Trades (stats)" name="minTradesForStats" value={wfConfig.minTradesForStats} onChange={set} min={1} max={30} help="skip windows below" />
+    </div>
+  );
+}
+
+// ── Monte Carlo Config ─────────────────────────────────────────────────
+
+function MonteCarloConfig({ mcConfig, onChange }) {
+  const set = (name, val) => onChange({ ...mcConfig, [name]: val });
+  return (
+    <div className="grid grid-cols-2 sm:grid-cols-3 gap-x-4 gap-y-2">
+      <ParamInput label="Simulations" name="nSimulations" value={mcConfig.nSimulations} onChange={set} min={100} max={5000} step={100} help="permutation count" />
+    </div>
+  );
+}
+
 // ── Progress Bar Component ──────────────────────────────────────────────────
 
 function StreamingProgressBar({ progress }) {
@@ -410,6 +440,8 @@ export default function BacktestPanel({ symbol = "SPY" }) {
   const [runResult, setRunResult] = useState(null);
   const [compareResult, setCompareResult] = useState(null);
   const [optimizeResult, setOptimizeResult] = useState(null);
+  const [walkForwardResult, setWalkForwardResult] = useState(null);
+  const [monteCarloResult, setMonteCarloResult] = useState(null);
 
   // Streaming progress state
   const [streamProgress, setStreamProgress] = useState(null);
@@ -424,6 +456,18 @@ export default function BacktestPanel({ symbol = "SPY" }) {
     { ...DEFAULT_CONFIG, label: "Aggressive", sl_bricks: 2, tp_bricks: 4 },
   ]);
   const [paramGrid, setParamGrid] = useState({ sl_bricks: [2, 3, 4], tp_bricks: [4, 5, 6] });
+
+  // Walk-forward config
+  const [wfConfig, setWfConfig] = useState({
+    trainWindow: 200,
+    testWindow: 50,
+    minTradesForStats: 5,
+  });
+
+  // Monte Carlo config
+  const [mcConfig, setMcConfig] = useState({
+    nSimulations: 1000,
+  });
 
   // ── Price generation ──────────────────────────────────────────────────
   const getPrices = useCallback(() => {
@@ -552,6 +596,50 @@ export default function BacktestPanel({ symbol = "SPY" }) {
     }
   }, [config, paramGrid, symbol, getPrices]);
 
+  // ── Walk-Forward validation ──────────────────────────────────────────
+  const handleWalkForward = useCallback(async () => {
+    setLoading(true);
+    setError(null);
+    setWalkForwardResult(null);
+    try {
+      const prices = getPrices();
+      const result = await bffFetch("walk-forward", {
+        prices,
+        symbol,
+        ...config,
+        trainWindow: wfConfig.trainWindow,
+        testWindow: wfConfig.testWindow,
+        minTradesForStats: wfConfig.minTradesForStats,
+      }, 300000);
+      setWalkForwardResult(result);
+    } catch (e) {
+      setError(e.message || "Walk-forward validation failed");
+    } finally {
+      setLoading(false);
+    }
+  }, [config, wfConfig, symbol, getPrices]);
+
+  // ── Monte Carlo permutation test ─────────────────────────────────────
+  const handleMonteCarlo = useCallback(async () => {
+    setLoading(true);
+    setError(null);
+    setMonteCarloResult(null);
+    try {
+      const prices = getPrices();
+      const result = await bffFetch("monte-carlo", {
+        prices,
+        symbol,
+        ...config,
+        nSimulations: mcConfig.nSimulations,
+      }, 300000);
+      setMonteCarloResult(result);
+    } catch (e) {
+      setError(e.message || "Monte Carlo analysis failed");
+    } finally {
+      setLoading(false);
+    }
+  }, [config, mcConfig, symbol, getPrices]);
+
   // ── Reset ────────────────────────────────────────────────────────────
   const handleReset = () => {
     if (abortRef.current) {
@@ -561,12 +649,37 @@ export default function BacktestPanel({ symbol = "SPY" }) {
     setRunResult(null);
     setCompareResult(null);
     setOptimizeResult(null);
+    setWalkForwardResult(null);
+    setMonteCarloResult(null);
     setError(null);
     setStreamProgress(null);
     setLoading(false);
   };
 
-  const hasResult = runResult || compareResult || optimizeResult;
+  const hasResult = runResult || compareResult || optimizeResult || walkForwardResult || monteCarloResult;
+
+  // ── Determine handler and label for current mode ──────────────────────
+  const getModeHandler = () => {
+    switch (mode) {
+      case "run": return handleRun;
+      case "compare": return handleCompare;
+      case "optimize": return handleOptimize;
+      case "walk_forward": return handleWalkForward;
+      case "monte_carlo": return handleMonteCarlo;
+      default: return handleRun;
+    }
+  };
+
+  const getModeLabel = () => {
+    switch (mode) {
+      case "run": return "🚀 Run Backtest";
+      case "compare": return "⚖️ Compare Configs";
+      case "optimize": return "🔍 Run Optimization";
+      case "walk_forward": return "🔄 Run Walk-Forward";
+      case "monte_carlo": return "🎲 Run Monte Carlo";
+      default: return "🚀 Run Backtest";
+    }
+  };
 
   return (
     <div className="space-y-4">
@@ -580,6 +693,7 @@ export default function BacktestPanel({ symbol = "SPY" }) {
               setMode(m.key);
               handleReset();
             }}
+            title={m.desc}
           >
             <span>{m.icon}</span> {m.label}
           </button>
@@ -620,8 +734,10 @@ export default function BacktestPanel({ symbol = "SPY" }) {
               {mode === "run" && "Backtest Configuration"}
               {mode === "compare" && "Compare Configurations"}
               {mode === "optimize" && "Base Configuration + Parameter Grid"}
+              {mode === "walk_forward" && "Walk-Forward Configuration"}
+              {mode === "monte_carlo" && "Monte Carlo Configuration"}
             </h4>
-            {mode === "run" && (
+            {(mode === "run" || mode === "walk_forward" || mode === "monte_carlo") && (
               <button
                 className="btn btn-xs btn-ghost ml-auto"
                 onClick={() => setConfig({ ...DEFAULT_CONFIG })}
@@ -631,7 +747,7 @@ export default function BacktestPanel({ symbol = "SPY" }) {
             )}
           </div>
 
-          {mode === "run" && (
+          {(mode === "run" || mode === "walk_forward" || mode === "monte_carlo") && (
             <ConfigForm config={config} onChange={setConfig} />
           )}
 
@@ -684,6 +800,20 @@ export default function BacktestPanel({ symbol = "SPY" }) {
               <ParamGridEditor paramGrid={paramGrid} onChange={setParamGrid} />
             </div>
           )}
+
+          {mode === "walk_forward" && (
+            <div className="mt-4 space-y-3">
+              <div className="divider text-xs text-base-content/40 before:bg-base-300 after:bg-base-300">Walk-Forward Settings</div>
+              <WalkForwardConfig wfConfig={wfConfig} onChange={setWfConfig} />
+            </div>
+          )}
+
+          {mode === "monte_carlo" && (
+            <div className="mt-4 space-y-3">
+              <div className="divider text-xs text-base-content/40 before:bg-base-300 after:bg-base-300">Monte Carlo Settings</div>
+              <MonteCarloConfig mcConfig={mcConfig} onChange={setMcConfig} />
+            </div>
+          )}
         </div>
       </div>
 
@@ -691,7 +821,7 @@ export default function BacktestPanel({ symbol = "SPY" }) {
       <div className="flex items-center gap-3">
         <button
           className={`btn btn-primary ${loading && mode !== "run" ? "btn-disabled" : ""}`}
-          onClick={mode === "run" ? handleRun : mode === "compare" ? handleCompare : handleOptimize}
+          onClick={getModeHandler()}
           disabled={loading && mode !== "run"}
         >
           {loading && mode === "run" ? (
@@ -707,11 +837,7 @@ export default function BacktestPanel({ symbol = "SPY" }) {
               Running...
             </>
           ) : (
-            <>
-              {mode === "run" && "🚀 Run Backtest"}
-              {mode === "compare" && "⚖️ Compare Configs"}
-              {mode === "optimize" && "🔍 Run Optimization"}
-            </>
+            getModeLabel()
           )}
         </button>
 
@@ -745,7 +871,7 @@ export default function BacktestPanel({ symbol = "SPY" }) {
       )}
 
       {/* Cache Indicator */}
-      {(runResult?.cached || compareResult?._cached || optimizeResult?._cached) && (
+      {(runResult?.cached || compareResult?._cached || optimizeResult?._cached || walkForwardResult?._cached || monteCarloResult?._cached) && (
         <div className="alert alert-info alert-sm py-1">
           <svg xmlns="http://www.w3.org/2000/svg" className="stroke-current shrink-0 h-4 w-4" fill="none" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
@@ -763,6 +889,12 @@ export default function BacktestPanel({ symbol = "SPY" }) {
       )}
       {mode === "optimize" && optimizeResult && (
         <ParameterSweep result={optimizeResult} symbol={symbol} config={config} />
+      )}
+      {mode === "walk_forward" && walkForwardResult && (
+        <WalkForwardResults result={walkForwardResult} symbol={symbol} />
+      )}
+      {mode === "monte_carlo" && monteCarloResult && (
+        <MonteCarloResults result={monteCarloResult} symbol={symbol} />
       )}
     </div>
   );

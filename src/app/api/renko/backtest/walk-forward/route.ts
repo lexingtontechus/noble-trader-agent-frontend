@@ -1,15 +1,14 @@
 /**
- * POST /api/renko/backtest/run
+ * POST /api/renko/backtest/walk-forward
  *
- * BFF proxy: runs a Renko pipeline backtest via the FastAPI backend.
- * Uses an isolated pipeline instance (never affects the live pipeline).
+ * BFF proxy: run walk-forward validation for the Renko pipeline
+ * via the FastAPI backend.
  *
  * Redis L1 cache: Results for identical configs are cached with 1h TTL.
- * Cache key is a deterministic hash of symbol + all config params.
  */
 import { getFastAPIAuthHeaders } from "@/lib/fastapi-auth";
 import { redis } from "@/lib/redis";
-import type { RenkoBacktestRequest, RenkoBacktestResponse } from "@/types/backtest";
+import type { RenkoBacktestRequest, RenkoWalkForwardResponse } from "@/types/backtest";
 
 const FASTAPI_URL = process.env.NEXT_PUBLIC_FASTAPI_URL || "http://localhost:8000";
 
@@ -39,6 +38,9 @@ export async function POST(request: Request) {
       spreadBps = 1.0,
       ocoPriority = "sl_first",
       initialCapital = 100000.0,
+      trainWindow = 200,
+      testWindow = 50,
+      minTradesForStats = 5,
       timestamps,
       regimes,
       signalConfidenceMin,
@@ -51,7 +53,7 @@ export async function POST(request: Request) {
       );
     }
 
-    const payload: RenkoBacktestRequest = {
+    const payload: RenkoBacktestRequest & { train_window: number; test_window: number; min_trades_for_stats: number } = {
       prices,
       symbol,
       brick_size: brickSize,
@@ -74,6 +76,9 @@ export async function POST(request: Request) {
       spread_bps: spreadBps,
       oco_priority: ocoPriority,
       initial_capital: initialCapital,
+      train_window: trainWindow,
+      test_window: testWindow,
+      min_trades_for_stats: minTradesForStats,
     };
 
     if (timestamps) payload.timestamps = timestamps;
@@ -81,11 +86,10 @@ export async function POST(request: Request) {
     if (signalConfidenceMin !== undefined) payload.signal_confidence_min = signalConfidenceMin;
 
     // ── Check Redis cache (L1) ──────────────────────────────────────────
-    const { prices: _omitPrices, ...cacheConfig } = payload;
-    // Don't include prices array in cache key hash (too large) — use length + first/last as fingerprint
-    const cacheKey = { ...cacheConfig, _price_fingerprint: `${prices.length}:${prices[0]}:${prices[prices.length - 1]}` } as Record<string, unknown>;
+    const { prices: _omitPrices, ...cacheConfigRest } = payload;
+    const cacheKey = { ...cacheConfigRest, _price_fingerprint: `${prices.length}:${prices[0]}:${prices[prices.length - 1]}` } as Record<string, unknown>;
 
-    const cached = await redis.getBacktestCache(symbol, cacheKey);
+    const cached = await redis.getBacktestCache(`renko:walk-forward:${symbol}`, cacheKey);
     if (cached) {
       return Response.json({ ...cached, _cached: true, _cache_ttl: "1h" });
     }
@@ -93,14 +97,14 @@ export async function POST(request: Request) {
     // ── Cache miss: call FastAPI ────────────────────────────────────────
     const authHeaders = await getFastAPIAuthHeaders();
 
-    const resp = await fetch(`${FASTAPI_URL}/renko/backtest/run`, {
+    const resp = await fetch(`${FASTAPI_URL}/renko/backtest/walk-forward`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
         ...authHeaders,
       },
       body: JSON.stringify(payload),
-      signal: AbortSignal.timeout(120000), // 2 min for heavy computation
+      signal: AbortSignal.timeout(300000), // 5 min for walk-forward analysis
     });
 
     if (!resp.ok) {
@@ -111,18 +115,16 @@ export async function POST(request: Request) {
       );
     }
 
-    const data: RenkoBacktestResponse = await resp.json();
+    const data: RenkoWalkForwardResponse = await resp.json();
 
-    // ── Save to Redis cache (fire-and-forget, never blocks) ─────────────
-    redis.setBacktestCache(symbol, cacheKey, data).catch(() => {
-      // Cache write failure is non-critical
-    });
+    // ── Save to Redis cache (fire-and-forget) ───────────────────────────
+    redis.setBacktestCache(`renko:walk-forward:${symbol}`, cacheKey, data).catch(() => {});
 
     return Response.json(data);
   } catch (error) {
-    console.error("[renko/backtest/run] Error:", error);
+    console.error("[renko/backtest/walk-forward] Error:", error);
     return Response.json(
-      { error: `Renko backtest failed: ${(error as Error).message}`, code: "RENKO_BACKTEST_ERROR" },
+      { error: `Walk-forward analysis failed: ${(error as Error).message}`, code: "WALK_FORWARD_ERROR" },
       { status: 500 }
     );
   }
