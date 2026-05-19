@@ -46,7 +46,7 @@ A NextJS v16 full-stack web application for real-time market regime detection, A
 |-------|-----------|---------|
 | Framework | **NextJS v16** | App Router, SSR/SSG, API routes (BFF) |
 | UI | **DaisyUI 5** + **TailwindCSS 4** | Component library + utility-first CSS |
-| Language | **JavaScript/JSX** | No TypeScript in source — JS only |
+| Language | **JavaScript/JSX** | JS for components/pages; TypeScript for API routes |
 | Auth | **Clerk** | SSO, user management, `private.metadata` for Alpaca keys |
 | Database | **Supabase PostgreSQL** | All persistence — never Prisma |
 | Charts | **Recharts 3** | Price charts, fan charts, visualizations |
@@ -123,7 +123,7 @@ src/
 │   ├── symbol-utils.js          # Yahoo ↔ Alpaca symbol mapping, asset class detection
 │   ├── trade-validation.js      # Walk-forward validation logic + synthetic ID parser
 │   └── yahoo-prices.js          # Yahoo Finance price fetcher
-└── proxy.js                     # Clerk middleware (NextJS v16 requires proxy.js, NOT middleware.js)
+└── proxy.js                     # Clerk middleware (NextJS v16 requires proxy.js, NOT middleware.ts)
 
 supabase/
 └── migrations/
@@ -354,7 +354,7 @@ The FastAPI backend is auto-deployed to **Render** on every push to its `main` b
 
 - **Backend URL**: [noble-trader-fastapi-backend.onrender.com](https://noble-trader-fastapi-backend.onrender.com)
 - **Backend Docs**: [noble-trader-fastapi-backend.onrender.com/docs](https://noble-trader-fastapi-backend.onrender.com/docs)
-- **Backend Repo** (read-only): [0x5961737349726d/MarketRegimeTrader](https://github.com/0x5961737349726d/MarketRegimeTrader)
+- **Backend Repo**: [lexingtontechus/noble-trader-fastapi-backend](https://github.com/lexingtontechus/noble-trader-fastapi-backend)
 
 > **Note**: The Render free plan has a ~30 second cold start. The first request after inactivity may be slow.
 
@@ -368,7 +368,7 @@ The FastAPI backend is auto-deployed to **Render** on every push to its `main` b
 4. **Do NOT delete** `proxy.js` — it is the Clerk middleware file required by NextJS v16 (not `middleware.js`)
 5. **Do NOT delete** `.env.local` — it contains all API keys and secrets
 6. **Yahoo Finance and Alpaca symbols are different** — Alpaca does NOT support FOREX or GOLD
-7. **JS/JSX only** — no TypeScript in source files
+7. **JS/JSX for components/pages** — TypeScript is acceptable for API route files (`src/app/api/**/*.ts`)
 
 ---
 
