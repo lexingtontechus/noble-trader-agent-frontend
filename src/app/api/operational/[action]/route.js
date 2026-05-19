@@ -18,8 +18,10 @@ const GET_ACTIONS = new Set([
   "audit-log-summary",
   "audit-log-export",
   "mode",
+  "mode-health",
   "reconcile-status",
   "reconcile-positions",
+  "executor-status",
 ]);
 
 // Map frontend action to backend path
@@ -39,11 +41,14 @@ function actionToPath(action) {
     "mode": "/mode",
     "mode-request": "/mode/request",
     "mode-confirm": "/mode/confirm",
+    "mode-health": "/mode/health",
     // Reconciliation
     "reconcile-status": "/reconcile/status",
     "reconcile-run": "/reconcile/run",
     "reconcile-order": "/reconcile/order",
     "reconcile-positions": "/reconcile/positions",
+    // Executor
+    "executor-status": "/executor/status",
   };
   return mapping[action] || `/${action}`;
 }

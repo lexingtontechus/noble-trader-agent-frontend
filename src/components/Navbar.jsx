@@ -27,6 +27,7 @@ const NAV_ITEMS = [
 
 export default function Navbar({ activeView, setActiveView }) {
   const [backendHealthy, setBackendHealthy] = useState(null);
+  const [tradingMode, setTradingMode] = useState("paper");
 
   useEffect(() => {
     let cancelled = false;
@@ -37,8 +38,13 @@ export default function Navbar({ activeView, setActiveView }) {
         const res = await fetch("/api/health");
         if (!res.ok) throw new Error("unhealthy");
         const data = await res.json();
-        if (!cancelled)
+        if (!cancelled) {
           setBackendHealthy(data?.status === "ok" || data?.healthy === true);
+          // Also extract trading mode from health response
+          if (data?.operational?.trading_mode) {
+            setTradingMode(data.operational.trading_mode);
+          }
+        }
       } catch {
         if (!cancelled) setBackendHealthy(false);
       }
@@ -131,10 +137,21 @@ export default function Navbar({ activeView, setActiveView }) {
           </div>
         </div>
 
-        {/* Right side: Notifications, Theme, Health, User */}
+        {/* Right side: Notifications, Theme, Health, Mode, User */}
         <div className="navbar-end gap-2">
           <NotificationCenter />
           <ThemeSwitcher />
+
+          {/* Trading mode indicator */}
+          <div className="hidden sm:flex items-center gap-1">
+            {tradingMode === "live" ? (
+              <span className="badge badge-error badge-sm animate-pulse">LIVE</span>
+            ) : tradingMode === "simulation" ? (
+              <span className="badge badge-ghost badge-sm">SIM</span>
+            ) : (
+              <span className="badge badge-success badge-sm">PAPER</span>
+            )}
+          </div>
 
           {/* Backend health indicator */}
           <div className="hidden sm:flex items-center gap-1">

@@ -31,10 +31,12 @@ export default function OperationalPage({ bffFetch }) {
         "/operational/mode": "mode",
         "/operational/mode/request": "mode-request",
         "/operational/mode/confirm": "mode-confirm",
+        "/operational/mode/health": "mode-health",
         "/operational/reconcile/status": "reconcile-status",
         "/operational/reconcile/run": "reconcile-run",
         "/operational/reconcile/order": "reconcile-order",
         "/operational/reconcile/positions": "reconcile-positions",
+        "/operational/executor/status": "executor-status",
       };
 
       // Extract the action from the path
