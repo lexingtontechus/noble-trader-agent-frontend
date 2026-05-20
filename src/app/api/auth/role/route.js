@@ -1,21 +1,29 @@
-import { isAdmin, getUserRole } from "@/lib/clerk-metadata";
+import { getRoleInfo } from "@/lib/clerk-metadata";
 
 /**
  * GET /api/auth/role
  *
  * Returns the authenticated user's role from Clerk private metadata.
- * Used by the client to gate admin-only UI elements.
+ * Used by the client to verify/gate role-based UI elements.
  *
- * Response: { role: string, isAdmin: boolean }
+ * Response shape matches useRole() hook for consistency:
+ * { role, isAdmin, isTrader, isViewer, isLoaded }
  */
 export async function GET() {
   try {
-    const role = await getUserRole();
-    return Response.json({ role, isAdmin: role === "admin" });
+    const roleInfo = await getRoleInfo();
+    return Response.json(roleInfo);
   } catch (err) {
     return Response.json(
-      { role: "unauthenticated", isAdmin: false, error: err.message },
-      { status: 401 }
+      {
+        role: "unauthenticated",
+        isAdmin: false,
+        isTrader: false,
+        isViewer: false,
+        isLoaded: true,
+        error: err.message,
+      },
+      { status: 401 },
     );
   }
 }

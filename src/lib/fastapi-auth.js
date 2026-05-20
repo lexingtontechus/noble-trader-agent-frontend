@@ -1,25 +1,52 @@
 import { auth } from "@clerk/nextjs/server";
-import { cookies as nextCookies, headers as nextHeaders } from "next/headers";
 
 /**
  * Gets the Authorization header for FastAPI backend calls.
  *
- * Tries multiple methods in order:
- * 1. Clerk auth().getToken() — standard method, works when Clerk is properly configured
- * 2. Read __session cookie directly — works in keyless/development mode
- * 3. X-API-Key env var — fallback for service-to-service auth
+ * Resolution order:
+ *   1. Clerk REST API JWT (most reliable in serverless)
+ *   2. auth().getToken() — standard Clerk SDK method
+ *   3. __session cookie (keyless/dev mode)
+ *   4. X-API-Key env var fallback (service-to-service)
  *
  * Returns a headers object ready to spread into fetch options.
  */
 export async function getFastAPIAuthHeaders() {
   const authHeaders = {};
 
-  // ── Method 1: Clerk auth().getToken() ──────────────────────────────────────
+  // ── Method 1: Clerk REST API JWT ──────────────────────────────────────────
+  // Most reliable method for serverless. Uses CLERK_SECRET_KEY to call the
+  // Clerk Sessions API and get a JWT for the current session. This always
+  // works as long as CLERK_SECRET_KEY is set and the user is authenticated.
+  try {
+    const authResult = await auth();
+    const sessionId = authResult?.sessionId;
+
+    if (sessionId) {
+      const jwt = await getClerkJWT(sessionId);
+      if (jwt) {
+        authHeaders["Authorization"] = `Bearer ${jwt}`;
+        return authHeaders;
+      }
+    }
+
+    if (authResult?.userId && !sessionId) {
+      console.debug(
+        "[fastapi-auth] User authenticated but no sessionId — cannot get JWT via REST API:",
+        authResult.userId,
+      );
+    }
+  } catch (e) {
+    console.debug("[fastapi-auth] Clerk REST API JWT failed:", e.message);
+  }
+
+  // ── Method 2: Clerk auth().getToken() ─────────────────────────────────────
+  // Standard SDK method. Works when Clerk middleware has populated the auth
+  // context and the signing key is available. May return null in edge cases.
   try {
     const authResult = await auth();
 
     if (authResult?.getToken) {
-      // Try default token first
       let token = await authResult.getToken();
 
       // If default token fails, try with 'server' template
@@ -36,54 +63,27 @@ export async function getFastAPIAuthHeaders() {
         return authHeaders;
       }
     }
-
-    // If we have a userId but no token, log for debugging
-    if (authResult?.userId) {
-      console.debug(
-        "[fastapi-auth] User authenticated but no JWT token available:",
-        authResult.userId,
-      );
-    }
   } catch (e) {
-    console.debug(
-      "[fastapi-auth] Clerk auth().getToken() failed:",
-      e.message,
-    );
+    console.debug("[fastapi-auth] Clerk auth().getToken() failed:", e.message);
   }
 
-  // ── Method 2: Read __session cookie directly ──────────────────────────────
+  // ── Method 3: Read __session cookie directly ──────────────────────────────
   // In keyless/development mode, Clerk stores the session token in a cookie.
-  // The auth() → getToken() path may not work without CLERK_SECRET_KEY,
-  // but the browser DOES send a valid JWT in the __session cookie.
   try {
+    const { cookies: nextCookies } = await import("next/headers");
     const cookieStore = await nextCookies();
     const sessionCookie = cookieStore.get("__session");
 
     if (sessionCookie?.value) {
-      // The __session cookie contains the Clerk session JWT
       authHeaders["Authorization"] = `Bearer ${sessionCookie.value}`;
       return authHeaders;
     }
   } catch (e) {
-    // cookies() may not be available in all contexts
     console.debug("[fastapi-auth] Cookie extraction failed:", e.message);
   }
 
-  // ── Method 3: Read Authorization header from incoming request ─────────────
-  // If the client already sends a Bearer token, forward it
-  try {
-    const headersList = await nextHeaders();
-    const authHeader = headersList.get("authorization");
-    if (authHeader?.startsWith("Bearer ")) {
-      authHeaders["Authorization"] = authHeader;
-      return authHeaders;
-    }
-  } catch (e) {
-    // headers() may not be available in all contexts
-    console.debug("[fastapi-auth] Header extraction failed:", e.message);
-  }
-
   // ── Method 4: X-API-Key fallback ──────────────────────────────────────────
+  // For service-to-service auth (cron jobs, background tasks)
   const apiKey = process.env.FASTAPI_API_KEY;
   if (apiKey) {
     authHeaders["X-API-Key"] = apiKey;
@@ -94,6 +94,44 @@ export async function getFastAPIAuthHeaders() {
   }
 
   return authHeaders;
+}
+
+/**
+ * Get a Clerk JWT via the Clerk REST API.
+ *
+ * This is the most reliable way to get a JWT in serverless environments.
+ * Uses CLERK_SECRET_KEY to call POST /v1/sessions/{sessionId}/tokens.
+ *
+ * @param {string} sessionId — The Clerk session ID from auth()
+ * @returns {Promise<string|null>} — The JWT string, or null if unavailable
+ */
+export async function getClerkJWT(sessionId) {
+  const clerkSecretKey = process.env.CLERK_SECRET_KEY;
+  if (!clerkSecretKey || !sessionId) return null;
+
+  try {
+    const tokenRes = await fetch(
+      `https://api.clerk.com/v1/sessions/${sessionId}/tokens`,
+      {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${clerkSecretKey}`,
+          "Content-Type": "application/json",
+        },
+        body: "{}",
+        signal: AbortSignal.timeout(10000),
+      },
+    );
+
+    if (tokenRes.ok) {
+      const tokenData = await tokenRes.json();
+      if (tokenData.jwt) return tokenData.jwt;
+    }
+  } catch {
+    // Failed — network error, timeout, etc.
+  }
+
+  return null;
 }
 
 /**
@@ -115,16 +153,29 @@ export async function getAuthDebugInfo() {
       hasGetToken: !!authResult?.getToken,
     };
 
+    if (authResult?.sessionId) {
+      try {
+        const jwt = await getClerkJWT(authResult.sessionId);
+        info.methods.clerkAuth.restApiJwt = !!jwt;
+        info.methods.clerkAuth.restApiJwtPreview = jwt
+          ? jwt.substring(0, 40) + "..."
+          : null;
+      } catch (e) {
+        info.methods.clerkAuth.restApiJwtError = e.message;
+      }
+    }
+
     if (authResult?.getToken) {
       try {
         const token = await authResult.getToken();
-        info.methods.clerkAuth.tokenAvailable = !!token;
-        info.methods.clerkAuth.tokenPreview = token
+        info.methods.clerkAuth.sdkTokenAvailable = !!token;
+        info.methods.clerkAuth.sdkTokenPreview = token
           ? token.substring(0, 40) + "..."
           : null;
 
-        if (token) {
-          const parts = token.split(".");
+        const jwtToDecode = token || info.methods.clerkAuth.restApiJwtPreview;
+        if (jwtToDecode) {
+          const parts = jwtToDecode.split(".");
           if (parts.length === 3) {
             try {
               const payload = JSON.parse(
@@ -147,6 +198,7 @@ export async function getAuthDebugInfo() {
 
   // Method 2: Cookie
   try {
+    const { cookies: nextCookies } = await import("next/headers");
     const cookieStore = await nextCookies();
     const sessionCookie = cookieStore.get("__session");
     info.methods.cookie = {
@@ -162,6 +214,11 @@ export async function getAuthDebugInfo() {
   // Method 3: X-API-Key
   info.methods.apiKey = {
     configured: !!process.env.FASTAPI_API_KEY,
+  };
+
+  // Method 4: Clerk Secret Key (for REST API JWT)
+  info.methods.clerkSecretKey = {
+    configured: !!process.env.CLERK_SECRET_KEY,
   };
 
   return info;

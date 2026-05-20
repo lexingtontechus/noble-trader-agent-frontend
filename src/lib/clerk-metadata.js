@@ -2,12 +2,19 @@ import { clerkClient } from "@clerk/nextjs/server";
 import { auth } from "@clerk/nextjs/server";
 
 /**
+ * Valid roles in the system. Role hierarchy: viewer (0) → trader (1) → admin (2)
+ * Must match the ROLE_HIERARCHY in useRole.js and RoleGate.jsx.
+ */
+export const VALID_ROLES = ["viewer", "trader", "admin"];
+export const DEFAULT_ROLE = "viewer";
+
+/**
  * Get Alpaca API keys from the authenticated user's Clerk private metadata.
  *
  * Private metadata is server-side only — it never reaches the browser.
  * Keys are stored under: user.privateMetadata.alpaca_api_key / alpaca_secret_key
  *
- * @returns {Promise<{apiKey: string|null, secretKey: string|null}>}
+ * @returns {Promise<{apiKey: string|null, secretKey: string|null}|null>}
  */
 export async function getAlpacaKeys() {
   try {
@@ -82,9 +89,12 @@ export async function hasAlpacaKeys() {
  * Get the role of the authenticated user from Clerk private metadata.
  *
  * Roles are stored in: user.privateMetadata.role
- * Valid roles: "admin", "trader", "viewer" (default: "authenticated")
+ * Valid roles: "viewer", "trader", "admin" (default: "viewer")
  *
- * @returns {Promise<string>} — the user's role, or "authenticated" if none set
+ * IMPORTANT: The default role MUST match the default in useRole.js.
+ * Both default to "viewer" to ensure client/server consistency.
+ *
+ * @returns {Promise<string>} — the user's role, or "viewer" if none set
  */
 export async function getUserRole() {
   try {
@@ -94,7 +104,11 @@ export async function getUserRole() {
     const client = await clerkClient();
     const user = await client.users.getUser(userId);
     const meta = user.privateMetadata || {};
-    return meta.role || "authenticated";
+    const role = meta.role || DEFAULT_ROLE;
+
+    // Normalize: ensure only valid roles are returned
+    if (!VALID_ROLES.includes(role)) return DEFAULT_ROLE;
+    return role;
   } catch (err) {
     console.error("[clerk-metadata] getUserRole failed:", err.message);
     return "unauthenticated";
@@ -109,4 +123,42 @@ export async function getUserRole() {
 export async function isAdmin() {
   const role = await getUserRole();
   return role === "admin";
+}
+
+/**
+ * Check if the authenticated user has trader-level access (trader or admin).
+ *
+ * @returns {Promise<boolean>}
+ */
+export async function isTrader() {
+  const role = await getUserRole();
+  return role === "admin" || role === "trader";
+}
+
+/**
+ * Get full role info for the authenticated user.
+ * Matches the shape returned by useRole() on the client side.
+ *
+ * @returns {Promise<{role: string, isAdmin: boolean, isTrader: boolean, isViewer: boolean, isLoaded: boolean}>}
+ */
+export async function getRoleInfo() {
+  const { userId } = await auth();
+  if (!userId) {
+    return {
+      role: "unauthenticated",
+      isAdmin: false,
+      isTrader: false,
+      isViewer: false,
+      isLoaded: true,
+    };
+  }
+
+  const role = await getUserRole();
+  return {
+    role,
+    isAdmin: role === "admin",
+    isTrader: role === "admin" || role === "trader",
+    isViewer: role === "viewer",
+    isLoaded: true,
+  };
 }
