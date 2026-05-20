@@ -5,6 +5,7 @@ import dynamic from "next/dynamic";
 import { UserButton } from "@clerk/nextjs";
 import { useRole } from "@/hooks/useRole";
 import ThemeSwitcher from "@/components/shared/ThemeSwitcher";
+import TradingModeToggle from "@/components/shared/TradingModeToggle";
 
 // Lazy-load NotificationCenter — not needed on initial render
 const NotificationCenter = dynamic(
@@ -159,26 +160,10 @@ export default function Navbar({ activeView, setActiveView }) {
           <NotificationCenter />
           <ThemeSwitcher />
 
-          {/* Trading mode indicator — clickable to navigate to Ops */}
-          <button
-            className="hidden sm:flex items-center gap-1 cursor-pointer hover:opacity-80 transition-opacity"
-            onClick={handleModeClick}
-            title="Go to Operational Controls"
-          >
-            {tradingMode === "live" ? (
-              <span className="badge badge-error badge-sm animate-pulse gap-1">
-                LIVE <span className="text-[10px]">&rarr;</span>
-              </span>
-            ) : tradingMode === "simulation" ? (
-              <span className="badge badge-ghost badge-sm gap-1">
-                SIM <span className="text-[10px]">&rarr;</span>
-              </span>
-            ) : (
-              <span className="badge badge-success badge-sm gap-1">
-                PAPER <span className="text-[10px]">&rarr;</span>
-              </span>
-            )}
-          </button>
+          {/* Trading mode toggle — Paper/Live switch (plan-gated) */}
+          <div className="hidden sm:flex">
+            <TradingModeToggle />
+          </div>
 
           {/* Backend health indicator */}
           <div className="hidden sm:flex items-center gap-1">
@@ -212,22 +197,29 @@ export default function Navbar({ activeView, setActiveView }) {
             </span>
           </div>
 
-          {/* Clerk UserButton with Admin custom menu items */}
+          {/* Clerk UserButton with Settings + Admin custom menu items */}
           <UserButton afterSignOutUrl="/">
-            {isAdmin && (
-              <UserButton.MenuItems>
-                <UserButton.Action
-                  label="Admin Panel"
-                  labelIcon={<span style={{ fontSize: 14 }}>⚙️</span>}
-                  onClick={() => setActiveView("admin")}
-                />
-                <UserButton.Action
-                  label="Ops Controls"
-                  labelIcon={<span style={{ fontSize: 14 }}>🛡️</span>}
-                  onClick={() => setActiveView("ops")}
-                />
-              </UserButton.MenuItems>
-            )}
+            <UserButton.MenuItems>
+              <UserButton.Action
+                label="Settings"
+                labelIcon={<span style={{ fontSize: 14 }}>🔧</span>}
+                onClick={() => setActiveView("settings")}
+              />
+              {isAdmin && (
+                <>
+                  <UserButton.Action
+                    label="Admin Panel"
+                    labelIcon={<span style={{ fontSize: 14 }}>⚙️</span>}
+                    onClick={() => setActiveView("admin")}
+                  />
+                  <UserButton.Action
+                    label="Ops Controls"
+                    labelIcon={<span style={{ fontSize: 14 }}>🛡️</span>}
+                    onClick={() => setActiveView("ops")}
+                  />
+                </>
+              )}
+            </UserButton.MenuItems>
           </UserButton>
         </div>
       </div>

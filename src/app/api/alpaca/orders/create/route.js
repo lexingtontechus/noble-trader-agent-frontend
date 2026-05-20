@@ -1,5 +1,5 @@
 import { createOrder } from "@/lib/alpaca-client";
-import { getAlpacaKeys } from "@/lib/clerk-metadata";
+import { getAlpacaCredentialKeys, resolveCredentialType } from "@/lib/alpaca-credentials";
 import { yahooToAlpacaSymbol, getAssetClass, isAlpacaTradable, getAlpacaTradeabilityReason } from "@/lib/symbol-utils";
 
 const VALID_TYPES = {
@@ -19,7 +19,8 @@ function getCategory(assetClass) {
 
 export async function POST(request) {
   try {
-    const keys = await getAlpacaKeys();
+    const credentialType = await resolveCredentialType(request);
+    const keys = await getAlpacaCredentialKeys(credentialType, request);
     if (!keys?.apiKey || !keys?.secretKey) {
       return Response.json(
         { error: "Alpaca API keys not configured. Save your keys in Settings.", code: "NO_KEYS" },
@@ -86,7 +87,7 @@ export async function POST(request) {
       stop_price,
       trail_price,
       trail_percent,
-    });
+    }, credentialType);
 
     return Response.json(order);
   } catch (error) {

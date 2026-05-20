@@ -1,9 +1,22 @@
-const ALPACA_BASE = process.env.ALPACA_PAPER_BASE_URL || "https://paper-api.alpaca.markets/v2";
+const ALPACA_PAPER_BASE = process.env.ALPACA_PAPER_BASE_URL || "https://paper-api.alpaca.markets/v2";
+const ALPACA_LIVE_BASE = process.env.ALPACA_LIVE_BASE_URL || "https://api.alpaca.markets/v2";
 
-export async function alpacaFetch(path, { apiKey, secretKey, method = "GET", body = null } = {}) {
+/**
+ * Fetch from Alpaca API.
+ * @param {string} path — API path (e.g., "/account")
+ * @param {object} options
+ * @param {string} options.apiKey
+ * @param {string} options.secretKey
+ * @param {string} [options.method="GET"]
+ * @param {object} [options.body=null]
+ * @param {"paper"|"live"} [options.mode="paper"] — Trading mode to select base URL
+ */
+export async function alpacaFetch(path, { apiKey, secretKey, method = "GET", body = null, mode = "paper" } = {}) {
   if (!apiKey || !secretKey) {
     throw new Error("Alpaca API keys are required");
   }
+
+  const baseUrl = mode === "live" ? ALPACA_LIVE_BASE : ALPACA_PAPER_BASE;
 
   const headers = {
     "APCA-API-KEY-ID": apiKey,
@@ -14,7 +27,7 @@ export async function alpacaFetch(path, { apiKey, secretKey, method = "GET", bod
   const options = { method, headers, signal: AbortSignal.timeout(15000) };
   if (body) options.body = JSON.stringify(body);
 
-  const res = await fetch(`${ALPACA_BASE}${path}`, options);
+  const res = await fetch(`${baseUrl}${path}`, options);
 
   // Handle non-JSON responses
   const text = await res.text();
@@ -33,14 +46,14 @@ export async function alpacaFetch(path, { apiKey, secretKey, method = "GET", bod
   return data;
 }
 
-export async function getAccount(apiKey, secretKey) {
-  return alpacaFetch("/account", { apiKey, secretKey });
+export async function getAccount(apiKey, secretKey, mode = "paper") {
+  return alpacaFetch("/account", { apiKey, secretKey, mode });
 }
 
-export async function getOrders(apiKey, secretKey, { status = "all", after = null } = {}) {
+export async function getOrders(apiKey, secretKey, { status = "all", after = null, mode = "paper" } = {}) {
   let path = `/orders?status=${status}&direction=desc&limit=100`;
   if (after) path += `&after=${after}`;
-  const result = await alpacaFetch(path, { apiKey, secretKey });
+  const result = await alpacaFetch(path, { apiKey, secretKey, mode });
   return Array.isArray(result) ? result : [];
 }
 
@@ -49,7 +62,7 @@ export async function getOrders(apiKey, secretKey, { status = "all", after = nul
  * Supports: market, limit, stop, stop_limit, trailing_stop
  * Ref: https://docs.alpaca.markets/reference/postorder
  */
-export async function createOrder(apiKey, secretKey, order) {
+export async function createOrder(apiKey, secretKey, order, mode = "paper") {
   const body = {
     symbol: order.symbol,
     qty: String(order.qty || 100),
@@ -81,11 +94,12 @@ export async function createOrder(apiKey, secretKey, order) {
     secretKey,
     method: "POST",
     body,
+    mode,
   });
 }
 
-export async function getPositions(apiKey, secretKey) {
-  const result = await alpacaFetch("/positions", { apiKey, secretKey });
+export async function getPositions(apiKey, secretKey, mode = "paper") {
+  const result = await alpacaFetch("/positions", { apiKey, secretKey, mode });
   return Array.isArray(result) ? result : [];
 }
 
@@ -97,7 +111,7 @@ export async function getPositions(apiKey, secretKey) {
  *   period: "1D" | "1W" | "1M" | "3M" | "6M" | "1A" | "all"
  *   timeframe: "1Min" | "5Min" | "15Min" | "1H" | "1D"
  */
-export async function getPortfolioHistory(apiKey, secretKey, { period = "1M", timeframe = "1D" } = {}) {
+export async function getPortfolioHistory(apiKey, secretKey, { period = "1M", timeframe = "1D", mode = "paper" } = {}) {
   const params = new URLSearchParams({ period, timeframe });
-  return alpacaFetch(`/account/portfolio/history?${params}`, { apiKey, secretKey });
+  return alpacaFetch(`/account/portfolio/history?${params}`, { apiKey, secretKey, mode });
 }

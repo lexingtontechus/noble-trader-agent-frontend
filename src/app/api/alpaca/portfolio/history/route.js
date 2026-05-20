@@ -1,13 +1,15 @@
 import { getPortfolioHistory } from "@/lib/alpaca-client";
-import { getAlpacaKeys } from "@/lib/clerk-metadata";
+import { getAlpacaCredentialKeys, resolveCredentialType } from "@/lib/alpaca-credentials";
 
 /**
  * GET /api/alpaca/portfolio/history?period=1M&timeframe=1D
- * Fetches portfolio equity history from Alpaca.
+ * Fetches portfolio equity history from Alpaca using encrypted keys from Supabase
+ * (with Clerk privateMetadata fallback for migration).
  */
 export async function GET(request) {
   try {
-    const keys = await getAlpacaKeys();
+    const credentialType = await resolveCredentialType(request);
+    const keys = await getAlpacaCredentialKeys(credentialType, request);
     if (!keys?.apiKey || !keys?.secretKey) {
       return Response.json(
         { error: "Alpaca API keys not configured.", code: "NO_KEYS" },
@@ -19,7 +21,11 @@ export async function GET(request) {
     const period = searchParams.get("period") || "1M";
     const timeframe = searchParams.get("timeframe") || "1D";
 
-    const history = await getPortfolioHistory(keys.apiKey, keys.secretKey, { period, timeframe });
+    const history = await getPortfolioHistory(keys.apiKey, keys.secretKey, {
+      period,
+      timeframe,
+      mode: credentialType,
+    });
     return Response.json(history);
   } catch (error) {
     return Response.json(

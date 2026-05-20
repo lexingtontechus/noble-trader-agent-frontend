@@ -14,12 +14,50 @@ import PortfolioPage from "@/components/portfolio/PortfolioPage";
 import AdminPage from "@/components/admin/AdminPage";
 import RenkoPage from "@/components/renko/RenkoPage";
 import OperationalPage from "@/components/operational/OperationalPage";
+import SettingsPage from "@/components/settings/SettingsPage";
+import OnboardingWizard from "@/components/onboarding/OnboardingWizard";
 import { StreamProvider } from "@/context/StreamContext";
 import NotificationToast from "@/components/shared/NotificationToast";
 
 export default function Home() {
   const { isAdmin, isLoaded: roleLoaded } = useRole();
   const [activeView, setActiveView] = useState("dashboard");
+  const [settingsTab, setSettingsTab] = useState("profile");
+  const [showOnboarding, setShowOnboarding] = useState(false);
+  const [onboardingChecked, setOnboardingChecked] = useState(false);
+
+  // Check onboarding status on mount
+  useEffect(() => {
+    async function checkOnboarding() {
+      try {
+        const res = await fetch("/api/onboarding");
+        if (res.ok) {
+          const data = await res.json();
+          if (!data.onboardingComplete) {
+            setShowOnboarding(true);
+          }
+        }
+      } catch {
+        // If API fails, skip onboarding check (don't block the user)
+      }
+      setOnboardingChecked(true);
+    }
+    checkOnboarding();
+  }, []);
+
+  // Listen for navigation events (from PlanGate, Navbar, etc.)
+  useEffect(() => {
+    const handler = (e) => {
+      if (e.detail?.view === "settings") {
+        setSettingsTab(e.detail.tab || "profile");
+        setActiveView("settings");
+      } else if (e.detail?.view) {
+        setActiveView(e.detail.view);
+      }
+    };
+    window.addEventListener("noble:navigate", handler);
+    return () => window.removeEventListener("noble:navigate", handler);
+  }, []);
 
   // Guard: redirect non-admin users away from admin view
   useEffect(() => {
@@ -101,24 +139,29 @@ export default function Home() {
       when="signed-out"
       fallback={
         <StreamProvider>
-          <div className="min-h-screen flex flex-col">
-            <Navbar activeView={activeView} setActiveView={setSafeActiveView} />
-            <main className="flex-1 container mx-auto px-4 py-6 pb-20 sm:pb-6 overflow-auto">
-              <div key={activeView} className="animate-fade-in-up">
-                {activeView === "dashboard" && <Dashboard />}
-                {activeView === "orders" && <OrdersPage />}
-                {activeView === "trade" && <TradingWorkflow />}
-                {activeView === "search" && <SearchPage />}
-                {activeView === "simulate" && <SimulatePage />}
-                {activeView === "portfolio" && <PortfolioPage />}
-                {activeView === "renko" && <RenkoPage />}
-                {activeView === "ops" && <OperationalPage />}
-                {activeView === "admin" && isAdmin && <AdminPage />}
-              </div>
-            </main>
-            <Footer />
-            <NotificationToast />
-          </div>
+          {showOnboarding && onboardingChecked ? (
+            <OnboardingWizard onComplete={() => setShowOnboarding(false)} />
+          ) : (
+            <div className="min-h-screen flex flex-col">
+              <Navbar activeView={activeView} setActiveView={setSafeActiveView} />
+              <main className="flex-1 container mx-auto px-4 py-6 pb-20 sm:pb-6 overflow-auto">
+                <div key={activeView} className="animate-fade-in-up">
+                  {activeView === "dashboard" && <Dashboard />}
+                  {activeView === "orders" && <OrdersPage />}
+                  {activeView === "trade" && <TradingWorkflow />}
+                  {activeView === "search" && <SearchPage />}
+                  {activeView === "simulate" && <SimulatePage />}
+                  {activeView === "portfolio" && <PortfolioPage />}
+                  {activeView === "renko" && <RenkoPage />}
+                  {activeView === "ops" && <OperationalPage />}
+                  {activeView === "settings" && <SettingsPage initialTab={settingsTab} />}
+                  {activeView === "admin" && isAdmin && <AdminPage />}
+                </div>
+              </main>
+              <Footer />
+              <NotificationToast />
+            </div>
+          )}
         </StreamProvider>
       }
     >

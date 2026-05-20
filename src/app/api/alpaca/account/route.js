@@ -1,13 +1,15 @@
 import { getAccount } from "@/lib/alpaca-client";
-import { getAlpacaKeys } from "@/lib/clerk-metadata";
+import { getAlpacaCredentialKeys, resolveCredentialType } from "@/lib/alpaca-credentials";
 
 /**
  * GET /api/alpaca/account
- * Fetches the Alpaca account info using keys stored in Clerk private metadata.
+ * Fetches the Alpaca account info using encrypted keys from Supabase
+ * (with Clerk privateMetadata fallback for migration).
  */
-export async function GET() {
+export async function GET(request) {
   try {
-    const keys = await getAlpacaKeys();
+    const credentialType = await resolveCredentialType(request);
+    const keys = await getAlpacaCredentialKeys(credentialType, request);
     if (!keys?.apiKey || !keys?.secretKey) {
       return Response.json(
         { error: "Alpaca API keys not configured. Save your keys in Settings.", code: "NO_KEYS" },
@@ -15,7 +17,7 @@ export async function GET() {
       );
     }
 
-    const account = await getAccount(keys.apiKey, keys.secretKey);
+    const account = await getAccount(keys.apiKey, keys.secretKey, credentialType);
     return Response.json(account);
   } catch (error) {
     return Response.json(

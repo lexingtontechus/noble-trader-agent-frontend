@@ -1,13 +1,15 @@
 import { getOrders } from "@/lib/alpaca-client";
-import { getAlpacaKeys } from "@/lib/clerk-metadata";
+import { getAlpacaCredentialKeys, resolveCredentialType } from "@/lib/alpaca-credentials";
 
 /**
  * GET /api/alpaca/orders
- * Fetches order history using keys stored in Clerk private metadata.
+ * Fetches order history using encrypted keys from Supabase
+ * (with Clerk privateMetadata fallback for migration).
  */
 export async function GET(request) {
   try {
-    const keys = await getAlpacaKeys();
+    const credentialType = await resolveCredentialType(request);
+    const keys = await getAlpacaCredentialKeys(credentialType, request);
     if (!keys?.apiKey || !keys?.secretKey) {
       return Response.json(
         { error: "Alpaca API keys not configured. Save your keys in Settings.", code: "NO_KEYS" },
@@ -28,6 +30,7 @@ export async function GET(request) {
     const orders = await getOrders(keys.apiKey, keys.secretKey, {
       status: "all",
       after: after.toISOString(),
+      mode: credentialType,
     });
 
     return Response.json(orders);
