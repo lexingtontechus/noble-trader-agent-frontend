@@ -17,6 +17,7 @@ import OperationalPage from "@/components/operational/OperationalPage";
 import SettingsPage from "@/components/settings/SettingsPage";
 import OnboardingWizard from "@/components/onboarding/OnboardingWizard";
 import { StreamProvider } from "@/context/StreamContext";
+import { PortfolioProvider } from "@/context/PortfolioContext";
 import NotificationToast from "@/components/shared/NotificationToast";
 
 export default function Home() {
@@ -138,31 +139,33 @@ export default function Home() {
     <Show
       when="signed-out"
       fallback={
-        <StreamProvider>
-          {showOnboarding && onboardingChecked ? (
-            <OnboardingWizard onComplete={() => setShowOnboarding(false)} />
-          ) : (
-            <div className="min-h-screen flex flex-col">
-              <Navbar activeView={activeView} setActiveView={setSafeActiveView} />
-              <main className="flex-1 container mx-auto px-4 py-6 pb-20 sm:pb-6 overflow-auto">
-                <div key={activeView} className="animate-fade-in-up">
-                  {activeView === "dashboard" && <Dashboard />}
-                  {activeView === "orders" && <OrdersPage />}
-                  {activeView === "trade" && <TradingWorkflow />}
-                  {activeView === "search" && <SearchPage />}
-                  {activeView === "simulate" && <SimulatePage />}
-                  {activeView === "portfolio" && <PortfolioPage />}
-                  {activeView === "renko" && <RenkoPage />}
-                  {activeView === "ops" && <OperationalPage />}
-                  {activeView === "settings" && <SettingsPage initialTab={settingsTab} />}
-                  {activeView === "admin" && isAdmin && <AdminPage />}
-                </div>
-              </main>
-              <Footer />
-              <NotificationToast />
-            </div>
-          )}
-        </StreamProvider>
+        <PortfolioProvider>
+          <StreamProvider>
+            {showOnboarding && onboardingChecked ? (
+              <OnboardingWizard onComplete={() => setShowOnboarding(false)} />
+            ) : (
+              <div className="min-h-screen flex flex-col">
+                <Navbar activeView={activeView} setActiveView={setSafeActiveView} />
+                <main className="flex-1 container mx-auto px-4 py-6 pb-20 sm:pb-6 overflow-auto">
+                  <div key={activeView} className="animate-fade-in-up">
+                    {activeView === "dashboard" && <Dashboard />}
+                    {activeView === "orders" && <OrdersPage />}
+                    {activeView === "trade" && <TradingWorkflow />}
+                    {activeView === "search" && <SearchPage />}
+                    {activeView === "simulate" && <SimulatePage />}
+                    {activeView === "portfolio" && <PortfolioPage />}
+                    {activeView === "renko" && <RenkoPage />}
+                    {activeView === "ops" && <OperationalPage />}
+                    {activeView === "settings" && <SettingsPage initialTab={settingsTab} />}
+                    {activeView === "admin" && isAdmin && <AdminPage />}
+                  </div>
+                </main>
+                <Footer />
+                <NotificationToast />
+              </div>
+            )}
+          </StreamProvider>
+        </PortfolioProvider>
       }
     >
       <div className="min-h-screen flex items-center justify-center bg-base-200">

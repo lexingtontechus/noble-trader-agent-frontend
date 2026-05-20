@@ -11,8 +11,7 @@ import {
   ResponsiveContainer,
   ReferenceLine,
 } from "recharts";
-import { usePortfolioData } from "@/hooks/usePortfolioData";
-import RoleGate from "@/components/shared/RoleGate";
+import { usePortfolio } from "@/context/PortfolioContext";
 
 const EQUITY_PERIODS = [
   { value: "1W", label: "1W" },
@@ -50,7 +49,7 @@ export default function LivePnLDashboard({ compact = false }) {
     totalMarketValue,
     dayPnl,
     dayPnlPc,
-  } = usePortfolioData({ refreshInterval: 10000 });
+  } = usePortfolio();
 
   const [sortBy, setSortBy] = useState("unrealized_pl");
   const [sortDir, setSortDir] = useState("desc");

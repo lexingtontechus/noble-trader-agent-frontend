@@ -4,21 +4,18 @@ import { useState, useEffect, useCallback } from 'react'
 import PortfolioOverview from './PortfolioOverview'
 import LivePnLDashboard from '@/components/operational/LivePnLDashboard'
 import TradingWorkflow from '@/components/trading/TradingWorkflow'
-import { usePortfolioData } from '@/hooks/usePortfolioData'
+import { usePortfolio } from '@/context/PortfolioContext'
 
 export default function PortfolioPage() {
   const [keysConfigured, setKeysConfigured] = useState(null)
   const [checkingKeys, setCheckingKeys] = useState(true)
 
-  // Use the shared portfolio data hook for positions/account
+  // Read from shared portfolio context (single source of truth)
   const {
     account,
     positions,
-    loading,
-    error,
     lastUpdated,
-    refresh,
-  } = usePortfolioData({ refreshInterval: 10000, enabled: keysConfigured === true })
+  } = usePortfolio()
 
   // Check Alpaca key status on mount
   const checkKeys = useCallback(async () => {
