@@ -26,9 +26,32 @@ const isPublicRoute = createRouteMatcher([
   "/index.html",
 ]);
 
+const isAdminRoute = createRouteMatcher([
+  "/admin(.*)",
+  "/api/admin/(.*)",
+  "/api/kill-switch(.*)",
+  "/api/mode(.*)",
+]);
+
 export default clerkMiddleware(async (auth, request) => {
   if (!isPublicRoute(request)) {
     await auth.protect();
+  }
+
+  // For admin routes, also check org role if available
+  if (isAdminRoute(request)) {
+    const { sessionClaims } = await auth();
+    const orgRole = sessionClaims?.org_role;
+    const userRole = sessionClaims?.role || sessionClaims?.metadata?.role;
+
+    // Allow access if user has admin role OR org:admin role
+    const isAdmin = userRole === "admin" || orgRole === "org:admin";
+    if (!isAdmin) {
+      // Redirect non-admin users away from admin routes
+      const url = new URL(request.url);
+      url.pathname = "/";
+      return Response.redirect(url);
+    }
   }
 });
 
