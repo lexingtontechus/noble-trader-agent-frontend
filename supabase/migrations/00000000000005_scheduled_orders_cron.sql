@@ -15,11 +15,23 @@
 --
 -- PREREQUISITES:
 --   1. pg_cron + pg_net extensions enabled
---   2. GUC variables set:
---      ALTER DATABASE postgres SET app.noble_base_url = 'https://noble-trader-agent-frontend.vercel.app';
---      ALTER DATABASE postgres SET app.noble_cron_secret = '<YOUR_CRON_SECRET>';
---   3. Run 00000000000004_scheduled_orders.sql first
+--   2. Vault secrets configured in Dashboard → Vault:
+--      - Name: cron_secret       Value: <your CRON_SECRET (same as Vercel)>
+--      - Name: noble_base_url    Value: https://noble-trader-agent-frontend.vercel.app
+--
+-- CONFIGURATION:
+--   - Secrets are read from Supabase Vault using vault.read_secret()
+--   - The base URL and cron secret are NOT stored as GUC variables
+--     (Supabase hosted plans don't support ALTER DATABASE SET for custom GUCs)
 -- ============================================================
+
+-- ----------------------------------------------------------
+-- Verify Vault secrets exist
+-- ----------------------------------------------------------
+SELECT
+  name,
+  CASE WHEN vault.read_secret(name) IS NOT NULL THEN 'OK' ELSE 'MISSING — add in Dashboard → Vault' END as status
+FROM (VALUES ('cron_secret'), ('noble_base_url')) AS t(name);
 
 -- ----------------------------------------------------------
 -- Step 1: Schedule — Order Execution (every 15 min, market hours)
@@ -43,10 +55,10 @@ SELECT cron.schedule(
   '*/15 13-20 * * 1-5',          -- every 15 min, Mon-Fri, 13:00-20:00 UTC
   $$
   SELECT net.http_post(
-    url := current_setting('app.noble_base_url', true) || '/api/trading/schedule/execute?secret=' || current_setting('app.noble_cron_secret', true),
+    url := vault.read_secret('noble_base_url') || '/api/trading/schedule/execute?secret=' || vault.read_secret('cron_secret'),
     headers := jsonb_build_object(
       'Content-Type', 'application/json',
-      'x-cron-secret', current_setting('app.noble_cron_secret', true)
+      'x-cron-secret', vault.read_secret('cron_secret')
     ),
     body := '{}'::jsonb
   );
@@ -75,8 +87,8 @@ ORDER BY name;
 -- Resume the job:     SELECT cron.resume('noble-schedule-execute');
 -- Delete the job:     SELECT cron.unschedule('noble-schedule-execute');
 -- Force-run once:     SELECT net.http_post(
---                        url := current_setting('app.noble_base_url', true) || '/api/trading/schedule/execute?secret=' || current_setting('app.noble_cron_secret', true),
---                        headers := jsonb_build_object('Content-Type', 'application/json', 'x-cron-secret', current_setting('app.noble_cron_secret', true)),
+--                        url := vault.read_secret('noble_base_url') || '/api/trading/schedule/execute?secret=' || vault.read_secret('cron_secret'),
+--                        headers := jsonb_build_object('Content-Type', 'application/json', 'x-cron-secret', vault.read_secret('cron_secret')),
 --                        body := '{}'::jsonb
 --                      );
 --

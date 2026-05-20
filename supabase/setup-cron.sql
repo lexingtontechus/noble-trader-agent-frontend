@@ -1,9 +1,16 @@
 -- ============================================================
--- Noble Trader Agent — One-Time Setup Script
+-- Noble Trader Agent — One-Time Setup Script (Vault-based)
 -- Run this ENTIRE script in Supabase Dashboard → SQL Editor
 --
--- IMPORTANT: Replace <YOUR_BASE_URL> and <YOUR_CRON_SECRET>
--- with your actual values before running.
+-- This script uses Supabase Vault for secret storage instead
+-- of GUC variables (ALTER DATABASE SET), which Supabase does
+-- not support on hosted plans.
+--
+-- PREREQUISITES:
+--   1. Add secrets in Dashboard → Vault:
+--      - Name: cron_secret       Value: <your CRON_SECRET (same as Vercel)>
+--      - Name: noble_base_url    Value: https://noble-trader-agent-frontend.vercel.app
+--   2. CRON_SECRET must also be set in Vercel (Project Settings → Environment Variables)
 -- ============================================================
 
 -- 1. Enable required extensions
@@ -14,21 +21,23 @@ CREATE EXTENSION IF NOT EXISTS pg_cron SCHEMA extensions;
 GRANT USAGE ON SCHEMA extensions TO postgres;
 GRANT ALL ON ALL SEQUENCES IN SCHEMA extensions TO postgres;
 
--- 3. Set GUC variables for the cron jobs to reference
---    Replace the values below with your actual deployment URL and CRON_SECRET
-ALTER DATABASE postgres SET app.noble_base_url = '<YOUR_BASE_URL>';
-ALTER DATABASE postgres SET app.noble_cron_secret = '<YOUR_CRON_SECRET>';
+-- 3. Verify Vault secrets exist (will show NULL if not configured)
+SELECT
+  name,
+  CASE WHEN vault.read_secret(name) IS NOT NULL THEN 'OK' ELSE 'MISSING — add in Dashboard → Vault' END as status
+FROM (VALUES ('cron_secret'), ('noble_base_url')) AS t(name);
 
 -- 4. Schedule TDA scan (every 4 hours)
+--    Reads secrets from Vault: vault.read_secret('cron_secret'), vault.read_secret('noble_base_url')
 SELECT cron.schedule(
   'noble-tda-scan',
   '0 */4 * * *',
   $$
   SELECT net.http_post(
-    url := current_setting('app.noble_base_url', true) || '/api/tda/scan?secret=' || current_setting('app.noble_cron_secret', true),
+    url := vault.read_secret('noble_base_url') || '/api/tda/scan?secret=' || vault.read_secret('cron_secret'),
     headers := jsonb_build_object(
       'Content-Type', 'application/json',
-      'x-cron-secret', current_setting('app.noble_cron_secret', true)
+      'x-cron-secret', vault.read_secret('cron_secret')
     ),
     body := '{}'::jsonb
   );
@@ -41,17 +50,57 @@ SELECT cron.schedule(
   '*/15 13-20 * * 1-5',
   $$
   SELECT net.http_post(
-    url := current_setting('app.noble_base_url', true) || '/api/trading/schedule/execute?secret=' || current_setting('app.noble_cron_secret', true),
+    url := vault.read_secret('noble_base_url') || '/api/trading/schedule/execute?secret=' || vault.read_secret('cron_secret'),
     headers := jsonb_build_object(
       'Content-Type', 'application/json',
-      'x-cron-secret', current_setting('app.noble_cron_secret', true)
+      'x-cron-secret', vault.read_secret('cron_secret')
     ),
     body := '{}'::jsonb
   );
   $$
 );
 
--- 6. Verify
+-- 6. Schedule campaign tick (every minute during market hours)
+--    Uses the campaign_tick() function which also reads from Vault
+SELECT cron.schedule(
+  'noble-campaign-tick',
+  '* 13-20 * * 1-5',
+  $$SELECT public.campaign_tick();$$
+);
+
+-- 7. Schedule strategy rotation check (every 6 hours)
+SELECT cron.schedule(
+  'noble-strategy-rotate',
+  '0 */6 * * *',
+  $$
+  SELECT net.http_post(
+    url := vault.read_secret('noble_base_url') || '/api/evolution/rotate?secret=' || vault.read_secret('cron_secret'),
+    headers := jsonb_build_object(
+      'Content-Type', 'application/json',
+      'x-cron-secret', vault.read_secret('cron_secret')
+    ),
+    body := '{"auto": true}'::jsonb
+  );
+  $$
+);
+
+-- 8. Schedule daily strategy optimization (10pm UTC, Mon-Fri)
+SELECT cron.schedule(
+  'noble-strategy-optimize',
+  '0 22 * * 1-5',
+  $$
+  SELECT net.http_post(
+    url := vault.read_secret('noble_base_url') || '/api/evolution/optimize?secret=' || vault.read_secret('cron_secret'),
+    headers := jsonb_build_object(
+      'Content-Type', 'application/json',
+      'x-cron-secret', vault.read_secret('cron_secret')
+    ),
+    body := '{"symbol": "SPY", "nTrials": 5}'::jsonb
+  );
+  $$
+);
+
+-- 9. Verify all jobs
 SELECT jobid, name, schedule, active
 FROM cron.job
-WHERE name IN ('noble-tda-scan', 'noble-schedule-execute');
+WHERE name IN ('noble-campaign-tick', 'noble-tda-scan', 'noble-schedule-execute', 'noble-strategy-rotate', 'noble-strategy-optimize');

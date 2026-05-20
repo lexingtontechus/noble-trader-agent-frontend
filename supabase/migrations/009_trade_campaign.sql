@@ -212,7 +212,10 @@ GRANT SELECT, INSERT, UPDATE, DELETE ON public.campaign_trades TO authenticated;
 --   2. For each, checks if current trade has closed
 --   3. Updates stats, places next trade, or stops campaign
 --
--- The CRON_SECRET env var must be set in Vercel for auth.
+-- Secrets are read from Supabase Vault (not GUC variables).
+-- Required Vault secrets:
+--   - cron_secret    (shared with Vercel CRON_SECRET)
+--   - noble_base_url (e.g. https://noble-trader-agent-frontend.vercel.app)
 
 CREATE OR REPLACE FUNCTION public.campaign_tick()
 RETURNS void
@@ -224,18 +227,18 @@ DECLARE
   secret TEXT;
   response integer;
 BEGIN
-  -- Read the app config for the tick endpoint
-  base_url := current_setting('app.campaign_tick_url', true);
-  secret := current_setting('app.cron_secret', true);
+  -- Read secrets from Supabase Vault
+  base_url := vault.read_secret('noble_base_url');
+  secret := vault.read_secret('cron_secret');
 
   IF base_url IS NULL OR secret IS NULL THEN
-    RAISE NOTICE 'app.campaign_tick_url or app.cron_secret not set — campaign tick skipped';
+    RAISE NOTICE 'Vault secrets noble_base_url or cron_secret not found — campaign tick skipped. Add them in Dashboard → Vault.';
     RETURN;
   END IF;
 
   -- Fire-and-forget HTTP POST to the campaign tick endpoint
   SELECT INTO response net.http_post(
-    url := base_url,
+    url := base_url || '/api/campaign/tick',
     headers := jsonb_build_object(
       'Content-Type', 'application/json',
       'Authorization', 'Bearer ' || secret
@@ -243,12 +246,12 @@ BEGIN
     body := '{}'::jsonb
   );
 
-  RAISE NOTICE 'Campaign tick fired, response status: %', response;
+  RAISE NOTICE 'Campaign tick fired to %, response status: %', base_url || '/api/campaign/tick', response;
 END;
 $$;
 
 COMMENT ON FUNCTION public.campaign_tick() IS
-  'pg_cron callback: fires HTTP POST to the campaign tick API route every minute during market hours. The API route does the actual orchestration.';
+  'pg_cron callback: fires HTTP POST to the campaign tick API route every minute during market hours. Reads CRON_SECRET and base URL from Supabase Vault.';
 
 -- ============================================================
 -- 5. pg_cron schedule — every 60s during US market hours
