@@ -12,8 +12,7 @@ const TradesPanel = dynamic(() => import("./TradesPanel"), { ssr: false });
 const ConfigPanel = dynamic(() => import("./ConfigPanel"), { ssr: false });
 const OrderTracker = dynamic(() => import("./OrderTracker"), { ssr: false });
 const RiskDashboard = dynamic(() => import("./RiskDashboard"), { ssr: false });
-const BacktestPanel = dynamic(() => import("./BacktestPanel"), { ssr: false });
-const BacktestResults = dynamic(() => import("./BacktestResults"), { ssr: false });
+const CampaignPanel = dynamic(() => import("@/components/campaign/CampaignPanel"), { ssr: false });
 
 // ── Error Boundary ─────────────────────────────────────────────────────────
 
@@ -77,9 +76,9 @@ const TABS = [
   { key: "signals", label: "📊 Signals", shortLabel: "Signals" },
   { key: "trades", label: "💰 Trades", shortLabel: "Trades" },
   { key: "orders", label: "📋 Orders", shortLabel: "Orders" },
+  { key: "campaigns", label: "🎯 Campaigns", shortLabel: "Campaigns" },
   { key: "config", label: "⚙️ Config", shortLabel: "Config" },
   { key: "risk", label: "🛡️ Risk", shortLabel: "Risk" },
-  { key: "backtest", label: "🧪 Backtest", shortLabel: "Backtest" },
 ];
 
 // ── Metric Card ──────────────────────────────────────────────────────────────
@@ -160,12 +159,6 @@ export default function RenkoPage() {
   const [trades, setTrades] = useState([]);
   const [stats, setStats] = useState(null);
   const [config, setConfig] = useState({});
-
-  // Backtest state
-  const [backtestResult, setBacktestResult] = useState(null);
-  const [optimizeResult, setOptimizeResult] = useState(null);
-  const [significanceTests, setSignificanceTests] = useState(null);
-  const [executionModelDetail, setExecutionModelDetail] = useState(null);
 
   // ── Live Renko Stream ──────────────────────────────────────────────
   const renkoStream = useRenkoStream(symbol, {
@@ -870,6 +863,13 @@ export default function RenkoPage() {
               saving={saving}
             />
           )}
+          {activeTab === "campaigns" && (
+            <CampaignPanel
+              signals={signals}
+              symbol={symbol}
+              stats={stats}
+            />
+          )}
           {activeTab === "risk" && (
             <RiskDashboard
               trades={trades}
@@ -878,23 +878,6 @@ export default function RenkoPage() {
               config={config}
               bricks={bricks}
             />
-          )}
-          {activeTab === "backtest" && (
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-              <BacktestPanel
-                bffFetch={renkoApiFetch}
-                onResult={setBacktestResult}
-                onOptimizeResult={setOptimizeResult}
-                onSignificanceTests={setSignificanceTests}
-                onExecutionModelDetail={setExecutionModelDetail}
-              />
-              <BacktestResults
-                result={backtestResult}
-                optimizeResult={optimizeResult}
-                significanceTests={significanceTests}
-                executionModelDetail={executionModelDetail}
-              />
-            </div>
           )}
         </div>
       </div>
