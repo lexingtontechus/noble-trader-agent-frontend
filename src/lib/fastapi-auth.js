@@ -105,19 +105,51 @@ export async function getFastAPIAuthHeaders() {
  * @param {string} sessionId — The Clerk session ID from auth()
  * @returns {Promise<string|null>} — The JWT string, or null if unavailable
  */
-export async function getClerkJWT(sessionId) {
+export async function getClerkJWT(sessionId, { template = "server" } = {}) {
   const clerkSecretKey = process.env.CLERK_SECRET_KEY;
   if (!clerkSecretKey || !sessionId) return null;
 
+  const headers = {
+    Authorization: `Bearer ${clerkSecretKey}`,
+    "Content-Type": "application/json",
+  };
+
+  // Try 1: Request JWT with the named template (includes email, name, role)
+  if (template) {
+    try {
+      const templateRes = await fetch(
+        `https://api.clerk.com/v1/sessions/${sessionId}/tokens`,
+        {
+          method: "POST",
+          headers,
+          body: JSON.stringify({ template }),
+          signal: AbortSignal.timeout(10000),
+        },
+      );
+
+      if (templateRes.ok) {
+        const tokenData = await templateRes.json();
+        if (tokenData.jwt) {
+          console.debug(`[fastapi-auth] Got Clerk JWT with template "${template}"`);
+          return tokenData.jwt;
+        }
+      }
+      // Template may not exist yet — fall through to default
+      console.debug(
+        `[fastapi-auth] Template "${template}" not available, falling back to default JWT`,
+      );
+    } catch {
+      // Network error, timeout, etc. — fall through to default
+    }
+  }
+
+  // Try 2: Default JWT (sub + iss + exp only, no email/name)
   try {
     const tokenRes = await fetch(
       `https://api.clerk.com/v1/sessions/${sessionId}/tokens`,
       {
         method: "POST",
-        headers: {
-          Authorization: `Bearer ${clerkSecretKey}`,
-          "Content-Type": "application/json",
-        },
+        headers,
         body: "{}",
         signal: AbortSignal.timeout(10000),
       },

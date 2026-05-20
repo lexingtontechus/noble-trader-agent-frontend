@@ -26,28 +26,52 @@ export async function GET() {
       );
     }
 
-    const tokenRes = await fetch(
-      `https://api.clerk.com/v1/sessions/${sessionId}/tokens`,
-      {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${clerkSecretKey}`,
-          "Content-Type": "application/json",
+    // Try "server" template first (includes email, name, role claims)
+    let token = null
+    try {
+      const templateRes = await fetch(
+        `https://api.clerk.com/v1/sessions/${sessionId}/tokens`,
+        {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${clerkSecretKey}`,
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({ template: "server" }),
+          signal: AbortSignal.timeout(10000),
         },
-        body: "{}",
-        signal: AbortSignal.timeout(10000),
-      },
-    );
-
-    if (!tokenRes.ok) {
-      return Response.json(
-        { error: "Failed to get Clerk token", status: tokenRes.status },
-        { status: tokenRes.status },
       );
-    }
+      if (templateRes.ok) {
+        const td = await templateRes.json();
+        if (td.jwt) token = td.jwt;
+      }
+    } catch { /* template may not exist */ }
 
-    const tokenData = await tokenRes.json();
-    const token = tokenData.jwt;
+    // Fallback: default JWT
+    if (!token) {
+      const tokenRes = await fetch(
+        `https://api.clerk.com/v1/sessions/${sessionId}/tokens`,
+        {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${clerkSecretKey}`,
+            "Content-Type": "application/json",
+          },
+          body: "{}",
+          signal: AbortSignal.timeout(10000),
+        },
+      );
+
+      if (!tokenRes.ok) {
+        return Response.json(
+          { error: "Failed to get Clerk token", status: tokenRes.status },
+          { status: tokenRes.status },
+        );
+      }
+
+      const tokenData = await tokenRes.json();
+      token = tokenData.jwt;
+    }
 
     // Decode JWT payload (lightweight)
     let payload = null;

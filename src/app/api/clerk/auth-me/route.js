@@ -11,31 +11,47 @@ const FASTAPI_BASE =
   "https://noble-trader-fastapi-backend.onrender.com";
 
 async function getClerkJWT(sessionId) {
-  // Get JWT via Clerk REST API (most reliable, least memory)
   const clerkSecretKey = process.env.CLERK_SECRET_KEY;
   if (!clerkSecretKey) return null;
 
+  const headers = {
+    Authorization: `Bearer ${clerkSecretKey}`,
+    "Content-Type": "application/json",
+  };
+
+  // Try "server" template first (includes email, name, role claims)
+  try {
+    const templateRes = await fetch(
+      `https://api.clerk.com/v1/sessions/${sessionId}/tokens`,
+      {
+        method: "POST",
+        headers,
+        body: JSON.stringify({ template: "server" }),
+        signal: AbortSignal.timeout(10000),
+      },
+    );
+    if (templateRes.ok) {
+      const td = await templateRes.json();
+      if (td.jwt) return td.jwt;
+    }
+  } catch { /* template may not exist */ }
+
+  // Fallback: default JWT
   try {
     const tokenRes = await fetch(
       `https://api.clerk.com/v1/sessions/${sessionId}/tokens`,
       {
         method: "POST",
-        headers: {
-          Authorization: `Bearer ${clerkSecretKey}`,
-          "Content-Type": "application/json",
-        },
+        headers,
         body: "{}",
         signal: AbortSignal.timeout(10000),
       },
     );
-
     if (tokenRes.ok) {
-      const tokenData = await tokenRes.json();
-      if (tokenData.jwt) return tokenData.jwt;
+      const td = await tokenRes.json();
+      if (td.jwt) return td.jwt;
     }
-  } catch {
-    // Failed
-  }
+  } catch { /* failed */ }
 
   return null;
 }
