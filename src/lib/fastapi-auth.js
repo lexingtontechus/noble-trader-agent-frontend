@@ -1,5 +1,5 @@
 import { auth } from "@clerk/nextjs/server";
-import { cookies, headers } from "next/headers";
+import { cookies as nextCookies, headers as nextHeaders } from "next/headers";
 
 /**
  * Gets the Authorization header for FastAPI backend calls.
@@ -12,7 +12,7 @@ import { cookies, headers } from "next/headers";
  * Returns a headers object ready to spread into fetch options.
  */
 export async function getFastAPIAuthHeaders() {
-  const headers = {};
+  const authHeaders = {};
 
   // ── Method 1: Clerk auth().getToken() ──────────────────────────────────────
   try {
@@ -32,8 +32,8 @@ export async function getFastAPIAuthHeaders() {
       }
 
       if (token) {
-        headers["Authorization"] = `Bearer ${token}`;
-        return headers;
+        authHeaders["Authorization"] = `Bearer ${token}`;
+        return authHeaders;
       }
     }
 
@@ -56,13 +56,13 @@ export async function getFastAPIAuthHeaders() {
   // The auth() → getToken() path may not work without CLERK_SECRET_KEY,
   // but the browser DOES send a valid JWT in the __session cookie.
   try {
-    const cookieStore = await cookies();
+    const cookieStore = await nextCookies();
     const sessionCookie = cookieStore.get("__session");
 
     if (sessionCookie?.value) {
       // The __session cookie contains the Clerk session JWT
-      headers["Authorization"] = `Bearer ${sessionCookie.value}`;
-      return headers;
+      authHeaders["Authorization"] = `Bearer ${sessionCookie.value}`;
+      return authHeaders;
     }
   } catch (e) {
     // cookies() may not be available in all contexts
@@ -72,11 +72,11 @@ export async function getFastAPIAuthHeaders() {
   // ── Method 3: Read Authorization header from incoming request ─────────────
   // If the client already sends a Bearer token, forward it
   try {
-    const headersList = await headers();
+    const headersList = await nextHeaders();
     const authHeader = headersList.get("authorization");
     if (authHeader?.startsWith("Bearer ")) {
-      headers["Authorization"] = authHeader;
-      return headers;
+      authHeaders["Authorization"] = authHeader;
+      return authHeaders;
     }
   } catch (e) {
     // headers() may not be available in all contexts
@@ -86,14 +86,14 @@ export async function getFastAPIAuthHeaders() {
   // ── Method 4: X-API-Key fallback ──────────────────────────────────────────
   const apiKey = process.env.FASTAPI_API_KEY;
   if (apiKey) {
-    headers["X-API-Key"] = apiKey;
+    authHeaders["X-API-Key"] = apiKey;
   }
 
-  if (Object.keys(headers).length === 0) {
+  if (Object.keys(authHeaders).length === 0) {
     console.warn("[fastapi-auth] No auth method available — request will likely fail with 401");
   }
 
-  return headers;
+  return authHeaders;
 }
 
 /**
@@ -147,7 +147,7 @@ export async function getAuthDebugInfo() {
 
   // Method 2: Cookie
   try {
-    const cookieStore = await cookies();
+    const cookieStore = await nextCookies();
     const sessionCookie = cookieStore.get("__session");
     info.methods.cookie = {
       available: !!sessionCookie?.value,
