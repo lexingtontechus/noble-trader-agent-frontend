@@ -1,6 +1,7 @@
 import { createOrder } from "@/lib/alpaca-client";
 import { getAlpacaCredentialKeys, resolveCredentialType } from "@/lib/alpaca-credentials";
 import { yahooToAlpacaSymbol, getAssetClass, isAlpacaTradable, getAlpacaTradeabilityReason } from "@/lib/symbol-utils";
+import { createApiError } from "@/lib/error-messages";
 
 const VALID_TYPES = {
   equity: ["market", "limit", "stop", "stop_limit", "trailing_stop"],
@@ -23,7 +24,10 @@ export async function POST(request) {
     const keys = await getAlpacaCredentialKeys(credentialType, request);
     if (!keys?.apiKey || !keys?.secretKey) {
       return Response.json(
-        { error: "Alpaca API keys not configured. Save your keys in Settings.", code: "NO_KEYS" },
+        {
+          error: "Your trading account is not connected yet. Add your Alpaca API keys to get started.",
+          code: "NO_KEYS",
+        },
         { status: 403 }
       );
     }
@@ -91,6 +95,6 @@ export async function POST(request) {
 
     return Response.json(order);
   } catch (error) {
-    return Response.json({ error: `Order failed: ${error.message}` }, { status: 500 });
+    return createApiError(error, { context: "orders" });
   }
 }

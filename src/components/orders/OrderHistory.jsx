@@ -1,6 +1,8 @@
 'use client'
 
-export default function OrderHistory({ orders, loading, error, onRetry }) {
+import GracefulError from '@/components/shared/GracefulError';
+
+export default function OrderHistory({ orders, loading, error, onRetry, onSetupKeys }) {
   const formatDate = (iso) => {
     if (!iso) return '—';
     try {
@@ -80,19 +82,13 @@ export default function OrderHistory({ orders, loading, error, onRetry }) {
         <h2 className="card-title text-lg mb-3">Order History</h2>
 
         {error ? (
-          <div className="text-center py-6">
-            <div className="alert alert-error mb-3">
-              <svg xmlns="http://www.w3.org/2000/svg" className="stroke-current shrink-0 h-5 w-5" fill="none" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M10 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2m7-2a9 9 0 11-18 0 9 9 0 0118 0z" />
-              </svg>
-              <span className="text-sm">{error}</span>
-            </div>
-            {onRetry && (
-              <button className="btn btn-sm btn-ghost" onClick={onRetry}>
-                Retry
-              </button>
-            )}
-          </div>
+          <GracefulError
+            code={error.code}
+            message={error.message}
+            compact
+            onAction={onSetupKeys}
+            onRetry={onRetry}
+          />
         ) : !orders || orders.length === 0 ? (
           <div className="text-center py-8 text-base-content/50">
             <svg xmlns="http://www.w3.org/2000/svg" width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" className="mx-auto mb-2 opacity-40">

@@ -7,6 +7,7 @@ import OrderHistory from '@/components/orders/OrderHistory';
 import OpenPositions from '@/components/orders/OpenPositions';
 import OrderModal from '@/components/orders/OrderModal';
 import PortfolioAnalysis from '@/components/orders/PortfolioAnalysis';
+import GracefulError from '@/components/shared/GracefulError';
 import { notifySuccess, notifyWarning } from '@/lib/notifications';
 
 const PERIODS = [
@@ -27,9 +28,9 @@ export default function OrdersPage() {
   const [loadingOrders, setLoadingOrders] = useState(false);
   const [loadingPositions, setLoadingPositions] = useState(false);
   const [orderModal, setOrderModal] = useState(null);
-  const [accountError, setAccountError] = useState('');
-  const [ordersError, setOrdersError] = useState('');
-  const [positionsError, setPositionsError] = useState('');
+  const [accountError, setAccountError] = useState(null);   // { message, code } | null
+  const [ordersError, setOrdersError] = useState(null);      // { message, code } | null
+  const [positionsError, setPositionsError] = useState(null); // { message, code } | null
   const [showKeyManager, setShowKeyManager] = useState(false);
 
   // Check if Alpaca keys are configured
@@ -53,7 +54,7 @@ export default function OrdersPage() {
   // Fetch account data
   const fetchAccount = useCallback(async () => {
     setLoadingAccount(true);
-    setAccountError('');
+    setAccountError(null);
     try {
       const res = await fetch('/api/alpaca/account');
       if (res.ok) {
@@ -61,15 +62,16 @@ export default function OrdersPage() {
         setAccount(data);
       } else {
         const data = await res.json().catch(() => ({}));
-        setAccountError(data.error || `Account fetch failed (${res.status})`);
-        // If 403, keys are invalid — re-check
-        if (res.status === 403) {
+        setAccountError({ message: data.error, code: data.code });
+        // If 403 NO_KEYS, keys are invalid — re-check
+        if (res.status === 403 && data.code === 'NO_KEYS') {
           setKeysConfigured(false);
-          notifyWarning('Alpaca API keys appear invalid. Please re-enter your keys.');
+        } else if (res.status === 401 || res.status === 403) {
+          notifyWarning('Your API keys appear invalid. Please update them in Settings.');
         }
       }
     } catch (err) {
-      setAccountError(err.message);
+      setAccountError({ message: 'Unable to reach the trading service.', code: 'CONNECTION_FAILED' });
     } finally {
       setLoadingAccount(false);
     }
@@ -78,7 +80,7 @@ export default function OrdersPage() {
   // Fetch orders
   const fetchOrders = useCallback(async (p) => {
     setLoadingOrders(true);
-    setOrdersError('');
+    setOrdersError(null);
     try {
       const res = await fetch(`/api/alpaca/orders?period=${p}`);
       if (res.ok) {
@@ -86,15 +88,14 @@ export default function OrdersPage() {
         setOrders(Array.isArray(data) ? data : []);
       } else {
         const data = await res.json().catch(() => ({}));
-        setOrdersError(data.error || `Orders fetch failed (${res.status})`);
+        setOrdersError({ message: data.error, code: data.code });
         setOrders([]);
-        if (res.status === 403) {
+        if (res.status === 403 && data.code === 'NO_KEYS') {
           setKeysConfigured(false);
-          notifyWarning('Alpaca API keys appear invalid. Please re-enter your keys.');
         }
       }
     } catch (err) {
-      setOrdersError(err.message);
+      setOrdersError({ message: 'Unable to reach the trading service.', code: 'CONNECTION_FAILED' });
       setOrders([]);
     } finally {
       setLoadingOrders(false);
@@ -104,7 +105,7 @@ export default function OrdersPage() {
   // Fetch positions
   const fetchPositions = useCallback(async () => {
     setLoadingPositions(true);
-    setPositionsError('');
+    setPositionsError(null);
     try {
       const res = await fetch('/api/alpaca/positions');
       if (res.ok) {
@@ -112,15 +113,14 @@ export default function OrdersPage() {
         setPositions(Array.isArray(data) ? data : []);
       } else {
         const data = await res.json().catch(() => ({}));
-        setPositionsError(data.error || `Positions fetch failed (${res.status})`);
+        setPositionsError({ message: data.error, code: data.code });
         setPositions([]);
-        if (res.status === 403) {
+        if (res.status === 403 && data.code === 'NO_KEYS') {
           setKeysConfigured(false);
-          notifyWarning('Alpaca API keys appear invalid. Please re-enter your keys.');
         }
       }
     } catch (err) {
-      setPositionsError(err.message);
+      setPositionsError({ message: 'Unable to reach the trading service.', code: 'CONNECTION_FAILED' });
       setPositions([]);
     } finally {
       setLoadingPositions(false);
@@ -245,17 +245,14 @@ export default function OrdersPage() {
         />
       )}
 
-      {/* Account Error Banner */}
+      {/* Account Error — Graceful UI */}
       {accountError && (
-        <div className="alert alert-error">
-          <svg xmlns="http://www.w3.org/2000/svg" className="stroke-current shrink-0 h-5 w-5" fill="none" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M10 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2m7-2a9 9 0 11-18 0 9 9 0 0118 0z" />
-          </svg>
-          <span className="text-sm">{accountError}</span>
-          <button className="btn btn-sm btn-ghost" onClick={() => setKeysConfigured(false)}>
-            Re-enter Keys
-          </button>
-        </div>
+        <GracefulError
+          code={accountError.code}
+          message={accountError.message}
+          onAction={() => setKeysConfigured(false)}
+          onRetry={fetchAccount}
+        />
       )}
 
       {/* Account Summary */}
@@ -282,12 +279,14 @@ export default function OrdersPage() {
           loading={loadingOrders}
           error={ordersError}
           onRetry={() => fetchOrders(period)}
+          onSetupKeys={() => setKeysConfigured(false)}
         />
         <OpenPositions
           positions={positions}
           loading={loadingPositions}
           error={positionsError}
           onRetry={fetchPositions}
+          onSetupKeys={() => setKeysConfigured(false)}
         />
       </div>
 

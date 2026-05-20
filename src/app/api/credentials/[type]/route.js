@@ -16,6 +16,7 @@ import {
   deleteCredentials,
   validateCredentials,
 } from "@/lib/credentials";
+import { createApiError, sanitizeError } from "@/lib/error-messages";
 
 export async function GET(request, { params }) {
   try {
@@ -27,10 +28,7 @@ export async function GET(request, { params }) {
     const status = await hasCredentials(type);
     return Response.json(status);
   } catch (error) {
-    if (error.message === "Not authenticated") {
-      return Response.json({ error: "Not authenticated" }, { status: 401 });
-    }
-    return Response.json({ error: error.message }, { status: 500 });
+    return createApiError(error, { context: "credentials" });
   }
 }
 
@@ -45,19 +43,19 @@ export async function POST(request, { params }) {
     const { apiKey, secretKey } = body;
 
     if (!apiKey || !secretKey) {
-      return Response.json({ error: "Both apiKey and secretKey are required" }, { status: 400 });
+      return Response.json({ error: "Both API Key and Secret Key are required" }, { status: 400 });
     }
 
     const result = await saveCredentials(type, apiKey, secretKey);
     return Response.json(result);
   } catch (error) {
-    if (error.message === "Not authenticated") {
-      return Response.json({ error: "Not authenticated" }, { status: 401 });
+    // Plan-gated errors are user-friendly already ("Live trading requires...")
+    const { message, code, status } = sanitizeError(error, { context: "credentials" });
+    // Preserve the plan-required message since it's already user-friendly
+    if (error.message?.includes("Premium") || error.message?.includes("Institutional")) {
+      return Response.json({ error: error.message, code: "PLAN_REQUIRED" }, { status: 403 });
     }
-    if (error.message.includes("Premium")) {
-      return Response.json({ error: error.message }, { status: 403 });
-    }
-    return Response.json({ error: error.message }, { status: 500 });
+    return Response.json({ error: message, code }, { status });
   }
 }
 
@@ -71,10 +69,7 @@ export async function DELETE(request, { params }) {
     const result = await deleteCredentials(type);
     return Response.json(result);
   } catch (error) {
-    if (error.message === "Not authenticated") {
-      return Response.json({ error: "Not authenticated" }, { status: 401 });
-    }
-    return Response.json({ error: error.message }, { status: 500 });
+    return createApiError(error, { context: "credentials" });
   }
 }
 
@@ -88,9 +83,6 @@ export async function PUT(request, { params }) {
     const result = await validateCredentials(type);
     return Response.json(result);
   } catch (error) {
-    if (error.message === "Not authenticated") {
-      return Response.json({ error: "Not authenticated" }, { status: 401 });
-    }
-    return Response.json({ error: error.message }, { status: 500 });
+    return createApiError(error, { context: "credentials" });
   }
 }

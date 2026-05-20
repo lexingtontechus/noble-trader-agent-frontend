@@ -29,15 +29,15 @@ let _supabaseClient = null;
 function getAdminClient() {
   if (_supabaseClient) return _supabaseClient;
   if (!SUPABASE_URL) {
+    console.error("[db] Missing NEXT_PUBLIC_SUPABASE_URL env var. Add it in Vercel project settings.");
     throw new Error(
-      "Missing NEXT_PUBLIC_SUPABASE_URL env var. " +
-      "Add it in Vercel project settings → Environment Variables."
+      "Service configuration is incomplete. Please try again later or contact support."
     );
   }
   if (!SUPABASE_KEY) {
+    console.error("[db] Missing NEXT_PUBLIC_SUPABASE_PUBLISHABLE_DEFAULT_KEY env var. Add it in Vercel project settings.");
     throw new Error(
-      "Missing NEXT_PUBLIC_SUPABASE_PUBLISHABLE_DEFAULT_KEY env var. " +
-      "Add it in Vercel project settings → Environment Variables."
+      "Service configuration is incomplete. Please try again later or contact support."
     );
   }
   _supabaseClient = createClient(SUPABASE_URL, SUPABASE_KEY, {

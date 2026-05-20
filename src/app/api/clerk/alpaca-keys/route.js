@@ -1,4 +1,5 @@
 import { getAlpacaKeys, setAlpacaKeys, deleteAlpacaKeys } from "@/lib/clerk-metadata";
+import { createApiError } from "@/lib/error-messages";
 
 // GET — returns ONLY whether keys are configured (never exposes the actual values)
 export async function GET() {
@@ -7,7 +8,7 @@ export async function GET() {
     const configured = !!(keys?.apiKey && keys?.secretKey);
     return Response.json({ configured });
   } catch (error) {
-    return Response.json({ configured: false, error: error.message }, { status: 500 });
+    return createApiError(error, { context: "credentials" });
   }
 }
 
@@ -18,13 +19,13 @@ export async function POST(request) {
     const { apiKey, secretKey } = body;
 
     if (!apiKey || !secretKey) {
-      return Response.json({ error: "Both apiKey and secretKey are required" }, { status: 400 });
+      return Response.json({ error: "Both API Key and Secret Key are required" }, { status: 400 });
     }
 
     await setAlpacaKeys(apiKey, secretKey);
-    return Response.json({ success: true, message: "Alpaca keys saved to private metadata" });
+    return Response.json({ success: true, message: "Alpaca keys saved successfully" });
   } catch (error) {
-    return Response.json({ error: error.message }, { status: 500 });
+    return createApiError(error, { context: "credentials" });
   }
 }
 
@@ -32,8 +33,8 @@ export async function POST(request) {
 export async function DELETE() {
   try {
     await deleteAlpacaKeys();
-    return Response.json({ success: true, message: "Alpaca keys removed from private metadata" });
+    return Response.json({ success: true, message: "Alpaca keys removed" });
   } catch (error) {
-    return Response.json({ error: error.message }, { status: 500 });
+    return createApiError(error, { context: "credentials" });
   }
 }

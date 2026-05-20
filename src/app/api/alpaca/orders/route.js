@@ -1,5 +1,6 @@
 import { getOrders } from "@/lib/alpaca-client";
 import { getAlpacaCredentialKeys, resolveCredentialType } from "@/lib/alpaca-credentials";
+import { createApiError } from "@/lib/error-messages";
 
 /**
  * GET /api/alpaca/orders
@@ -12,7 +13,10 @@ export async function GET(request) {
     const keys = await getAlpacaCredentialKeys(credentialType, request);
     if (!keys?.apiKey || !keys?.secretKey) {
       return Response.json(
-        { error: "Alpaca API keys not configured. Save your keys in Settings.", code: "NO_KEYS" },
+        {
+          error: "Your trading account is not connected yet. Add your Alpaca API keys to get started.",
+          code: "NO_KEYS",
+        },
         { status: 403 }
       );
     }
@@ -35,9 +39,6 @@ export async function GET(request) {
 
     return Response.json(orders);
   } catch (error) {
-    return Response.json(
-      { error: `Failed to fetch orders: ${error.message}` },
-      { status: 500 }
-    );
+    return createApiError(error, { context: "orders" });
   }
 }

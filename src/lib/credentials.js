@@ -28,8 +28,14 @@ let _adminClient = null;
 
 function getServiceClient() {
   if (_adminClient) return _adminClient;
-  if (!SUPABASE_URL) throw new Error("Missing NEXT_PUBLIC_SUPABASE_URL");
-  if (!SUPABASE_SERVICE_KEY) throw new Error("Missing SUPABASE_SERVICE_ROLE_KEY or NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY");
+  if (!SUPABASE_URL) {
+    console.error("[credentials] Missing NEXT_PUBLIC_SUPABASE_URL env var");
+    throw new Error("Service configuration is incomplete. Please try again later or contact support.");
+  }
+  if (!SUPABASE_SERVICE_KEY) {
+    console.error("[credentials] Missing SUPABASE_SERVICE_ROLE_KEY / NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY env var");
+    throw new Error("Service configuration is incomplete. Please try again later or contact support.");
+  }
   _adminClient = createClient(SUPABASE_URL, SUPABASE_SERVICE_KEY, {
     auth: { autoRefreshToken: false, persistSession: false },
   });

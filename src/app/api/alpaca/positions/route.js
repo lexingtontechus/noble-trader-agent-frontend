@@ -1,5 +1,6 @@
 import { getPositions } from "@/lib/alpaca-client";
 import { getAlpacaCredentialKeys, resolveCredentialType } from "@/lib/alpaca-credentials";
+import { createApiError } from "@/lib/error-messages";
 
 /**
  * GET /api/alpaca/positions
@@ -12,7 +13,10 @@ export async function GET(request) {
     const keys = await getAlpacaCredentialKeys(credentialType, request);
     if (!keys?.apiKey || !keys?.secretKey) {
       return Response.json(
-        { error: "Alpaca API keys not configured. Save your keys in Settings.", code: "NO_KEYS" },
+        {
+          error: "Your trading account is not connected yet. Add your Alpaca API keys to get started.",
+          code: "NO_KEYS",
+        },
         { status: 403 }
       );
     }
@@ -20,9 +24,6 @@ export async function GET(request) {
     const positions = await getPositions(keys.apiKey, keys.secretKey, credentialType);
     return Response.json(positions);
   } catch (error) {
-    return Response.json(
-      { error: `Failed to fetch positions: ${error.message}` },
-      { status: 500 }
-    );
+    return createApiError(error, { context: "positions" });
   }
 }
