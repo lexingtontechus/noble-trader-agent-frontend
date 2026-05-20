@@ -1,28 +1,19 @@
 import { clerkMiddleware, createRouteMatcher } from "@clerk/nextjs/server";
 
+/**
+ * Root proxy (fallback — the primary is src/proxy.js)
+ * Next.js 16 uses proxy.js instead of middleware.ts.
+ *
+ * This ensures clerkMiddleware() runs for ALL requests, populating
+ * the Clerk auth context so auth().getToken() works in Route Handlers.
+ */
+
 const isPublicRoute = createRouteMatcher([
   "/",
   "/sign-in(.*)",
   "/sign-up(.*)",
   "/api/health(.*)",
-  "/api/auth/(.*)",
-  "/api/trading/(.*)",
-  "/api/alpaca/(.*)",
-  "/api/portfolio/(.*)",
-  "/api/telegram/(.*)",
-  "/api/tda/(.*)",
-  "/api/evolution/(.*)",
-  "/api/simulate(.*)",
-  "/api/cron/(.*)",
-  "/api/clerk/(.*)",
-  "/api/commentary(.*)",
-  "/api/correlation/(.*)",
-  "/api/googl-fill(.*)",
-  "/api/observation/(.*)",
-  "/api/optimise/(.*)",
-  "/api/prices(.*)",
-  "/api/stream/(.*)",
-  "/api/analyse(.*)",
+  "/api/auth/clerk-config(.*)",
   "/index.html",
 ]);
 
@@ -34,21 +25,28 @@ const isAdminRoute = createRouteMatcher([
 ]);
 
 export default clerkMiddleware(async (auth, request) => {
-  if (!isPublicRoute(request)) {
-    await auth.protect();
-  }
+  if (isPublicRoute(request)) return;
 
-  // For admin routes, also check org role if available
+  await auth.protect();
+
   if (isAdminRoute(request)) {
-    const { sessionClaims } = await auth();
-    const orgRole = sessionClaims?.org_role;
-    const userRole = sessionClaims?.role || sessionClaims?.metadata?.role;
+    const { userId } = await auth();
+    if (!userId) return;
 
-    // Allow access if user has admin role OR org:admin role
-    const isAdmin = userRole === "admin" || orgRole === "org:admin";
-    if (!isAdmin) {
-      // Redirect non-admin users away from admin routes
-      const url = new URL(request.url);
+    try {
+      const { clerkClient } = await import("@clerk/nextjs/server");
+      const client = await clerkClient();
+      const user = await client.users.getUser(userId);
+      const role = user.privateMetadata?.role || "viewer";
+
+      if (role !== "admin") {
+        const url = request.nextUrl.clone();
+        url.pathname = "/";
+        return Response.redirect(url);
+      }
+    } catch (err) {
+      console.error("[proxy] Admin role check failed:", err.message);
+      const url = request.nextUrl.clone();
       url.pathname = "/";
       return Response.redirect(url);
     }

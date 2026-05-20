@@ -118,18 +118,20 @@ export async function analyseFull(prices, symbol = "UNKNOWN", options = {}) {
     base_risk_limit: options.base_risk_limit ?? 0.02,
   };
 
+  const authHeaders = await getFastAPIAuthHeaders();
   const res = await fetchWithDedup(`${FASTAPI_BASE}/analyse/full`, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: { ...authHeaders, "Content-Type": "application/json" },
     body: JSON.stringify(body),
   });
   return res.json();
 }
 
 export async function detectRegime(prices, symbol = "UNKNOWN") {
+  const authHeaders = await getFastAPIAuthHeaders();
   const res = await fetchWithDedup(`${FASTAPI_BASE}/regime/detect`, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: { ...authHeaders, "Content-Type": "application/json" },
     body: JSON.stringify({ prices, symbol }),
   });
   return res.json();
@@ -145,9 +147,10 @@ export async function sizeKelly(prices, symbol = "UNKNOWN", options = {}) {
   };
   if (options.returns) body.returns = options.returns;
 
+  const authHeaders = await getFastAPIAuthHeaders();
   const res = await fetchWithDedup(`${FASTAPI_BASE}/size/kelly`, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: { ...authHeaders, "Content-Type": "application/json" },
     body: JSON.stringify(body),
   });
   return res.json();
@@ -164,9 +167,10 @@ export async function analyseRisk(prices, symbol = "UNKNOWN", options = {}) {
   };
   if (options.returns) body.returns = options.returns;
 
+  const authHeaders = await getFastAPIAuthHeaders();
   const res = await fetchWithDedup(`${FASTAPI_BASE}/risk/analyse`, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: { ...authHeaders, "Content-Type": "application/json" },
     body: JSON.stringify(body),
   });
   return res.json();
@@ -323,25 +327,30 @@ export async function getPortfolioSymbols() {
 
 // --- Streaming (v2.0) ---
 export async function seedSession(symbol, prices) {
+  const authHeaders = await getFastAPIAuthHeaders();
   const res = await fetchWithRetry(`${FASTAPI_BASE}/stream/seed`, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: { ...authHeaders, "Content-Type": "application/json" },
     body: JSON.stringify({ symbol, prices }),
   });
   return res.json();
 }
 
 export async function pushTick(symbol, price) {
+  const authHeaders = await getFastAPIAuthHeaders();
   const res = await fetchWithRetry(`${FASTAPI_BASE}/stream/tick`, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: { ...authHeaders, "Content-Type": "application/json" },
     body: JSON.stringify({ symbol, price }),
   });
   return res.json();
 }
 
 export async function getSessions() {
-  const res = await fetchWithRetry(`${FASTAPI_BASE}/stream/sessions`);
+  const authHeaders = await getFastAPIAuthHeaders();
+  const res = await fetchWithRetry(`${FASTAPI_BASE}/stream/sessions`, {
+    headers: { ...authHeaders },
+  });
   return res.json();
 }
 
@@ -493,9 +502,10 @@ export async function detectRegimeV2(prices, symbol = "UNKNOWN", options = {}) {
     n_iter: options.n_iter ?? 100,
   };
 
+  const authHeaders = await getFastAPIAuthHeaders();
   const res = await fetchWithDedup(`${FASTAPI_BASE}/regime/detect-v2`, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: { ...authHeaders, "Content-Type": "application/json" },
     body: JSON.stringify(body),
   });
   return res.json();
