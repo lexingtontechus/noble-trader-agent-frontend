@@ -1,9 +1,11 @@
 /**
- * Credential management — Supabase-backed with pgcrypto encryption.
+ * Credential management — Supabase-backed with AES-256-GCM encryption.
  *
- * Replaces the Clerk privateMetadata approach with a proper database layer.
- * Keys are encrypted at rest in Supabase using pgp_sym_encrypt/pgp_sym_decrypt
- * with the app.encryption_key database setting.
+ * Keys are encrypted at rest using Node.js crypto (AES-256-GCM) before
+ * being stored in Supabase. This is safer and faster than pgcrypto because:
+ *  1. No dependency on DB-level settings (app.encryption_key)
+ *  2. Encryption key is managed via environment variable
+ *  3. Decryption can happen anywhere the key is available
  *
  * All functions are SERVER-SIDE ONLY (API routes, Server Actions).
  * They require Clerk auth() to identify the user.
@@ -11,15 +13,56 @@
 
 import { auth, clerkClient } from "@clerk/nextjs/server";
 import { createClient } from "@supabase/supabase-js";
+import crypto from "crypto";
 
-// ── Supabase admin client (service role key for credential operations) ──
-// We need the service role key to:
-//  1. Bypass RLS (credential writes happen server-side only)
-//  2. Call the encrypt_credential() / decrypt_credential() DB functions
-//     which require the app.encryption_key setting (not available to anon key)
+// ── Encryption config ──────────────────────────────────────────────────────
+const ENCRYPTION_KEY = process.env.SUPABASE_ENCRYPTION_KEY;
+const ALGORITHM = "aes-256-gcm";
+const IV_LENGTH = 16;
+const TAG_LENGTH = 16;
+
+/**
+ * Encrypt a plaintext string using AES-256-GCM.
+ * Returns a base64 string containing: iv + tag + ciphertext
+ */
+function encrypt(plainText) {
+  if (!ENCRYPTION_KEY) {
+    console.error("[credentials] Missing SUPABASE_ENCRYPTION_KEY env var");
+    throw new Error("Service configuration is incomplete. Please try again later or contact support.");
+  }
+  const iv = crypto.randomBytes(IV_LENGTH);
+  const key = Buffer.from(ENCRYPTION_KEY.padEnd(32).slice(0, 32), "utf8");
+  const cipher = crypto.createCipheriv(ALGORITHM, key, iv);
+  let encrypted = cipher.update(plainText, "utf8", "base64");
+  encrypted += cipher.final("base64");
+  const tag = cipher.getAuthTag();
+  // Combine: iv (16 bytes) + tag (16 bytes) + ciphertext
+  return Buffer.concat([iv, tag, Buffer.from(encrypted, "base64")]).toString("base64");
+}
+
+/**
+ * Decrypt a base64-encoded AES-256-GCM ciphertext.
+ * Input format: base64(iv + tag + ciphertext)
+ */
+function decrypt(encoded) {
+  if (!ENCRYPTION_KEY) {
+    console.error("[credentials] Missing SUPABASE_ENCRYPTION_KEY env var");
+    throw new Error("Service configuration is incomplete. Please try again later or contact support.");
+  }
+  const key = Buffer.from(ENCRYPTION_KEY.padEnd(32).slice(0, 32), "utf8");
+  const combined = Buffer.from(encoded, "base64");
+  const iv = combined.subarray(0, IV_LENGTH);
+  const tag = combined.subarray(IV_LENGTH, IV_LENGTH + TAG_LENGTH);
+  const ciphertext = combined.subarray(IV_LENGTH + TAG_LENGTH);
+  const decipher = crypto.createDecipheriv(ALGORITHM, key, iv);
+  decipher.setAuthTag(tag);
+  let decrypted = decipher.update(ciphertext, undefined, "utf8");
+  decrypted += decipher.final("utf8");
+  return decrypted;
+}
+
+// ── Supabase admin client ──────────────────────────────────────────────────
 const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL;
-// Service role key: used for credential encryption/decryption RPC calls and RLS bypass
-// Named NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY in Vercel (it's actually the service role JWT)
 const SUPABASE_SERVICE_KEY =
   process.env.SUPABASE_SERVICE_ROLE_KEY ||
   process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY;
@@ -56,7 +99,8 @@ async function requireAuth() {
 
 /**
  * Save Alpaca API keys for the authenticated user.
- * Encrypts keys at rest in Supabase. If keys already exist for this type, they are replaced.
+ * Encrypts keys with AES-256-GCM before storing in Supabase.
+ * If keys already exist for this type, they are replaced.
  *
  * @param {"paper"|"live"} credentialType
  * @param {string} apiKey — Alpaca API key (e.g., PK...)
@@ -79,16 +123,9 @@ export async function saveCredentials(credentialType, apiKey, secretKey) {
     }
   }
 
-  // Encrypt keys using Supabase pgcrypto functions
-  const { data: encApiKey, error: encApiErr } = await client.rpc("encrypt_credential", {
-    plain_text: apiKey,
-  });
-  if (encApiErr) throw new Error(`Failed to encrypt API key: ${encApiErr.message}`);
-
-  const { data: encSecretKey, error: encSecretErr } = await client.rpc("encrypt_credential", {
-    plain_text: secretKey,
-  });
-  if (encSecretErr) throw new Error(`Failed to encrypt secret key: ${encSecretErr.message}`);
+  // Encrypt keys in application layer (AES-256-GCM)
+  const encApiKey = encrypt(apiKey);
+  const encSecretKey = encrypt(secretKey);
 
   // Upsert credentials
   const { error: upsertErr } = await client
@@ -129,28 +166,14 @@ export async function getCredentials(credentialType) {
 
   if (error || !data) return null;
 
-  // Decrypt
-  const { data: decApiKey, error: decApiErr } = await client.rpc("decrypt_credential", {
-    cipher_text: data.api_key_encrypted,
-  });
-  if (decApiErr) {
-    console.error("[credentials] Failed to decrypt API key:", decApiErr.message);
+  try {
+    const apiKey = decrypt(data.api_key_encrypted);
+    const secretKey = decrypt(data.secret_key_encrypted);
+    return { apiKey, secretKey, isValid: data.is_valid };
+  } catch (decErr) {
+    console.error("[credentials] Failed to decrypt credentials:", decErr.message);
     return null;
   }
-
-  const { data: decSecretKey, error: decSecretErr } = await client.rpc("decrypt_credential", {
-    cipher_text: data.secret_key_encrypted,
-  });
-  if (decSecretErr) {
-    console.error("[credentials] Failed to decrypt secret key:", decSecretErr.message);
-    return null;
-  }
-
-  return {
-    apiKey: decApiKey,
-    secretKey: decSecretKey,
-    isValid: data.is_valid,
-  };
 }
 
 /**
@@ -253,7 +276,6 @@ export async function validateCredentials(credentialType) {
     const client = getServiceClient();
 
     if (res.ok) {
-      // Mark as valid
       await client
         .from("user_credentials")
         .update({ is_valid: true, last_validated_at: new Date().toISOString() })
@@ -261,7 +283,6 @@ export async function validateCredentials(credentialType) {
         .eq("credential_type", credentialType);
       return { valid: true };
     } else {
-      // Mark as invalid
       await client
         .from("user_credentials")
         .update({ is_valid: false, last_validated_at: new Date().toISOString() })
@@ -287,7 +308,6 @@ export async function validateCredentials(credentialType) {
 export async function getUserPlan() {
   const userId = await requireAuth();
 
-  // Try Supabase first
   const client = getServiceClient();
   const { data, error } = await client
     .from("user_subscriptions")
@@ -296,14 +316,12 @@ export async function getUserPlan() {
     .single();
 
   if (!error && data) {
-    // If subscription is not active, treat as free
     if (data.plan_status !== "active" && data.plan_status !== "trialing") {
       return "free";
     }
     return data.plan || "free";
   }
 
-  // Fallback to Clerk privateMetadata
   try {
     const clerk = await clerkClient();
     const user = await clerk.users.getUser(userId);
@@ -341,7 +359,6 @@ export async function setUserPlan(clerkUserId, plan, options = {}) {
 
   if (error) throw new Error(`Failed to set user plan: ${error.message}`);
 
-  // Also update Clerk privateMetadata for client-side reads
   try {
     const clerk = await clerkClient();
     await clerk.users.updateUserMetadata(clerkUserId, {
@@ -349,7 +366,6 @@ export async function setUserPlan(clerkUserId, plan, options = {}) {
     });
   } catch (err) {
     console.error("[credentials] Failed to update Clerk plan metadata:", err.message);
-    // Non-fatal — Supabase is the source of truth
   }
 
   return { success: true };
@@ -439,13 +455,11 @@ export async function completeOnboarding() {
 export async function migrateClerkKeysToSupabase() {
   const userId = await requireAuth();
 
-  // Check if paper creds already exist in Supabase
   const paperStatus = await hasCredentials("paper");
   if (paperStatus.configured) {
     return { migrated: false, credentialType: "paper" };
   }
 
-  // Read old keys from Clerk
   try {
     const clerk = await clerkClient();
     const user = await clerk.users.getUser(userId);
@@ -458,10 +472,8 @@ export async function migrateClerkKeysToSupabase() {
       return { migrated: false, credentialType: "none" };
     }
 
-    // Save to Supabase as paper keys (old keys were paper-only)
     await saveCredentials("paper", apiKey, secretKey);
 
-    // Remove from Clerk privateMetadata
     await clerk.users.updateUserMetadata(userId, {
       privateMetadata: {
         alpaca_api_key: null,
