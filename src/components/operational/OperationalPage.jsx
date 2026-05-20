@@ -4,6 +4,7 @@ import KillSwitchPanel from "./KillSwitchPanel";
 import AuditLogViewer from "./AuditLogViewer";
 import ModeToggle from "./ModeToggle";
 import ReconciliationPanel from "./ReconciliationPanel";
+import LivePnLDashboard from "./LivePnLDashboard";
 
 /**
  * OperationalPage — Phase 8: Operational Hardening
@@ -78,6 +79,9 @@ export default function OperationalPage({ bffFetch }) {
           are required before enabling live trading.
         </span>
       </div>
+
+      {/* Live P&L Dashboard — full width */}
+      <LivePnLDashboard />
 
       {/* Top Row: Kill Switch + Mode Toggle */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">

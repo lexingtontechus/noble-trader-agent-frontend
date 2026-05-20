@@ -1,8 +1,9 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import dynamic from "next/dynamic";
 import { UserButton } from "@clerk/nextjs";
+import { useRole } from "@/hooks/useRole";
 import ThemeSwitcher from "@/components/shared/ThemeSwitcher";
 
 // Lazy-load NotificationCenter — not needed on initial render
@@ -20,14 +21,30 @@ const NAV_ITEMS = [
   { key: "portfolio", label: "Portfolio", icon: "📈", shortLabel: "Port" },
   { key: "search", label: "Search", icon: "🔍", shortLabel: "Search" },
   { key: "ops", label: "Ops", icon: "🛡️", shortLabel: "Ops" },
-  { key: "admin", label: "Admin", icon: "⚙️", shortLabel: "Admin" },
+  // Admin is role-gated — only shown for admin users via useRole()
+  // Also accessible via UserButton custom menu item
+  { key: "admin", label: "Admin", icon: "⚙️", shortLabel: "Admin", minRole: "admin" },
 ];
 
-// External nav items (docs link removed — no longer required)
-
 export default function Navbar({ activeView, setActiveView }) {
+  const { isAdmin, isTrader, isLoaded: roleLoaded } = useRole();
   const [backendHealthy, setBackendHealthy] = useState(null);
   const [tradingMode, setTradingMode] = useState("paper");
+
+  // Role hierarchy for nav filtering
+  const ROLE_LEVEL = { viewer: 0, trader: 1, admin: 2 };
+  const userLevel = isAdmin ? 2 : isTrader ? 1 : 0;
+
+  // Filter nav items based on role
+  const visibleNavItems = NAV_ITEMS.filter((item) => {
+    if (item.minRole) return userLevel >= (ROLE_LEVEL[item.minRole] ?? 0);
+    return true;
+  });
+
+  // Navigate to Ops when clicking mode badge
+  const handleModeClick = useCallback(() => {
+    setActiveView("ops");
+  }, [setActiveView]);
 
   useEffect(() => {
     let cancelled = false;
@@ -85,8 +102,8 @@ export default function Navbar({ activeView, setActiveView }) {
     };
   }, []);
 
-  // Desktop tabs use only NAV_ITEMS (docs link removed)
-  const allDesktopItems = NAV_ITEMS;
+  // Desktop tabs use filtered nav items (role-gated)
+  const allDesktopItems = visibleNavItems;
 
   return (
     <>
@@ -142,16 +159,26 @@ export default function Navbar({ activeView, setActiveView }) {
           <NotificationCenter />
           <ThemeSwitcher />
 
-          {/* Trading mode indicator */}
-          <div className="hidden sm:flex items-center gap-1">
+          {/* Trading mode indicator — clickable to navigate to Ops */}
+          <button
+            className="hidden sm:flex items-center gap-1 cursor-pointer hover:opacity-80 transition-opacity"
+            onClick={handleModeClick}
+            title="Go to Operational Controls"
+          >
             {tradingMode === "live" ? (
-              <span className="badge badge-error badge-sm animate-pulse">LIVE</span>
+              <span className="badge badge-error badge-sm animate-pulse gap-1">
+                LIVE <span className="text-[10px]">&rarr;</span>
+              </span>
             ) : tradingMode === "simulation" ? (
-              <span className="badge badge-ghost badge-sm">SIM</span>
+              <span className="badge badge-ghost badge-sm gap-1">
+                SIM <span className="text-[10px]">&rarr;</span>
+              </span>
             ) : (
-              <span className="badge badge-success badge-sm">PAPER</span>
+              <span className="badge badge-success badge-sm gap-1">
+                PAPER <span className="text-[10px]">&rarr;</span>
+              </span>
             )}
-          </div>
+          </button>
 
           {/* Backend health indicator */}
           <div className="hidden sm:flex items-center gap-1">
@@ -185,8 +212,23 @@ export default function Navbar({ activeView, setActiveView }) {
             </span>
           </div>
 
-          {/* Clerk UserButton */}
-          <UserButton afterSignOutUrl="/" />
+          {/* Clerk UserButton with Admin custom menu items */}
+          <UserButton afterSignOutUrl="/">
+            {isAdmin && (
+              <UserButton.MenuItems>
+                <UserButton.Action
+                  label="Admin Panel"
+                  labelIcon={<span style={{ fontSize: 14 }}>⚙️</span>}
+                  onClick={() => setActiveView("admin")}
+                />
+                <UserButton.Action
+                  label="Ops Controls"
+                  labelIcon={<span style={{ fontSize: 14 }}>🛡️</span>}
+                  onClick={() => setActiveView("ops")}
+                />
+              </UserButton.MenuItems>
+            )}
+          </UserButton>
         </div>
       </div>
 
@@ -197,7 +239,7 @@ export default function Navbar({ activeView, setActiveView }) {
         aria-label="Mobile navigation"
       >
         <div className="flex items-stretch justify-around" style={{ paddingBottom: 'env(safe-area-inset-bottom, 0px)' }}>
-          {NAV_ITEMS.map((item) => (
+          {visibleNavItems.map((item) => (
             <button
               key={item.key}
               onClick={() => setActiveView(item.key)}

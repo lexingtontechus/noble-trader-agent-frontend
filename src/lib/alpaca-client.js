@@ -88,3 +88,16 @@ export async function getPositions(apiKey, secretKey) {
   const result = await alpacaFetch("/positions", { apiKey, secretKey });
   return Array.isArray(result) ? result : [];
 }
+
+/**
+ * Get portfolio history (equity curve over time).
+ * @param {string} apiKey
+ * @param {string} secretKey
+ * @param {{ period?: string, timeframe?: string, date_end?: string, extended_hours?: boolean }} opts
+ *   period: "1D" | "1W" | "1M" | "3M" | "6M" | "1A" | "all"
+ *   timeframe: "1Min" | "5Min" | "15Min" | "1H" | "1D"
+ */
+export async function getPortfolioHistory(apiKey, secretKey, { period = "1M", timeframe = "1D" } = {}) {
+  const params = new URLSearchParams({ period, timeframe });
+  return alpacaFetch(`/account/portfolio/history?${params}`, { apiKey, secretKey });
+}

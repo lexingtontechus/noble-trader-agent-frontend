@@ -1,7 +1,8 @@
 "use client";
 
 import { Show, SignIn } from "@clerk/nextjs";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
+import { useRole } from "@/hooks/useRole";
 import Navbar from "@/components/Navbar";
 import Footer from "@/components/Footer";
 import Dashboard from "@/components/dashboard/Dashboard";
@@ -17,7 +18,21 @@ import { StreamProvider } from "@/context/StreamContext";
 import NotificationToast from "@/components/shared/NotificationToast";
 
 export default function Home() {
+  const { isAdmin, isLoaded: roleLoaded } = useRole();
   const [activeView, setActiveView] = useState("dashboard");
+
+  // Guard: redirect non-admin users away from admin view
+  useEffect(() => {
+    if (activeView === "admin" && roleLoaded && !isAdmin) {
+      setActiveView("dashboard");
+    }
+  }, [activeView, isAdmin, roleLoaded]);
+
+  // Safe view setter that enforces role gating
+  const setSafeActiveView = useCallback((view) => {
+    if (view === "admin" && !isAdmin) return;
+    setActiveView(view);
+  }, [isAdmin]);
 
   // Global error handler to catch toLowerCase/toUpperCase is not a function errors
   useEffect(() => {
@@ -74,7 +89,7 @@ export default function Home() {
         setActiveView("ops");
       } else if ((e.metaKey || e.ctrlKey) && e.key === "9") {
         e.preventDefault();
-        setActiveView("admin");
+        setSafeActiveView("admin");
       }
     };
     window.addEventListener("keydown", handleKeyDown);
@@ -87,7 +102,7 @@ export default function Home() {
       fallback={
         <StreamProvider>
           <div className="min-h-screen flex flex-col">
-            <Navbar activeView={activeView} setActiveView={setActiveView} />
+            <Navbar activeView={activeView} setActiveView={setSafeActiveView} />
             <main className="flex-1 container mx-auto px-4 py-6 pb-20 sm:pb-6 overflow-auto">
               <div key={activeView} className="animate-fade-in-up">
                 {activeView === "dashboard" && <Dashboard />}
@@ -98,7 +113,7 @@ export default function Home() {
                 {activeView === "portfolio" && <PortfolioPage />}
                 {activeView === "renko" && <RenkoPage />}
                 {activeView === "ops" && <OperationalPage />}
-                {activeView === "admin" && <AdminPage />}
+                {activeView === "admin" && isAdmin && <AdminPage />}
               </div>
             </main>
             <Footer />

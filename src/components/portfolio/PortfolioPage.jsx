@@ -2,99 +2,51 @@
 
 import { useState, useEffect, useCallback } from 'react'
 import PortfolioOverview from './PortfolioOverview'
+import LivePnLDashboard from '@/components/operational/LivePnLDashboard'
 import TradingWorkflow from '@/components/trading/TradingWorkflow'
-import { notifyError } from '@/lib/notifications'
+import { usePortfolioData } from '@/hooks/usePortfolioData'
 
 export default function PortfolioPage() {
-  const [positions, setPositions] = useState([])
-  const [account, setAccount] = useState(null)
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState(null)
   const [keysConfigured, setKeysConfigured] = useState(null)
+  const [checkingKeys, setCheckingKeys] = useState(true)
 
-  const fetchPositions = useCallback(async () => {
-    try {
-      const res = await fetch('/api/alpaca/positions')
-      if (res.ok) {
-        const data = await res.json()
-        setPositions(Array.isArray(data) ? data : [])
-      } else if (res.status === 403) {
-        setKeysConfigured(false)
-        setPositions([])
-      }
-    } catch (err) {
-      console.error('Failed to fetch positions:', err)
-      notifyError('Failed to fetch positions')
-      setPositions([])
-    }
-  }, [])
+  // Use the shared portfolio data hook for positions/account
+  const {
+    account,
+    positions,
+    loading,
+    error,
+    lastUpdated,
+    refresh,
+  } = usePortfolioData({ refreshInterval: 10000, enabled: keysConfigured === true })
 
-  const fetchAccount = useCallback(async () => {
-    try {
-      const res = await fetch('/api/alpaca/account')
-      if (res.ok) {
-        const data = await res.json()
-        setAccount(data)
-      } else if (res.status === 403) {
-        setKeysConfigured(false)
-      }
-    } catch (err) {
-      console.error('Failed to fetch account:', err)
-      notifyError('Failed to fetch account data')
-    }
-  }, [])
-
+  // Check Alpaca key status on mount
   const checkKeys = useCallback(async () => {
     try {
       const res = await fetch('/api/clerk/alpaca-keys-status')
       const data = await res.json()
       setKeysConfigured(data.configured === true)
-      return data.configured === true
     } catch {
       setKeysConfigured(false)
-      return false
+    } finally {
+      setCheckingKeys(false)
     }
   }, [])
 
   useEffect(() => {
-    async function init() {
-      setLoading(true)
-      const hasKeys = await checkKeys()
-      if (hasKeys) {
-        await Promise.all([fetchPositions(), fetchAccount()])
-      }
-      setLoading(false)
-    }
-    init()
-  }, [checkKeys, fetchPositions, fetchAccount])
+    checkKeys()
+  }, [checkKeys])
 
-  // Loading state
-  if (loading) {
+  // Loading state (checking keys)
+  if (checkingKeys) {
     return (
       <div className="space-y-6">
         <div className="flex items-center gap-3">
-          <h1 className="text-3xl font-bold text-primary">Portfolio Overview</h1>
-          <span className="badge badge-primary badge-sm">v3.0</span>
+          <h1 className="text-3xl font-bold text-primary">Portfolio</h1>
+          <span className="badge badge-primary badge-sm">P&L</span>
         </div>
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-          {[...Array(4)].map((_, i) => (
-            <div key={i} className="card bg-base-200 shadow-sm">
-              <div className="card-body p-4">
-                <div className="skeleton h-3 w-20 mb-2"></div>
-                <div className="skeleton h-8 w-16"></div>
-              </div>
-            </div>
-          ))}
-        </div>
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-          {[...Array(2)].map((_, i) => (
-            <div key={i} className="card bg-base-200 shadow-lg">
-              <div className="card-body p-4">
-                <div className="skeleton h-6 w-40 mb-3"></div>
-                <div className="skeleton h-20 w-full"></div>
-              </div>
-            </div>
-          ))}
+        <div className="flex items-center justify-center py-12">
+          <span className="loading loading-spinner loading-lg text-primary" />
         </div>
       </div>
     )
@@ -105,8 +57,8 @@ export default function PortfolioPage() {
     return (
       <div className="space-y-6">
         <div className="flex items-center gap-3">
-          <h1 className="text-3xl font-bold text-primary">Portfolio Overview</h1>
-          <span className="badge badge-primary badge-sm">v3.0</span>
+          <h1 className="text-3xl font-bold text-primary">Portfolio</h1>
+          <span className="badge badge-primary badge-sm">P&L</span>
         </div>
         <div className="card bg-base-200 shadow-lg">
           <div className="card-body items-center text-center py-12">
@@ -116,10 +68,10 @@ export default function PortfolioPage() {
             </svg>
             <h3 className="text-lg font-semibold mb-2">Alpaca Keys Required</h3>
             <p className="text-sm text-base-content/60 max-w-md">
-              To view your portfolio overview, configure your Alpaca API keys in the Orders tab first.
+              To view your portfolio P&L and analysis, configure your Alpaca API keys in the Orders tab first.
             </p>
             <p className="text-xs text-base-content/40 mt-2">
-              Go to <strong>Orders → Manage Alpaca Keys</strong> to get started.
+              Go to <strong>Orders &rarr; Manage Alpaca Keys</strong> to get started.
             </p>
           </div>
         </div>
@@ -129,10 +81,23 @@ export default function PortfolioPage() {
 
   return (
     <div className="space-y-8">
+      {/* Page Header */}
+      <div className="flex items-center gap-3">
+        <h1 className="text-3xl font-bold text-primary">Portfolio</h1>
+        <span className="badge badge-primary badge-sm">P&L</span>
+      </div>
+
+      {/* Live P&L Dashboard — equity curve, metrics, positions table */}
+      <LivePnLDashboard />
+
+      {/* Correlation & Optimization Analysis */}
       <PortfolioOverview
         positions={positions}
         account={account}
+        lastUpdated={lastUpdated}
       />
+
+      {/* Trading Workflow */}
       <div className="divider text-base-content/40 uppercase tracking-wider text-sm font-semibold">
         Trading Workflow
       </div>
