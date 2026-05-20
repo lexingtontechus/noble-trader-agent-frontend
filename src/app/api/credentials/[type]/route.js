@@ -2,10 +2,8 @@
  * API Route: /api/credentials/[type]
  *
  * CRUD for user Alpaca credentials (paper/live).
- * Tries Supabase first (encrypted), falls back to Clerk privateMetadata.
- *
- * This dual-path ensures keys can be saved even when the Supabase
- * migration hasn't been run yet, or the encryption functions aren't set up.
+ * Primary storage: Supabase (AES-256-GCM encrypted).
+ * Fallback: Clerk privateMetadata (paper keys only, legacy).
  *
  * GET    — Check if credentials are configured for this type
  * POST   — Save new credentials (encrypted in Supabase, or Clerk as fallback)
@@ -32,22 +30,22 @@ export async function GET(request, { params }) {
     // Try Supabase first
     try {
       const status = await hasCredentials(type);
-      if (status.configured) return Response.json(status);
-    } catch {
-      // Supabase unavailable — fall through to Clerk
+      if (status.configured) return Response.json({ ...status, source: "supabase" });
+    } catch (err) {
+      console.warn("[credentials/GET] Supabase check failed:", err.message);
     }
 
     // Fallback: Clerk privateMetadata (paper only in old system)
     if (type === "paper") {
       try {
         const configured = await hasAlpacaKeys();
-        return Response.json({ configured, isValid: configured ? true : null });
-      } catch {
-        // Clerk also unavailable
+        return Response.json({ configured, isValid: configured ? true : null, source: "clerk" });
+      } catch (err) {
+        console.warn("[credentials/GET] Clerk check also failed:", err.message);
       }
     }
 
-    return Response.json({ configured: false, isValid: null });
+    return Response.json({ configured: false, isValid: null, source: "none" });
   } catch (error) {
     return createApiError(error, { context: "credentials" });
   }
@@ -70,13 +68,14 @@ export async function POST(request, { params }) {
     // Try Supabase first (encrypted storage)
     try {
       const result = await saveCredentials(type, apiKey, secretKey);
+      console.info(`[credentials/POST] Keys saved to Supabase for type=${type}`);
       return Response.json({ ...result, storage: "encrypted" });
     } catch (supabaseErr) {
-      console.warn("[credentials] Supabase save failed, falling back to Clerk:", supabaseErr.message);
+      console.error(`[credentials/POST] Supabase save failed for type=${type}:`, supabaseErr.message);
+      console.error("[credentials/POST] Full error:", supabaseErr.stack || supabaseErr);
 
       // Plan gating check — even in Clerk fallback, enforce live trading plan requirement
       if (type === "live") {
-        // Can't check plan from Supabase if it's down; check Clerk metadata
         try {
           const { auth, clerkClient } = await import("@clerk/nextjs/server");
           const { userId } = await auth();
@@ -92,7 +91,6 @@ export async function POST(request, { params }) {
             }
           }
         } catch {
-          // Can't verify plan — reject live for safety
           return Response.json(
             { error: "Live trading requires a Premium or Institutional plan", code: "PLAN_REQUIRED" },
             { status: 403 }
@@ -104,9 +102,10 @@ export async function POST(request, { params }) {
       if (type === "paper") {
         try {
           await setAlpacaKeys(apiKey, secretKey);
+          console.warn(`[credentials/POST] Fell back to Clerk storage for paper keys — Supabase is not configured correctly`);
           return Response.json({ success: true, credentialType: "paper", storage: "clerk" });
         } catch (clerkErr) {
-          console.error("[credentials] Clerk fallback also failed:", clerkErr.message);
+          console.error("[credentials/POST] Clerk fallback also failed:", clerkErr.message);
           return createApiError(clerkErr, { context: "credentials" });
         }
       }
@@ -118,7 +117,6 @@ export async function POST(request, { params }) {
       );
     }
   } catch (error) {
-    // Preserve the plan-required message since it's already user-friendly
     if (error.message?.includes("Premium") || error.message?.includes("Institutional")) {
       return Response.json({ error: error.message, code: "PLAN_REQUIRED" }, { status: 403 });
     }
@@ -139,8 +137,9 @@ export async function DELETE(request, { params }) {
     try {
       await deleteCredentials(type);
       supabaseDeleted = true;
-    } catch {
-      // Supabase unavailable
+      console.info(`[credentials/DELETE] Keys deleted from Supabase for type=${type}`);
+    } catch (err) {
+      console.warn(`[credentials/DELETE] Supabase delete failed:`, err.message);
     }
 
     // Also clean up Clerk privateMetadata (legacy)

@@ -62,10 +62,10 @@ function decrypt(encoded) {
 }
 
 // ── Supabase admin client ──────────────────────────────────────────────────
+// IMPORTANT: SUPABASE_SERVICE_ROLE_KEY is a server-side-only env var.
+// It bypasses RLS and must NEVER be exposed to the browser (no NEXT_PUBLIC_ prefix).
 const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL;
-const SUPABASE_SERVICE_KEY =
-  process.env.SUPABASE_SERVICE_ROLE_KEY ||
-  process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY;
+const SUPABASE_SERVICE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
 
 let _adminClient = null;
 
@@ -76,12 +76,13 @@ function getServiceClient() {
     throw new Error("Service configuration is incomplete. Please try again later or contact support.");
   }
   if (!SUPABASE_SERVICE_KEY) {
-    console.error("[credentials] Missing SUPABASE_SERVICE_ROLE_KEY / NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY env var");
+    console.error("[credentials] Missing SUPABASE_SERVICE_ROLE_KEY env var — this is required for server-side credential storage. Add it to .env.local (never with NEXT_PUBLIC_ prefix).");
     throw new Error("Service configuration is incomplete. Please try again later or contact support.");
   }
   _adminClient = createClient(SUPABASE_URL, SUPABASE_SERVICE_KEY, {
     auth: { autoRefreshToken: false, persistSession: false },
   });
+  console.info("[credentials] Supabase service client initialized successfully");
   return _adminClient;
 }
 

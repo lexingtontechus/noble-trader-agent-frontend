@@ -7,11 +7,9 @@
 --   2. user_subscriptions — Plan/subscription state (free/premium/institutional)
 --   3. user_onboarding   — Onboarding progress tracking
 --
--- PREREQUISITES:
---   - Supabase project must be provisioned
---   - The `app.encryption_key` database setting must be configured
---     (ALTER DATABASE <db> SET app.encryption_key = '<your-32-char-key>';)
---   - pgcrypto extension requires superuser to enable
+-- NOTE: Encryption is handled in the application layer (Node.js AES-256-GCM)
+-- via the SUPABASE_ENCRYPTION_KEY env var. Encrypted values are stored as
+-- base64-encoded TEXT (not BYTEA) because AES-256-GCM output is base64.
 -- ============================================================
 
 -- ============================================================
@@ -19,7 +17,7 @@
 -- ============================================================
 CREATE EXTENSION IF NOT EXISTS pgcrypto SCHEMA public;
 
-COMMENT ON EXTENSION pgcrypto IS 'Provides cryptographic functions for encrypting API credentials (pgp_sym_encrypt/decrypt)';
+COMMENT ON EXTENSION pgcrypto IS 'Provides cryptographic functions (gen_random_uuid, etc.)';
 
 -- ============================================================
 -- 1. Helper Functions
@@ -39,46 +37,6 @@ $$;
 COMMENT ON FUNCTION public.set_updated_at() IS
   'Trigger function: automatically sets updated_at to current timestamp on row update';
 
--- Encrypt a plaintext value using the app.encryption_key setting
-CREATE OR REPLACE FUNCTION public.encrypt_credential(plain_text TEXT)
-RETURNS BYTEA
-LANGUAGE plpgsql
-STABLE
-AS $$
-DECLARE
-  enc_key TEXT;
-BEGIN
-  enc_key := current_setting('app.encryption_key', true);
-  IF enc_key IS NULL OR enc_key = '' THEN
-    RAISE EXCEPTION 'app.encryption_key is not set. Configure it with: ALTER DATABASE %% SET app.encryption_key = ''<key>''';
-  END IF;
-  RETURN pgp_sym_encrypt(plain_text, enc_key);
-END;
-$$;
-
-COMMENT ON FUNCTION public.encrypt_credential(TEXT) IS
-  'Encrypts a plaintext string using pgp_sym_encrypt with the app.encryption_key database setting. Returns BYTEA ciphertext.';
-
--- Decrypt a ciphertext value using the app.encryption_key setting
-CREATE OR REPLACE FUNCTION public.decrypt_credential(cipher_text BYTEA)
-RETURNS TEXT
-LANGUAGE plpgsql
-STABLE
-AS $$
-DECLARE
-  enc_key TEXT;
-BEGIN
-  enc_key := current_setting('app.encryption_key', true);
-  IF enc_key IS NULL OR enc_key = '' THEN
-    RAISE EXCEPTION 'app.encryption_key is not set. Configure it with: ALTER DATABASE %% SET app.encryption_key = ''<key>''';
-  END IF;
-  RETURN pgp_sym_decrypt(cipher_text, enc_key);
-END;
-$$;
-
-COMMENT ON FUNCTION public.decrypt_credential(BYTEA) IS
-  'Decrypts a BYTEA ciphertext using pgp_sym_decrypt with the app.encryption_key database setting. Returns plaintext TEXT.';
-
 -- ============================================================
 -- 2. user_credentials table
 -- ============================================================
@@ -86,8 +44,8 @@ CREATE TABLE IF NOT EXISTS public.user_credentials (
   id                    UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
   clerk_user_id         TEXT        NOT NULL,
   credential_type       TEXT        NOT NULL CHECK (credential_type IN ('paper', 'live')),
-  api_key_encrypted     BYTEA       NOT NULL,
-  secret_key_encrypted  BYTEA       NOT NULL,
+  api_key_encrypted     TEXT        NOT NULL,
+  secret_key_encrypted  TEXT        NOT NULL,
   is_valid              BOOLEAN     DEFAULT true,
   last_validated_at     TIMESTAMPTZ,
   created_at            TIMESTAMPTZ DEFAULT now(),
@@ -103,8 +61,8 @@ COMMENT ON TABLE public.user_credentials IS
 COMMENT ON COLUMN public.user_credentials.id IS 'Primary key';
 COMMENT ON COLUMN public.user_credentials.clerk_user_id IS 'Clerk user ID — identifies the user in the auth system';
 COMMENT ON COLUMN public.user_credentials.credential_type IS 'Key environment: ''paper'' for paper-trading, ''live'' for real-money';
-COMMENT ON COLUMN public.user_credentials.api_key_encrypted IS 'PGP-encrypted Alpaca API key (use encrypt_credential() to insert)';
-COMMENT ON COLUMN public.user_credentials.secret_key_encrypted IS 'PGP-encrypted Alpaca secret key (use encrypt_credential() to insert)';
+COMMENT ON COLUMN public.user_credentials.api_key_encrypted IS 'AES-256-GCM encrypted Alpaca API key (base64-encoded, encrypted in application layer)';
+COMMENT ON COLUMN public.user_credentials.secret_key_encrypted IS 'AES-256-GCM encrypted Alpaca secret key (base64-encoded, encrypted in application layer)';
 COMMENT ON COLUMN public.user_credentials.is_valid IS 'True if keys passed last validation check; set to false on auth failure';
 COMMENT ON COLUMN public.user_credentials.last_validated_at IS 'Timestamp of the most recent successful key validation';
 COMMENT ON COLUMN public.user_credentials.created_at IS 'Row creation timestamp';
@@ -300,20 +258,3 @@ GRANT USAGE ON SCHEMA public TO anon, authenticated;
 GRANT SELECT, INSERT, UPDATE, DELETE ON public.user_credentials TO authenticated;
 GRANT SELECT ON public.user_subscriptions TO authenticated;
 GRANT SELECT, INSERT, UPDATE ON public.user_onboarding TO authenticated;
-
--- ============================================================
--- 6. Validation: ensure encryption key is configurable
--- ============================================================
--- This block is informational — it will raise a notice at migration time
--- if the key is not yet set. It does NOT block the migration.
-DO $$
-BEGIN
-  IF current_setting('app.encryption_key', true) IS NULL THEN
-    RAISE NOTICE
-      'app.encryption_key is not set. Encrypted credential functions will fail until configured. '
-      'Run: ALTER DATABASE %% SET app.encryption_key = ''<your-secret-key>''';
-  ELSE
-    RAISE NOTICE 'app.encryption_key is configured. Encryption functions are ready.';
-  END IF;
-END;
-$$;
