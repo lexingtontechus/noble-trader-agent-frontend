@@ -23,6 +23,7 @@ import { useState, useEffect, useCallback, useRef } from "react";
  *   refresh: () => Promise<void>,
  *   totalUnrealizedPnl: number,
  *   totalUnrealizedPnlPc: number,
+ *   totalMarketValue: number,
  *   dayPnl: number,
  *   dayPnlPc: number,
  * }}
@@ -182,6 +183,7 @@ export function usePortfolioData({ refreshInterval = 10000, enabled = true } = {
     refresh,
     totalUnrealizedPnl,
     totalUnrealizedPnlPc,
+    totalMarketValue,
     dayPnl,
     dayPnlPc,
   };

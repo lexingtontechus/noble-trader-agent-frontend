@@ -47,6 +47,7 @@ export default function LivePnLDashboard({ compact = false }) {
     refresh,
     totalUnrealizedPnl,
     totalUnrealizedPnlPc,
+    totalMarketValue,
     dayPnl,
     dayPnlPc,
   } = usePortfolioData({ refreshInterval: 10000 });
