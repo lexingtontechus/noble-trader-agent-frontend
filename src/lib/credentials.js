@@ -18,14 +18,18 @@ import { createClient } from "@supabase/supabase-js";
 //  2. Call the encrypt_credential() / decrypt_credential() DB functions
 //     which require the app.encryption_key setting (not available to anon key)
 const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL;
-const SUPABASE_SERVICE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
+// Service role key: used for credential encryption/decryption RPC calls and RLS bypass
+// Named NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY in Vercel (it's actually the service role JWT)
+const SUPABASE_SERVICE_KEY =
+  process.env.SUPABASE_SERVICE_ROLE_KEY ||
+  process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY;
 
 let _adminClient = null;
 
 function getServiceClient() {
   if (_adminClient) return _adminClient;
   if (!SUPABASE_URL) throw new Error("Missing NEXT_PUBLIC_SUPABASE_URL");
-  if (!SUPABASE_SERVICE_KEY) throw new Error("Missing SUPABASE_SERVICE_ROLE_KEY");
+  if (!SUPABASE_SERVICE_KEY) throw new Error("Missing SUPABASE_SERVICE_ROLE_KEY or NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY");
   _adminClient = createClient(SUPABASE_URL, SUPABASE_SERVICE_KEY, {
     auth: { autoRefreshToken: false, persistSession: false },
   });
