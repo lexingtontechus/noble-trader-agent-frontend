@@ -1,7 +1,7 @@
 # Noble Trader Agent — Project State
 
-**Last Updated:** 2026-05-19
-**Version:** v5.4.0 (Renko HFT Pipeline + Backtesting + Redis Caching + SSE Streaming)
+**Last Updated:** 2026-05-21
+**Version:** v5.5.0 (Renko HFT Pipeline + Backtesting + Redis Caching + SSE Streaming + Auth Hardening)
 
 ---
 
@@ -104,56 +104,57 @@ Redis L1 (fastest, 4h TTL) → Supabase L2 (persistent, 4h TTL) → Yahoo Financ
 
 ### v5.0 Renko HFT Pipeline
 
-| Endpoint | Method | Description |
-|----------|--------|-------------|
-| `/renko/tick` | POST | Process single tick through 6-layer pipeline |
-| `/renko/tick/batch` | POST | Batch tick processing (backtest/warmup) |
-| `/renko/state` | GET | Current pipeline state snapshot |
-| `/renko/stats` | GET | Comprehensive pipeline statistics |
-| `/renko/bricks` | GET | Recent Renko bricks (last 500) |
-| `/renko/classified` | GET | Bricks with swing labels (HH/HL/LH/LL) |
-| `/renko/signals` | GET | Pattern signals history |
-| `/renko/trades` | GET | Trade journal records |
-| `/renko/swing-points` | GET | Detected swing points |
-| `/renko/regime` | POST | Update HMM regime for gate filter |
-| `/renko/equity` | POST | Update account equity |
-| `/renko/config` | POST | Update pipeline configuration (resets pipeline) |
-| `/renko/reset` | POST | Reset pipeline for a symbol |
-| `/renko/backtest/stats` | GET | Backtest/trading statistics from journal |
-| `/renko/backtest/run/stream` | POST | SSE streaming backtest with progressive chunked results |
-| `/health` | GET | Health check + Discord status |
+| Endpoint | Method | Description | Auth Level |
+|----------|--------|-------------|------------|
+| `/renko/tick` | POST | Process single tick through 6-layer pipeline | admin/trader |
+| `/renko/tick/batch` | POST | Batch tick processing (backtest/warmup) | admin/trader |
+| `/renko/state` | GET | Current pipeline state snapshot | any role |
+| `/renko/stats` | GET | Comprehensive pipeline statistics | any role |
+| `/renko/bricks` | GET | Recent Renko bricks (last 500) | any role |
+| `/renko/classified` | GET | Bricks with swing labels (HH/HL/LH/LL) | any role |
+| `/renko/signals` | GET | Pattern signals history | any role |
+| `/renko/trades` | GET | Trade journal records | any role |
+| `/renko/swing-points` | GET | Detected swing points | any role |
+| `/renko/regime` | POST | Update HMM regime for gate filter | admin/trader |
+| `/renko/equity` | POST | Update account equity | admin/trader |
+| `/renko/config` | POST | Update pipeline configuration (resets pipeline) | admin |
+| `/renko/reset` | POST | Reset pipeline for a symbol | admin |
+| `/renko/backtest/stats` | GET | Backtest/trading statistics from journal | any role |
+| `/renko/backtest/run/stream` | POST | SSE streaming backtest with progressive chunked results | admin/trader |
+| `/health` | GET | Health check + Discord status | any role |
 
 ### v2.x-v4.0 Regime Platform Endpoints (also deployed)
 
-| Endpoint | Method | Description |
-|----------|--------|-------------|
-| `/regime/detect` | POST | HMM-based regime classification |
-| `/size/kelly` | POST | Regime-gated fractional Kelly sizing |
-| `/risk/analyse` | POST | VaR, CVaR, drawdown analysis |
-| `/analyse/full` | POST | One-shot: regime + sizing + risk |
-| `/simulate/{symbol}` | POST | Markov-chain regime simulation |
-| `/portfolio` | GET | Multi-symbol aggregated regime + risk |
-| `/correlation/detect` | POST | DCC-based portfolio correlation regime |
-| `/optimise/full` | POST | Drawdown-controlled max-Sharpe |
-| `/strategy/signal` | POST | Strategy signal generation |
-| `/backtest/run` | POST | Backtest execution |
-| `/backtest/history` | GET | Paginated list of saved backtest results |
-| `/backtest/{id}` | GET | Full backtest result by ID |
-| `/backtest/compare` | POST | Side-by-side comparison of saved results |
-| `/backtest/optimize` | POST | Parameter grid sweep (max 50 combos) |
-| `/backtest/export` | POST | Export result as CSV/JSON |
-| `/backtest/{id}` | DELETE | Delete a saved backtest result |
-| `/tda/features` | POST | TDA feature extraction |
-| `/observation/build` | POST | 24-feature HMM observation vector |
-| `/stream/seed` | POST | Seed historical prices |
-| `/stream/tick` | POST | Ingest single tick |
-| `/stream/sessions` | GET | List active streaming sessions |
-| `/ws/{symbol}` | WS | WebSocket stream |
-| `/sse/{symbol}` | GET | SSE stream |
-| `/gpu/capabilities` | GET | GPU HMM backend info |
-| `/gpu/benchmark` | POST | HMM fit/predict latency benchmark |
-| `/feeds/start` | POST | Start Alpaca/Binance/IB feed |
-| `/feeds/status` | GET | Feed adapter health |
+| Endpoint | Method | Description | Auth Level |
+|----------|--------|-------------|------------|
+| `/regime/detect` | POST | HMM-based regime classification | admin/trader |
+| `/size/kelly` | POST | Regime-gated fractional Kelly sizing | admin/trader |
+| `/risk/analyse` | POST | VaR, CVaR, drawdown analysis | admin/trader |
+| `/analyse/full` | POST | One-shot: regime + sizing + risk | admin/trader |
+| `/simulate/{symbol}` | POST | Markov-chain regime simulation | admin/trader |
+| `/portfolio` | GET | Multi-symbol aggregated regime + risk | any role |
+| `/correlation/detect` | POST | DCC-based portfolio correlation regime | admin/trader |
+| `/optimise/full` | POST | Drawdown-controlled max-Sharpe | admin/trader |
+| `/strategy/signal` | POST | Strategy signal generation | admin/trader |
+| `/backtest/run` | POST | Backtest execution | admin/trader |
+| `/backtest/history` | GET | Paginated list of saved backtest results | any role |
+| `/backtest/{id}` | GET | Full backtest result by ID | any role |
+| `/backtest/compare` | POST | Side-by-side comparison of saved results | admin/trader |
+| `/backtest/optimize` | POST | Parameter grid sweep (max 50 combos) | admin/trader |
+| `/backtest/export` | POST | Export result as CSV/JSON | admin/trader |
+| `/backtest/{id}` | DELETE | Delete a saved backtest result | admin |
+| `/tda/features` | POST | TDA feature extraction | admin/trader |
+| `/observation/build` | POST | 24-feature HMM observation vector | admin/trader |
+| `/stream/seed` | POST | Seed historical prices | admin/trader |
+| `/stream/tick` | POST | Ingest single tick | admin/trader |
+| `/stream/sessions` | GET | List active streaming sessions | any role |
+| `/ws/{symbol}` | WS | WebSocket stream | any role |
+| `/sse/{symbol}` | GET | SSE stream (auth required) | any role |
+| `/sse/alerts` | GET | Global SSE alert stream | any role |
+| `/gpu/capabilities` | GET | GPU HMM backend info | any role |
+| `/gpu/benchmark` | POST | HMM fit/predict latency benchmark | admin/trader |
+| `/feeds/start` | POST | Start Alpaca/Binance/IB feed | admin/trader |
+| `/feeds/status` | GET | Feed adapter health | any role |
 
 ---
 
@@ -243,6 +244,10 @@ CLERK_SECRET_KEY=
 | 15 | **Missing backtest endpoints** | Added /backtest/optimize (grid sweep), /backtest/export (CSV/JSON) | ✅ Implemented |
 | 16 | **Missing backtest BFF routes** | Added /api/backtest/optimize and /api/backtest/export BFF proxies | ✅ Implemented |
 | 17 | **Missing backtest client helpers** | Added 6 functions to fastapi-client.js (history, detail, compare, delete, optimize, export) | ✅ Implemented |
+| 18 | **SSE endpoints had no auth** | Added `get_authed_user` dependency to `/sse/{symbol}` and `/sse/alerts` | ✅ Fixed |
+| 19 | **Renko write ops allowed viewers** | Upgraded tick/batch/backtest endpoints from `get_authed_user` to `require_write` | ✅ Fixed |
+| 20 | **JWT claims were null** | Added "server" JWT template support + Clerk API enrichment fallback | ✅ Fixed |
+| 21 | **Role system inconsistent** | Unified default to "viewer", added `useRole().canAccess()`, server sync | ✅ Fixed |
 
 ### Pending 🔲
 
@@ -402,11 +407,26 @@ The mode is determined entirely by the credentials passed, not by a config flag.
 
 ## Auth Flow
 
-1. Clerk signs in user → JWT token extracted via `auth().getToken({ template: 'server' })`
-2. BFF API routes forward `Authorization: Bearer <token>` to FastAPI
-3. FastAPI validates via Clerk JWKS (`get_authed_user()`)
-4. Alpaca keys stored in Clerk `private.metadata` → retrieved via BFF `proxy.js`
-5. **DO NOT modify `proxy.js`** — it handles Alpaca key management
+1. Clerk signs in user → session ID available via `auth().sessionId`
+2. BFF routes call `getClerkJWT(sessionId)` which tries "server" JWT template first, then default JWT
+3. BFF forwards `Authorization: Bearer <token>` to FastAPI backend
+4. FastAPI validates via Clerk JWKS (`get_authed_user()`)
+5. If JWT claims are null (no template), backend enriches via Clerk API (`_enrich_from_clerk_api()`, 5-min cache)
+6. All 57 backend endpoints now require auth (SSE endpoints fixed, renko write ops upgraded)
+7. Alpaca keys stored in Clerk `private.metadata` → retrieved via BFF `proxy.js`
+8. **DO NOT modify `proxy.js`** — it handles Alpaca key management
+
+### Role System
+
+| Role | Access | Default |
+|------|--------|----------|
+| `admin` | Full access (config, reset, kill-switch, all write ops) | No |
+| `trader` | Read + write (tick ingestion, backtests, regime, equity) | No |
+| `viewer` | Read-only (state, stats, bricks, signals, trades) | **Yes** |
+
+- Client: `useRole()` hook with `canAccess(role)` + server sync via `/api/auth/role`
+- Server: `clerk-metadata.js` → `getRoleInfo()`
+- UI: `<RoleGate require="trader">` with loading + `requireServerSync`
 
 ---
 

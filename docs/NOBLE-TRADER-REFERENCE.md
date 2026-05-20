@@ -1,7 +1,7 @@
 # Noble Trader Agent — Complete Project Reference
 
-> **Last Updated**: 2026-05-20  
-> **Version**: v3.1  
+> **Last Updated**: 2026-05-21  
+> **Version**: v3.2  
 > **Organization**: Lexington Tech LLC  
 > **License**: MIT  
 
@@ -696,9 +696,48 @@ A/B test variant assignment is **deterministic by symbol name** using a hash fun
 ### Authentication Flow
 
 1. **Clerk** handles user authentication (sign-up, sign-in, session management)
-2. **Clerk JWT** is forwarded to FastAPI backend via BFF routes
+2. **Clerk JWT** is obtained via REST API with "server" template, then forwarded to FastAPI backend via BFF routes
 3. **Supabase RLS** uses `auth.jwt() ->> 'sub'` for user-scoped data access
 4. **Service role key** bypasses RLS for server-side operations (credential CRUD, campaign orchestration)
+
+### JWT Resolution Cascade (BFF → FastAPI)
+
+The BFF route handlers (e.g., `/api/renko/[action]`) obtain a JWT via `getFastAPIAuthHeaders()` which tries methods in priority order:
+
+1. **Clerk REST API JWT with "server" template** — Calls `POST /v1/sessions/{sessionId}/tokens` with `body: {template: "server"}`. The "server" JWT template (configured in Clerk Dashboard) injects email, first_name, last_name, username, and role claims into the JWT. This is the primary method and works reliably in serverless.
+
+2. **Clerk REST API default JWT** — If the "server" template doesn't exist yet, falls back to `body: {}` which returns a default JWT with only sub/iss/exp claims.
+
+3. **`auth().getToken()`** — Standard Clerk SDK method. Tries `{template: "server"}` first, then default. May return null in serverless edge cases.
+
+4. **`__session` cookie** — Keyless/dev mode fallback.
+
+5. **`X-API-Key`** — Service-to-service fallback for cron jobs.
+
+### Backend Clerk API Enrichment
+
+When the JWT doesn't contain email/name claims (i.e., the "server" template hasn't been configured), the FastAPI backend automatically calls the Clerk Backend API (`GET /v1/users/{sub}`) to fill in user profile info. Results are cached for 5 minutes per user.
+
+### Clerk JWT Template Setup
+
+For zero-latency claims (no backend API call needed), create a JWT template in Clerk Dashboard → Paths → JWT Templates:
+
+- **Template name**: `server`
+- **Claims**: `{"email": "{{user.primary_email_address}}", "first_name": "{{user.first_name}}", "last_name": "{{user.last_name}}", "username": "{{user.username}}", "role": "{{user.private_metadata.role}}"}`
+
+### Role System
+
+Roles are unified across client and server:
+
+| Role | Access Level | Default |
+|------|-------------|--------|
+| `admin` | Full access — all endpoints, configuration, kill-switch | No |
+| `trader` | Read + write — sizing, risk, streaming, backtests, tick ingestion | No |
+| `viewer` | Read-only — state, stats, bricks, signals, trades | **Yes** (default) |
+
+- **Client-side**: `useRole()` hook with `canAccess(role)` helper and optional server sync via `/api/auth/role`
+- **Server-side**: `clerk-metadata.js` → `getRoleInfo()` returns same shape
+- **RoleGate component**: `<RoleGate require="trader">` with loading state and `requireServerSync` prop for sensitive ops
 
 ### Credential Encryption
 
@@ -813,6 +852,11 @@ The `<GracefulError>` component (`src/components/shared/GracefulError.jsx`) rend
 ---
 
 ## 10. API Routes Reference
+
+**Note**: All `/api/renko/*` BFF routes forward the Clerk JWT to the FastAPI backend. The backend enforces role-based access:
+- Read endpoints (state, stats, bricks, etc.): any authenticated role
+- Write endpoints (tick, backtest, regime, equity): requires `admin` or `trader` role
+- Admin endpoints (config, reset): requires `admin` role
 
 ### Campaign Routes
 
@@ -1029,6 +1073,17 @@ The FastAPI backend on Render spins down after inactivity. The BFF client (`fast
 ---
 
 ## 15. Known Issues & Pending Work
+
+### Recent Changes (v3.2 — 2026-05-21)
+
+| Change | Details |
+|--------|--------|
+| JWT template system | `getClerkJWT()` tries "server" template first for enriched claims (email, name, role) |
+| Backend enrichment fallback | `_enrich_from_clerk_api()` fills null claims via Clerk Backend API (5-min cache) |
+| Auth wired to all 57 endpoints | SSE endpoints now require auth; renko write ops require admin/trader role |
+| Role system unified | Default role is "viewer" everywhere; `useRole()` + `canAccess()` + server sync |
+| RoleGate component | Loading state + `requireServerSync` prop for sensitive operations |
+| Supabase Vault cron | All 5 cron jobs migrated from GUC to `vault.read_secret()` |
 
 ### Current Issues
 
