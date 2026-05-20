@@ -2,6 +2,12 @@
 
 import { useState } from 'react';
 
+/**
+ * AlpacaKeySetup — Manages Alpaca paper trading API keys.
+ *
+ * Now uses the unified credential system (/api/credentials/paper)
+ * which stores keys encrypted in Supabase with Clerk privateMetadata fallback.
+ */
 export default function AlpacaKeySetup({ onConfigured, onRemoved, isManaging = false }) {
   const [apiKey, setApiKey] = useState('');
   const [secretKey, setSecretKey] = useState('');
@@ -23,7 +29,7 @@ export default function AlpacaKeySetup({ onConfigured, onRemoved, isManaging = f
     setSuccess('');
 
     try {
-      const res = await fetch('/api/clerk/alpaca-keys', {
+      const res = await fetch('/api/credentials/paper', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ apiKey: apiKey.trim(), secretKey: secretKey.trim() }),
@@ -52,7 +58,7 @@ export default function AlpacaKeySetup({ onConfigured, onRemoved, isManaging = f
     setSuccess('');
 
     try {
-      const res = await fetch('/api/clerk/alpaca-keys', {
+      const res = await fetch('/api/credentials/paper', {
         method: 'DELETE',
       });
 
@@ -111,13 +117,13 @@ export default function AlpacaKeySetup({ onConfigured, onRemoved, isManaging = f
     return (
       <div className="card bg-base-200 shadow">
         <div className="card-body p-4">
-          <h3 className="card-title text-lg text-primary">Alpaca Key Manager</h3>
+          <h3 className="card-title text-lg text-primary">Paper Trading Keys</h3>
 
           <div className="alert alert-info mb-3">
             <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" className="stroke-current shrink-0 w-5 h-5">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
             </svg>
-            <span className="text-xs">Keys are stored in Clerk private metadata (server-side only). They never reach the browser.</span>
+            <span className="text-xs">Your keys are encrypted to ensure safety and security. They are stored server-side and never reach the browser.</span>
           </div>
 
           {error && (
@@ -196,9 +202,9 @@ export default function AlpacaKeySetup({ onConfigured, onRemoved, isManaging = f
   return (
     <div className="card bg-base-200 shadow-lg max-w-lg mx-auto">
       <div className="card-body p-6">
-        <h3 className="card-title text-lg text-primary mb-1">Configure Alpaca API Keys</h3>
+        <h3 className="card-title text-lg text-primary mb-1">Connect Your Alpaca Account</h3>
         <p className="text-sm text-base-content/60 mb-4">
-          Connect your Alpaca paper trading account to view orders and positions.
+          Enter your Alpaca paper trading API keys to view orders and positions.
         </p>
 
         {/* Security Notice */}
@@ -206,7 +212,7 @@ export default function AlpacaKeySetup({ onConfigured, onRemoved, isManaging = f
           <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" className="stroke-current shrink-0 w-5 h-5">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
           </svg>
-          <span className="text-xs">Keys stored securely in Clerk private metadata (server-side only). They never reach the client directly.</span>
+          <span className="text-xs">Your keys are encrypted to ensure safety and security. They are stored server-side and never reach the browser directly.</span>
         </div>
 
         {/* API Key Field */}
@@ -248,10 +254,10 @@ export default function AlpacaKeySetup({ onConfigured, onRemoved, isManaging = f
           {saving ? (
             <>
               <span className="loading loading-spinner loading-sm"></span>
-              Saving...
+              Connecting...
             </>
           ) : (
-            'Save Keys'
+            'Connect Paper Account'
           )}
         </button>
 

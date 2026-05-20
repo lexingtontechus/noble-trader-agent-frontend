@@ -202,7 +202,7 @@ export default function CredentialCard({
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
         </svg>
         <span className="text-xs">
-          Keys are encrypted at rest in Supabase using pgp_sym_encrypt and never exposed to the browser. Only a configured/invalid status is returned to the client.
+          Your keys are encrypted to ensure safety and security. They are never exposed to the browser — only a configured/invalid status is returned.
         </span>
       </div>
 

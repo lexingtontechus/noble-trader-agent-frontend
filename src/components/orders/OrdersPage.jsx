@@ -33,11 +33,11 @@ export default function OrdersPage() {
   const [positionsError, setPositionsError] = useState(null); // { message, code } | null
   const [showKeyManager, setShowKeyManager] = useState(false);
 
-  // Check if Alpaca keys are configured
+  // Check if Alpaca keys are configured (unified credential system)
   const checkKeys = useCallback(async () => {
     setCheckingKeys(true);
     try {
-      const res = await fetch('/api/clerk/alpaca-keys-status');
+      const res = await fetch('/api/credentials/paper');
       const data = await res.json();
       setKeysConfigured(data.configured === true);
     } catch {
