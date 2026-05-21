@@ -22,6 +22,7 @@ const GET_ACTIONS = new Set([
   "reconcile-status",
   "reconcile-positions",
   "executor-status",
+  "throttle-status",
 ]);
 
 // Map frontend action to backend path
@@ -47,8 +48,9 @@ function actionToPath(action) {
     "reconcile-run": "/reconcile/run",
     "reconcile-order": "/reconcile/order",
     "reconcile-positions": "/reconcile/positions",
-    // Executor
+    // Executor + Throttle
     "executor-status": "/executor/status",
+    "throttle-status": "/throttle/status",
   };
   return mapping[action] || `/${action}`;
 }

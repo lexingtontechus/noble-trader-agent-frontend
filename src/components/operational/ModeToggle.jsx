@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback } from "react";
 export default function ModeToggle({ bffFetch }) {
   const [mode, setMode] = useState("paper");
   const [modeState, setModeState] = useState(null);
+  const [modeHealth, setModeHealth] = useState(null);
   const [loading, setLoading] = useState(false);
   const [showConfirmModal, setShowConfirmModal] = useState(false);
   const [targetMode, setTargetMode] = useState(null);
@@ -29,7 +30,24 @@ export default function ModeToggle({ bffFetch }) {
     }
   }, [bffFetch]);
 
-  useEffect(() => { fetchMode(); }, [fetchMode]);
+  const fetchModeHealth = useCallback(async () => {
+    try {
+      const res = await bffFetch("/operational/mode/health");
+      if (res.ok) {
+        setModeHealth(await res.json());
+      }
+    } catch (e) {
+      // Health check is optional
+    }
+  }, [bffFetch]);
+
+  useEffect(() => { fetchMode(); fetchModeHealth(); }, [fetchMode, fetchModeHealth]);
+
+  // Refresh mode every 30s to stay in sync with backend
+  useEffect(() => {
+    const interval = setInterval(fetchMode, 30000);
+    return () => clearInterval(interval);
+  }, [fetchMode]);
 
   const handleRequestModeChange = async (newMode) => {
     setLoading(true);
@@ -47,11 +65,12 @@ export default function ModeToggle({ bffFetch }) {
         setCheckboxes({ tested: false, understand: false, riskLimits: false, verifiedKeys: false });
         setShowConfirmModal(true);
       } else {
-        const err = await res.json();
-        alert(err.detail || "Mode change request failed");
+        const err = await res.json().catch(() => ({ detail: "Mode change request failed" }));
+        alert(err.detail || err.error || "Mode change request failed");
       }
     } catch (e) {
       console.error("Mode request error:", e);
+      alert("Failed to connect to backend");
     }
     setLoading(false);
   };
@@ -73,47 +92,65 @@ export default function ModeToggle({ bffFetch }) {
         setModeState(data);
         setShowConfirmModal(false);
         setConfirmationToken(null);
+        fetchModeHealth();
       } else {
-        const err = await res.json();
-        alert(err.detail || "Mode confirmation failed");
+        const err = await res.json().catch(() => ({ detail: "Mode confirmation failed" }));
+        alert(err.detail || err.error || "Mode confirmation failed");
       }
     } catch (e) {
       console.error("Mode confirm error:", e);
+      alert("Failed to connect to backend");
     }
     setLoading(false);
   };
 
   const allChecked = Object.values(checkboxes).every(Boolean);
   const isLiveMode = mode === "live";
+  const isSimulation = mode === "simulation";
+
+  const modeBadge = () => {
+    if (isLiveMode) return <span className="badge badge-error badge-lg animate-pulse">LIVE TRADING</span>;
+    if (isSimulation) return <span className="badge badge-ghost badge-lg">SIMULATION</span>;
+    return <span className="badge badge-success badge-lg">PAPER TRADING</span>;
+  };
 
   return (
     <div className={`card shadow-xl border ${isLiveMode ? "border-error bg-error/5" : "border-base-300 bg-base-100"}`}>
       <div className="card-body">
         <div className="flex items-center justify-between">
           <h2 className="card-title">Trading Mode</h2>
-          {isLiveMode ? (
-            <span className="badge badge-error badge-lg animate-pulse">LIVE TRADING</span>
-          ) : mode === "simulation" ? (
-            <span className="badge badge-ghost badge-lg">SIMULATION</span>
-          ) : (
-            <span className="badge badge-success badge-lg">PAPER TRADING</span>
-          )}
+          {modeBadge()}
         </div>
 
         {/* Current Mode Info */}
-        <div className="mt-2">
+        <div className="mt-2 space-y-1">
           <div className="text-sm opacity-70">
-            Current mode: <strong>{mode.toUpperCase()}</strong>
+            Current mode: <strong className={isLiveMode ? "text-error" : ""}>{mode.toUpperCase()}</strong>
             {modeState?.previous_mode && (
-              <span className="ml-2">(was {modeState.previous_mode})</span>
+              <span className="ml-2 text-xs">(was {modeState.previous_mode})</span>
             )}
-            {modeState?.last_changed_at && (
-              <span className="ml-2 text-xs">
-                changed {new Date(modeState.last_changed_at).toLocaleString()} by {modeState.last_changed_by}
+          </div>
+          {modeState?.last_changed_at && (
+            <div className="text-xs opacity-50">
+              Last changed {new Date(modeState.last_changed_at).toLocaleString()}
+              {modeState.last_changed_by && ` by ${modeState.last_changed_by}`}
+            </div>
+          )}
+        </div>
+
+        {/* Mode Health */}
+        {modeHealth && (
+          <div className="flex gap-2 mt-1">
+            <span className={`badge badge-sm ${modeHealth.healthy ? "badge-success" : "badge-error"}`}>
+              {modeHealth.healthy ? "Healthy" : "Unhealthy"}
+            </span>
+            {modeHealth.executor_url && (
+              <span className="text-xs opacity-50 font-mono truncate max-w-[200px]">
+                {modeHealth.executor_url}
               </span>
             )}
           </div>
-        </div>
+        )}
 
         {/* Mode Switch Buttons */}
         <div className="divider mt-1 mb-1"></div>
@@ -125,6 +162,15 @@ export default function ModeToggle({ bffFetch }) {
               disabled={loading}
             >
               Switch to Paper
+            </button>
+          )}
+          {mode !== "simulation" && mode !== "live" && (
+            <button
+              className="btn btn-ghost btn-sm flex-1"
+              onClick={() => handleRequestModeChange("simulation")}
+              disabled={loading}
+            >
+              Simulation
             </button>
           )}
           {mode !== "live" && (
@@ -140,7 +186,8 @@ export default function ModeToggle({ bffFetch }) {
 
         {isLiveMode && (
           <div className="alert alert-error mt-2 text-sm">
-            Real money is at risk. All orders will be executed on the live Alpaca API.
+            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+            <span>Real money is at risk. All orders execute on the live Alpaca API.</span>
           </div>
         )}
 
@@ -152,7 +199,8 @@ export default function ModeToggle({ bffFetch }) {
                 <>
                   <h3 className="font-bold text-lg text-error">LIVE TRADING ACTIVATION</h3>
                   <div className="alert alert-error mt-2">
-                    <span>You are about to switch to LIVE TRADING. Real money will be at risk.</span>
+                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+                    <span>You are about to switch to <strong>LIVE TRADING</strong>. Real money will be at risk. Losses are irreversible.</span>
                   </div>
                   <div className="form-control mt-4 space-y-2">
                     <label className="label cursor-pointer justify-start gap-3">
@@ -175,9 +223,10 @@ export default function ModeToggle({ bffFetch }) {
                   <div className="form-control mt-4">
                     <label className="label"><span className="label-text font-bold">Type &quot;I UNDERSTAND THE RISKS&quot; to confirm:</span></label>
                     <input
-                      type="text" className="input input-bordered input-error w-full"
+                      type="text" className="input input-bordered input-error w-full font-mono"
                       value={acknowledgmentText} onChange={(e) => setAcknowledgmentText(e.target.value)}
                       placeholder="I UNDERSTAND THE RISKS"
+                      autoComplete="off"
                     />
                   </div>
                   <div className="modal-action">
@@ -193,12 +242,12 @@ export default function ModeToggle({ bffFetch }) {
                 </>
               ) : (
                 <>
-                  <h3 className="font-bold text-lg">Switch to Paper Trading</h3>
-                  <p className="py-4">This will switch from live to paper trading mode. All open live orders will be cancelled as a safety measure.</p>
+                  <h3 className="font-bold text-lg">Switch to {targetMode === "simulation" ? "Simulation" : "Paper Trading"}</h3>
+                  <p className="py-4">This will switch from {mode} to {targetMode} trading mode{mode === "live" ? ". All open live orders will be cancelled as a safety measure." : "."}</p>
                   <div className="modal-action">
                     <button className="btn btn-ghost" onClick={() => setShowConfirmModal(false)}>Cancel</button>
                     <button className="btn btn-success" disabled={loading} onClick={handleConfirmModeChange}>
-                      {loading ? <span className="loading loading-spinner loading-xs"></span> : "Switch to Paper"}
+                      {loading ? <span className="loading loading-spinner loading-xs"></span> : `Switch to ${targetMode === "simulation" ? "Simulation" : "Paper"}`}
                     </button>
                   </div>
                 </>

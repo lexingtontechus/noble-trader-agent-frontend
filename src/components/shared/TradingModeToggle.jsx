@@ -1,30 +1,51 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { usePlan } from "@/hooks/usePlan";
-import PlanGate from "@/components/shared/PlanGate";
 
 /**
  * TradingModeToggle — Paper/Live toggle for the navbar.
  *
- * - Shows current mode (PAPER/LIVE)
- * - Clicking toggles between modes
- * - Live mode requires Premium+ plan (gated via PlanGate)
- * - Persists preference in localStorage
- * - Dispatches `noble:trading-mode` event when changed
+ * - Reads current mode from backend /operational/mode (source of truth)
+ * - Falls back to localStorage if backend unavailable
+ * - Clicking navigates to Ops page for full mode management
+ * - Live mode pulses red as a visual warning
+ * - Dispatches `noble:trading-mode` event when mode changes
  */
 export default function TradingModeToggle() {
   const { canUseLive, isLoaded } = usePlan();
   const [mode, setMode] = useState("paper");
-  const [showUpgradeModal, setShowUpgradeModal] = useState(false);
+  const [backendMode, setBackendMode] = useState(null);
 
-  // Load saved preference
-  useEffect(() => {
-    const saved = localStorage.getItem("noble-trading-mode");
-    if (saved === "live" && canUseLive) {
-      setMode("live");
+  // Fetch real mode from backend
+  const fetchMode = useCallback(async () => {
+    try {
+      const res = await fetch("/api/operational/mode");
+      if (res.ok) {
+        const data = await res.json();
+        if (data.current_mode) {
+          setBackendMode(data.current_mode);
+          setMode(data.current_mode);
+        }
+      }
+    } catch {
+      // Backend unavailable — use localStorage fallback
     }
-  }, [canUseLive]);
+  }, []);
+
+  useEffect(() => {
+    fetchMode();
+    const interval = setInterval(fetchMode, 30000); // Refresh every 30s
+    return () => clearInterval(interval);
+  }, [fetchMode]);
+
+  // Load saved preference as fallback
+  useEffect(() => {
+    if (!backendMode) {
+      const saved = localStorage.getItem("noble-trading-mode");
+      if (saved) setMode(saved);
+    }
+  }, [backendMode]);
 
   // Dispatch mode change event
   useEffect(() => {
@@ -33,18 +54,11 @@ export default function TradingModeToggle() {
     );
   }, [mode]);
 
-  const handleToggle = () => {
-    if (mode === "paper") {
-      if (!canUseLive) {
-        setShowUpgradeModal(true);
-        return;
-      }
-      setMode("live");
-      localStorage.setItem("noble-trading-mode", "live");
-    } else {
-      setMode("paper");
-      localStorage.setItem("noble-trading-mode", "paper");
-    }
+  // Click navigates to Ops page for full mode management
+  const handleClick = () => {
+    window.dispatchEvent(
+      new CustomEvent("noble:navigate", { detail: { view: "ops" } })
+    );
   };
 
   if (!isLoaded) {
@@ -55,62 +69,25 @@ export default function TradingModeToggle() {
     );
   }
 
-  return (
-    <>
-      <button
-        className="flex items-center gap-1 cursor-pointer hover:opacity-80 transition-opacity"
-        onClick={handleToggle}
-        title={mode === "paper" ? "Switch to Live Trading" : "Switch to Paper Trading"}
-      >
-        {mode === "live" ? (
-          <span className="badge badge-error badge-sm animate-pulse gap-1">
-            LIVE
-            <svg xmlns="http://www.w3.org/2000/svg" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
-          </span>
-        ) : (
-          <span className="badge badge-success badge-sm gap-1">
-            PAPER
-            <svg xmlns="http://www.w3.org/2000/svg" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
-          </span>
-        )}
-      </button>
+  const isLive = mode === "live";
 
-      {/* Upgrade Modal */}
-      {showUpgradeModal && (
-        <dialog className="modal modal-open">
-          <div className="modal-box">
-            <h3 className="font-bold text-lg">Live Trading Requires Premium</h3>
-            <p className="py-4 text-sm text-base-content/70">
-              Live trading with real capital is available on the Premium plan.
-              Upgrade to connect a live Alpaca account and execute trades with
-              real money, access real-time P&L dashboards, and get priority
-              order execution.
-            </p>
-            <div className="modal-action">
-              <button
-                className="btn btn-ghost btn-sm"
-                onClick={() => setShowUpgradeModal(false)}
-              >
-                Maybe Later
-              </button>
-              <button
-                className="btn btn-primary btn-sm"
-                onClick={() => {
-                  setShowUpgradeModal(false);
-                  window.dispatchEvent(
-                    new CustomEvent("noble:navigate", { detail: { view: "settings", tab: "plan" } })
-                  );
-                }}
-              >
-                Upgrade Plan
-              </button>
-            </div>
-          </div>
-          <form method="dialog" className="modal-backdrop">
-            <button onClick={() => setShowUpgradeModal(false)}>close</button>
-          </form>
-        </dialog>
+  return (
+    <button
+      className="flex items-center gap-1 cursor-pointer hover:opacity-80 transition-opacity"
+      onClick={handleClick}
+      title={isLive ? "LIVE TRADING — Click to manage" : "Paper Trading — Click to manage"}
+    >
+      {isLive ? (
+        <span className="badge badge-error badge-sm animate-pulse gap-1">
+          LIVE
+          <svg xmlns="http://www.w3.org/2000/svg" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
+        </span>
+      ) : (
+        <span className="badge badge-success badge-sm gap-1">
+          PAPER
+          <svg xmlns="http://www.w3.org/2000/svg" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
+        </span>
       )}
-    </>
+    </button>
   );
 }
