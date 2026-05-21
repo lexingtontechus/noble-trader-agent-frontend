@@ -76,7 +76,8 @@ export function PortfolioProvider({ children }) {
   const intervalRef = useRef(null);
   const staleTimerRef = useRef(null);
   const sseRef = useRef(null);
-  const refreshInterval = 10000; // 10s polling (will throttle to 30s when SSE active)
+  const SSE_ACTIVE_INTERVAL = 30000; // 30s polling when SSE is connected (safety net)
+  const SSE_DOWN_INTERVAL = 10000;  // 10s polling when SSE is disconnected (primary)
 
   // ── REST data fetch ────────────────────────────────────────
   const refresh = useCallback(async () => {
@@ -166,9 +167,13 @@ export function PortfolioProvider({ children }) {
   }, [equityCurvePeriod, hasKeys, refreshEquityCurve]);
 
   // ── Initial fetch + polling ────────────────────────────────
+  // When SSE is active, polling throttles to 30s (safety net).
+  // When SSE is down, polling runs at 10s (primary data source).
   useEffect(() => {
     refresh();
-    intervalRef.current = setInterval(refresh, refreshInterval);
+
+    const currentInterval = sseConnected ? SSE_ACTIVE_INTERVAL : SSE_DOWN_INTERVAL;
+    intervalRef.current = setInterval(refresh, currentInterval);
 
     // Stale detection: mark as stale if no update for 30s
     staleTimerRef.current = setInterval(() => {
@@ -181,7 +186,7 @@ export function PortfolioProvider({ children }) {
       if (intervalRef.current) clearInterval(intervalRef.current);
       if (staleTimerRef.current) clearInterval(staleTimerRef.current);
     };
-  }, [refresh, refreshInterval, lastUpdated]);
+  }, [refresh, sseConnected]); // Re-run when SSE status changes
 
   // ── SSE connection ──────────────────────────────────────────
   // Connects to /api/stream/pnl (BFF proxy → FastAPI /sse/pnl)
