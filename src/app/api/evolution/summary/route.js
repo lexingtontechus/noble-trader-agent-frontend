@@ -3,8 +3,9 @@
  * Get a summary of the strategy evolution state for the UI.
  */
 import { getEvolutionSummary } from "@/lib/strategy-evolution";
+import { withAuth } from "@/lib/withAuth";
 
-export async function GET() {
+export const GET = withAuth(async (request, context, authContext) => {
   try {
     const summary = await getEvolutionSummary();
     return Response.json(summary);
@@ -15,4 +16,4 @@ export async function GET() {
       { status: 500 }
     );
   }
-}
+}, { minRole: "viewer" });

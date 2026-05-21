@@ -1,6 +1,7 @@
 import ZAI from "z-ai-web-dev-sdk";
 import OpenAI from "openai";
 import { getCached, setCache } from "@/lib/cache";
+import { withAuth } from "@/lib/withAuth";
 
 // ── ZAI instance (lazy-initialized) ────────────────────────────────────────
 let zaiInstance = null;
@@ -95,7 +96,7 @@ async function generateWithGroq(prompt) {
   return commentary;
 }
 
-export async function POST(request) {
+export const POST = withAuth(async (request, context, authContext) => {
   try {
     const body = await request.json();
     const { symbol, regime, sizing, risk } = body;
@@ -174,4 +175,4 @@ export async function POST(request) {
       { status: 500 },
     );
   }
-}
+}, { minRole: "viewer" });

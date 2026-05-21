@@ -1,3 +1,4 @@
+import { withAuth } from "@/lib/withAuth";
 import { getPortfolioHistory } from "@/lib/alpaca-client";
 import { getAlpacaCredentialKeys, resolveCredentialType } from "@/lib/alpaca-credentials";
 import { createApiError } from "@/lib/error-messages";
@@ -7,7 +8,7 @@ import { createApiError } from "@/lib/error-messages";
  * Fetches portfolio equity history from Alpaca using encrypted keys from Supabase
  * (with Clerk privateMetadata fallback for migration).
  */
-export async function GET(request) {
+export const GET = withAuth(async (request, _context, _authContext) => {
   try {
     const credentialType = await resolveCredentialType(request);
     const keys = await getAlpacaCredentialKeys(credentialType, request);
@@ -34,4 +35,4 @@ export async function GET(request) {
   } catch (error) {
     return createApiError(error, { context: "portfolio" });
   }
-}
+}, { minRole: "viewer" });

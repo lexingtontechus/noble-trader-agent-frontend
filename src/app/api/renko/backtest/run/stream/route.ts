@@ -13,8 +13,9 @@
 import { getFastAPIAuthHeaders } from "@/lib/fastapi-auth";
 import { FASTAPI_BASE } from "@/lib/config";
 import type { RenkoBacktestRequest, RenkoBacktestResponse } from "@/types/backtest";
+import { withAuth } from "@/lib/withAuth";
 
-export async function POST(request: Request) {
+export const POST = withAuth(async (request: Request, context: any, authContext: any) => {
   try {
     const body = await request.json();
     const {
@@ -242,4 +243,4 @@ export async function POST(request: Request) {
       { status: 500 }
     );
   }
-}
+}, { minRole: "trader" });

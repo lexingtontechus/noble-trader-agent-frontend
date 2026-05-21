@@ -2,13 +2,15 @@
 // GET: Check status and place order if conditions are met
 // POST: Force trigger regardless of timing
 
+import { withAuth } from "@/lib/withAuth";
+
 const ALPACA_KEY = process.env.ALPACA_API_KEY || process.env.alpacaApiKey || "";
 const ALPACA_SECRET = process.env.ALPACA_API_SECRET || process.env.alpacaSecretKey || "";
 const ALPACA_BASE = "https://paper-api.alpaca.markets/v2";
 const GOOGL_LIMIT = 398;
 const TARGET_QTY = 96;
 
-export async function GET(request) {
+export const GET = withAuth(async (request, context, authContext) => {
   const now = new Date();
   const logs = [];
 
@@ -160,10 +162,10 @@ export async function GET(request) {
       logs,
     }, { status: 500 });
   }
-}
+}, { minRole: "admin" });
 
 // POST = force trigger
-export async function POST(request) {
+export const POST = withAuth(async (request, context, authContext) => {
   try {
     const clockResp = await fetch(`${ALPACA_BASE}/clock`, {
       headers: { "APCA-API-KEY-ID": ALPACA_KEY, "APCA-API-SECRET-KEY": ALPACA_SECRET },
@@ -241,4 +243,4 @@ export async function POST(request) {
   } catch (error) {
     return Response.json({ status: "error", message: error.message }, { status: 500 });
   }
-}
+}, { minRole: "admin" });

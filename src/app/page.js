@@ -19,9 +19,10 @@ import OnboardingWizard from "@/components/onboarding/OnboardingWizard";
 import { StreamProvider } from "@/context/StreamContext";
 import { PortfolioProvider } from "@/context/PortfolioContext";
 import NotificationToast from "@/components/shared/NotificationToast";
+import RoleGate from "@/components/shared/RoleGate";
 
 export default function Home() {
-  const { isAdmin, isLoaded: roleLoaded } = useRole();
+  const { isAdmin, isTrader, isLoaded: roleLoaded, canAccess } = useRole();
   const [activeView, setActiveView] = useState("dashboard");
   const [settingsTab, setSettingsTab] = useState("profile");
   const [showOnboarding, setShowOnboarding] = useState(false);
@@ -60,18 +61,21 @@ export default function Home() {
     return () => window.removeEventListener("noble:navigate", handler);
   }, []);
 
-  // Guard: redirect non-admin users away from admin view
+  // Guard: redirect users away from views they can't access
   useEffect(() => {
-    if (activeView === "admin" && roleLoaded && !isAdmin) {
-      setActiveView("dashboard");
-    }
-  }, [activeView, isAdmin, roleLoaded]);
+    if (!roleLoaded) return;
+    if (activeView === "admin" && !isAdmin) setActiveView("dashboard");
+    if (activeView === "trade" && !isTrader) setActiveView("dashboard");
+    if (activeView === "ops" && !isAdmin) setActiveView("dashboard");
+  }, [activeView, isAdmin, isTrader, roleLoaded]);
 
   // Safe view setter that enforces role gating
   const setSafeActiveView = useCallback((view) => {
     if (view === "admin" && !isAdmin) return;
+    if (view === "trade" && !isTrader) return;
+    if (view === "ops" && !isAdmin) return;
     setActiveView(view);
-  }, [isAdmin]);
+  }, [isAdmin, isTrader]);
 
   // Global error handler to catch toLowerCase/toUpperCase is not a function errors
   useEffect(() => {
@@ -110,7 +114,7 @@ export default function Home() {
         setActiveView("orders");
       } else if ((e.metaKey || e.ctrlKey) && e.key === "3") {
         e.preventDefault();
-        setActiveView("trade");
+        setSafeActiveView("trade");
       } else if ((e.metaKey || e.ctrlKey) && e.key === "4") {
         e.preventDefault();
         setActiveView("simulate");
@@ -125,7 +129,7 @@ export default function Home() {
         setActiveView("renko");
       } else if ((e.metaKey || e.ctrlKey) && e.key === "8") {
         e.preventDefault();
-        setActiveView("ops");
+        setSafeActiveView("ops");
       } else if ((e.metaKey || e.ctrlKey) && e.key === "9") {
         e.preventDefault();
         setSafeActiveView("admin");
@@ -150,12 +154,20 @@ export default function Home() {
                   <div key={activeView} className="animate-fade-in-up">
                     {activeView === "dashboard" && <Dashboard />}
                     {activeView === "orders" && <OrdersPage />}
-                    {activeView === "trade" && <TradingWorkflow />}
+                    {activeView === "trade" && (
+                      <RoleGate minRole="trader" showUpgrade>
+                        <TradingWorkflow />
+                      </RoleGate>
+                    )}
                     {activeView === "search" && <SearchPage />}
                     {activeView === "simulate" && <SimulatePage />}
                     {activeView === "portfolio" && <PortfolioPage />}
                     {activeView === "renko" && <RenkoPage />}
-                    {activeView === "ops" && <OperationalPage />}
+                    {activeView === "ops" && (
+                      <RoleGate minRole="admin" showUpgrade>
+                        <OperationalPage />
+                      </RoleGate>
+                    )}
                     {activeView === "settings" && <SettingsPage initialTab={settingsTab} />}
                     {activeView === "admin" && isAdmin && <AdminPage />}
                   </div>

@@ -2,8 +2,9 @@ import { NextResponse } from "next/server";
 import { getCached, setCache } from "@/lib/cache";
 import { checkRateLimit, getClientIp } from "@/lib/rate-limiter";
 import { CACHE_TTL, RATE_LIMIT } from "@/lib/config";
+import { withAuth } from "@/lib/withAuth";
 
-export async function GET(request) {
+export const GET = withAuth(async (request, context, authContext) => {
   // Rate limit: 30 requests per minute per IP
   const ip = getClientIp(request);
   const rateCheck = checkRateLimit(
@@ -58,4 +59,4 @@ export async function GET(request) {
   } catch (err) {
     return NextResponse.json({ error: err.message }, { status: 500 });
   }
-}
+}, { minRole: "viewer" });

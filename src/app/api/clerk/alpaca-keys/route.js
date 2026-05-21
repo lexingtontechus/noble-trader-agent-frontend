@@ -1,8 +1,9 @@
+import { withAuth } from "@/lib/withAuth";
 import { getAlpacaKeys, setAlpacaKeys, deleteAlpacaKeys } from "@/lib/clerk-metadata";
 import { createApiError } from "@/lib/error-messages";
 
 // GET — returns ONLY whether keys are configured (never exposes the actual values)
-export async function GET() {
+export const GET = withAuth(async (request, _context, _authContext) => {
   try {
     const keys = await getAlpacaKeys();
     const configured = !!(keys?.apiKey && keys?.secretKey);
@@ -10,10 +11,10 @@ export async function GET() {
   } catch (error) {
     return createApiError(error, { context: "credentials" });
   }
-}
+}, { minRole: "viewer" });
 
 // POST — save new Alpaca keys
-export async function POST(request) {
+export const POST = withAuth(async (request, _context, _authContext) => {
   try {
     const body = await request.json();
     const { apiKey, secretKey } = body;
@@ -27,14 +28,14 @@ export async function POST(request) {
   } catch (error) {
     return createApiError(error, { context: "credentials" });
   }
-}
+}, { minRole: "viewer" });
 
 // DELETE — remove Alpaca keys
-export async function DELETE() {
+export const DELETE = withAuth(async (request, _context, _authContext) => {
   try {
     await deleteAlpacaKeys();
     return Response.json({ success: true, message: "Alpaca keys removed" });
   } catch (error) {
     return createApiError(error, { context: "credentials" });
   }
-}
+}, { minRole: "viewer" });

@@ -1,3 +1,4 @@
+import { withAuth } from "@/lib/withAuth";
 import { validateTrade } from "@/lib/trade-validation";
 
 /**
@@ -6,7 +7,7 @@ import { validateTrade } from "@/lib/trade-validation";
  * Body: { tradeId: string } OR { symbol: string, side: string, prices?: number[] }
  * Also accepts both tradeId + symbol/side for fallback when DB id lookup fails.
  */
-export async function POST(request) {
+export const POST = withAuth(async (request, _context, _authContext) => {
   let body = {};
   try {
     body = await request.json();
@@ -56,4 +57,4 @@ export async function POST(request) {
       { status: 200 } // Return 200 with error info so UI can display it gracefully
     );
   }
-}
+}, { minRole: "viewer" });

@@ -3,8 +3,9 @@ import { buildObservation } from "@/lib/fastapi-client";
 import { getCached, setCache } from "@/lib/cache";
 import { CACHE_TTL } from "@/lib/config";
 import { normalizeToYahooSymbol } from "@/lib/symbol-utils";
+import { withAuth } from "@/lib/withAuth";
 
-export async function POST(request) {
+export const POST = withAuth(async (request, context, authContext) => {
   try {
     const body = await request.json();
     const { symbol, period = "1y", window, refit_every, n_hmm_states, recommended_f } = body;
@@ -62,4 +63,4 @@ export async function POST(request) {
       { status: 500 },
     );
   }
-}
+}, { minRole: "trader" });

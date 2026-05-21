@@ -5,8 +5,9 @@
  * Falls back to a local simple backtest if the backend is unavailable.
  */
 import { runBacktest } from "@/lib/fastapi-client";
+import { withAuth } from "@/lib/withAuth";
 
-export async function POST(request: Request) {
+export const POST = withAuth(async (request: Request, context: any, authContext: any) => {
   try {
     const body = await request.json();
 
@@ -78,4 +79,4 @@ export async function POST(request: Request) {
       { status: 500 }
     );
   }
-}
+}, { minRole: "trader" });

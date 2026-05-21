@@ -7,8 +7,10 @@
  *   active?: boolean (if true, return only the active variant)
  */
 import { getAllVariants, getActiveVariant } from "@/lib/strategy-evolution";
+import { createVariant, activateVariant } from "@/lib/strategy-evolution";
+import { withAuth } from "@/lib/withAuth";
 
-export async function GET(request) {
+export const GET = withAuth(async (request, context, authContext) => {
   try {
     const { searchParams } = new URL(request.url);
     const limit = parseInt(searchParams.get("limit") || "50", 10);
@@ -30,7 +32,7 @@ export async function GET(request) {
       { status: 500 }
     );
   }
-}
+}, { minRole: "viewer" });
 
 /**
  * POST /api/evolution/variants
@@ -44,9 +46,7 @@ export async function GET(request) {
  *   activate?: boolean
  * }
  */
-import { createVariant, activateVariant } from "@/lib/strategy-evolution";
-
-export async function POST(request) {
+export const POST = withAuth(async (request, context, authContext) => {
   try {
     const body = await request.json();
     const { name, params, parentVariantId, optimizerParams, activate } = body;
@@ -74,4 +74,4 @@ export async function POST(request) {
       { status: 500 }
     );
   }
-}
+}, { minRole: "trader" });

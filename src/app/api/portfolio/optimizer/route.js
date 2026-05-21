@@ -4,6 +4,7 @@ import { getPositions } from "@/lib/alpaca-client";
 import { getCached, setCache } from "@/lib/cache";
 import { fetchHistoricalPrices } from "@/lib/yahoo-prices";
 import { alpacaToYahooSymbol } from "@/lib/symbol-utils";
+import { withAuth } from "@/lib/withAuth";
 
 /**
  * Convert an array of closing prices to log-returns.
@@ -19,7 +20,7 @@ function toLogReturns(prices) {
   return returns;
 }
 
-export async function POST(request) {
+export const POST = withAuth(async (request, context, authContext) => {
   try {
     const body = await request.json();
     const {
@@ -207,4 +208,4 @@ export async function POST(request) {
       { status: 500 },
     );
   }
-}
+}, { minRole: "trader" });

@@ -1,4 +1,5 @@
 import { validateTrade } from "@/lib/trade-validation";
+import { withAuth } from "@/lib/withAuth";
 
 /**
  * Parse a synthetic trade id like "sell-AAPL-1778554793607" or "buy-DIA-1778554793607"
@@ -20,7 +21,7 @@ function parseSyntheticTradeId(tradeId) {
  * DB-resilient: handles database unavailability gracefully.
  * Body: { tradeId: string, action: "approve" | "block" | "executed", symbol?, side?, alpacaOrderId? }
  */
-export async function POST(request) {
+export const POST = withAuth(async (request, context, authContext) => {
   try {
     const body = await request.json();
     const { tradeId, action, symbol, side, alpacaOrderId } = body;
@@ -184,4 +185,4 @@ export async function POST(request) {
       { status: 500 }
     );
   }
-}
+}, { minRole: "trader" });

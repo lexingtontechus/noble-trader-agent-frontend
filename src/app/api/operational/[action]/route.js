@@ -4,8 +4,11 @@
  * Handles auth, Render cold starts, and error recovery.
  *
  * Phase 8 P0: Kill Switch, Audit Log, Mode Toggle, Reconciliation
+ *
+ * Auth: GET (status queries) require viewer+, POST (mutations) require admin+.
  */
 
+import { withAuth } from "@/lib/withAuth";
 import { getFastAPIAuthHeaders } from "@/lib/fastapi-auth";
 import { FASTAPI_BASE } from "@/lib/config";
 
@@ -147,10 +150,5 @@ async function proxyRequest(request, params) {
   }
 }
 
-export async function GET(request, { params }) {
-  return proxyRequest(request, params);
-}
-
-export async function POST(request, { params }) {
-  return proxyRequest(request, params);
-}
+export const GET = withAuth(async (request, { params }) => proxyRequest(request, params), { minRole: "viewer" });
+export const POST = withAuth(async (request, { params }) => proxyRequest(request, params), { minRole: "admin" });

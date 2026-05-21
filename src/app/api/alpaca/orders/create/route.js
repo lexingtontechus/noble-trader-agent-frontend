@@ -2,6 +2,7 @@ import { createOrder } from "@/lib/alpaca-client";
 import { getAlpacaCredentialKeys, resolveCredentialType } from "@/lib/alpaca-credentials";
 import { yahooToAlpacaSymbol, getAssetClass, isAlpacaTradable, getAlpacaTradeabilityReason } from "@/lib/symbol-utils";
 import { createApiError } from "@/lib/error-messages";
+import { withAuth } from "@/lib/withAuth";
 
 const VALID_TYPES = {
   equity: ["market", "limit", "stop", "stop_limit", "trailing_stop"],
@@ -18,7 +19,7 @@ function getCategory(assetClass) {
   return "equity";
 }
 
-export async function POST(request) {
+export const POST = withAuth(async (request, context, authContext) => {
   try {
     const credentialType = await resolveCredentialType(request);
     const keys = await getAlpacaCredentialKeys(credentialType, request);
@@ -97,4 +98,4 @@ export async function POST(request) {
   } catch (error) {
     return createApiError(error, { context: "orders" });
   }
-}
+}, { minRole: "trader" });

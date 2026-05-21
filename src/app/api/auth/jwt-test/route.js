@@ -1,3 +1,4 @@
+import { withAuth } from "@/lib/withAuth";
 import { auth } from "@clerk/nextjs/server";
 import { getClerkJWT } from "@/lib/fastapi-auth";
 
@@ -20,7 +21,7 @@ const FASTAPI_BASE =
   process.env.NEXT_PUBLIC_FASTAPI_BASE_URL ||
   "https://noble-trader-fastapi-backend.onrender.com";
 
-export async function GET() {
+export const GET = withAuth(async (request, _context, _authContext) => {
   const steps = [];
   let jwt = null;
 
@@ -217,4 +218,4 @@ export async function GET() {
         : "Some steps failed — check details above"
     }`,
   });
-}
+}, { minRole: "viewer" });

@@ -11,8 +11,9 @@
 import { getFastAPIAuthHeaders } from "@/lib/fastapi-auth";
 import { FASTAPI_BASE } from "@/lib/config";
 import { checkRateLimit, getClientIp } from "@/lib/rate-limiter";
+import { withAuth } from "@/lib/withAuth";
 
-export async function GET(request) {
+export const GET = withAuth(async (request, context, authContext) => {
   // ── Rate limiting: 30 req/min per IP ───────────────────
   const clientIp = getClientIp(request);
   const rateCheck = checkRateLimit(`pnl:alerts:${clientIp}`, 30, 60000);
@@ -50,9 +51,9 @@ export async function GET(request) {
       { status: 500 }
     );
   }
-}
+}, { minRole: "viewer" });
 
-export async function POST(request) {
+export const POST = withAuth(async (request, context, authContext) => {
   // ── Rate limiting: 10 req/min per IP (writes are heavier) ──
   const clientIp = getClientIp(request);
   const rateCheck = checkRateLimit(`pnl:alerts:write:${clientIp}`, 10, 60000);
@@ -97,9 +98,9 @@ export async function POST(request) {
       { status: 500 }
     );
   }
-}
+}, { minRole: "viewer" });
 
-export async function DELETE(request) {
+export const DELETE = withAuth(async (request, context, authContext) => {
   // ── Rate limiting: 10 req/min per IP (writes are heavier) ──
   const clientIp = getClientIp(request);
   const rateCheck = checkRateLimit(`pnl:alerts:write:${clientIp}`, 10, 60000);
@@ -145,4 +146,4 @@ export async function DELETE(request) {
       { status: 500 }
     );
   }
-}
+}, { minRole: "viewer" });

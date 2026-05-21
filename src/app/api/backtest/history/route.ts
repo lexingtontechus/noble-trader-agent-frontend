@@ -5,8 +5,9 @@
  */
 import { getFastAPIAuthHeaders } from "@/lib/fastapi-auth";
 import { FASTAPI_BASE } from "@/lib/config";
+import { withAuth } from "@/lib/withAuth";
 
-export async function GET(request: Request) {
+export const GET = withAuth(async (request: Request, context: any, authContext: any) => {
   try {
     const { searchParams } = new URL(request.url);
     const offset = searchParams.get("offset") || "0";
@@ -41,4 +42,4 @@ export async function GET(request: Request) {
       { status: 500 }
     );
   }
-}
+}, { minRole: "viewer" });

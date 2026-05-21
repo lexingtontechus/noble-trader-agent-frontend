@@ -1,11 +1,12 @@
 import { db } from "@/lib/db";
+import { withAuth } from "@/lib/withAuth";
 
 /**
  * GET /api/tda/alerts
  * Fetch early warning alert history.
  * Query params: acknowledged (bool), limit (int), symbol (string)
  */
-export async function GET(request) {
+export const GET = withAuth(async (request, context, authContext) => {
   try {
     const { searchParams } = new URL(request.url);
     const acknowledged = searchParams.get("acknowledged");
@@ -46,14 +47,14 @@ export async function GET(request) {
     console.error("Fetch TDA alerts error:", error);
     return Response.json({ error: error.message }, { status: 500 });
   }
-}
+}, { minRole: "viewer" });
 
 /**
  * PATCH /api/tda/alerts
  * Acknowledge an alert.
  * Body: { alertId: string, acknowledged: boolean }
  */
-export async function PATCH(request) {
+export const PATCH = withAuth(async (request, context, authContext) => {
   try {
     const body = await request.json();
     const { alertId, acknowledged } = body;
@@ -72,4 +73,4 @@ export async function PATCH(request) {
     console.error("Acknowledge alert error:", error);
     return Response.json({ error: error.message }, { status: 500 });
   }
-}
+}, { minRole: "viewer" });

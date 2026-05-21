@@ -1,11 +1,12 @@
 import { NextResponse } from "next/server";
 import { getFastAPIAuthHeaders } from "@/lib/fastapi-auth";
+import { withAuth } from "@/lib/withAuth";
 
 const FASTAPI_BASE =
   process.env.NEXT_PUBLIC_FASTAPI_BASE_URL ||
   "https://noble-trader-fastapi-backend.onrender.com";
 
-export async function GET(request) {
+export const GET = withAuth(async (request, context, authContext) => {
   try {
     const { searchParams } = new URL(request.url);
     const symbols = searchParams.get("symbols") || "";
@@ -38,4 +39,4 @@ export async function GET(request) {
   } catch (err) {
     return NextResponse.json({ error: err.message }, { status: 500 });
   }
-}
+}, { minRole: "viewer" });

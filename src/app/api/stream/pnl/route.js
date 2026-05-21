@@ -23,11 +23,12 @@
 
 import { getFastAPIAuthHeaders } from "@/lib/fastapi-auth";
 import { FASTAPI_BASE } from "@/lib/config";
+import { withAuth } from "@/lib/withAuth";
 
 /** Maximum duration for an SSE proxy connection (10 minutes) */
 const SSE_MAX_DURATION_MS = 10 * 60 * 1000;
 
-export async function GET(request) {
+export const GET = withAuth(async (request, context, authContext) => {
   // Resolve JWT for backend auth
   const authHeaders = await getFastAPIAuthHeaders();
 
@@ -131,4 +132,4 @@ export async function GET(request) {
       { status: 500 },
     );
   }
-}
+}, { minRole: "viewer" });

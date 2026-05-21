@@ -1,4 +1,5 @@
 import { db } from "@/lib/db";
+import { withAuth } from "@/lib/withAuth";
 
 const TELEGRAM_BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN;
 const TELEGRAM_CHAT_ID = process.env.TELEGRAM_CHAT_ID;
@@ -158,7 +159,7 @@ function formatTradeReport(analysis, execution) {
  * Send a formatted trade summary report to Telegram.
  * Body: { chat_id?, analysis, execution, analysisId? }
  */
-export async function POST(request) {
+export const POST = withAuth(async (request, context, authContext) => {
   if (!TELEGRAM_BOT_TOKEN) {
     return Response.json(
       { error: "Telegram bot token not configured", code: "NO_TOKEN" },
@@ -235,4 +236,4 @@ export async function POST(request) {
       { status: 500 }
     );
   }
-}
+}, { minRole: "trader" });

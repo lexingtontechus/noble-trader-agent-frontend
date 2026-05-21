@@ -10,8 +10,9 @@ import { getFastAPIAuthHeaders } from "@/lib/fastapi-auth";
 import { redis } from "@/lib/redis";
 import { FASTAPI_BASE } from "@/lib/config";
 import type { RenkoBacktestOptimizeRequest, RenkoBacktestOptimizeResponse } from "@/types/backtest";
+import { withAuth } from "@/lib/withAuth";
 
-export async function POST(request: Request) {
+export const POST = withAuth(async (request: Request, context: any, authContext: any) => {
   try {
     const body = await request.json();
     const { prices, symbol = "SPY", param_grid, ...options } = body;
@@ -121,4 +122,4 @@ export async function POST(request: Request) {
       { status: 500 }
     );
   }
-}
+}, { minRole: "trader" });

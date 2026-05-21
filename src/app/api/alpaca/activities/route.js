@@ -1,3 +1,4 @@
+import { withAuth } from "@/lib/withAuth";
 import { getActivities } from "@/lib/alpaca-client";
 import { getAlpacaCredentialKeys, resolveCredentialType } from "@/lib/alpaca-credentials";
 import { createApiError } from "@/lib/error-messages";
@@ -17,7 +18,7 @@ import { createApiError } from "@/lib/error-messages";
  *   page_size      — max items (default: 100, max: 1000)
  *   period         — shorthand: "1d", "1w", "1m", "3m", "1y" (default: "3m")
  */
-export async function GET(request) {
+export const GET = withAuth(async (request, _context, _authContext) => {
   try {
     const credentialType = await resolveCredentialType(request);
     const keys = await getAlpacaCredentialKeys(credentialType, request);
@@ -67,4 +68,4 @@ export async function GET(request) {
   } catch (error) {
     return createApiError(error, { context: "activities" });
   }
-}
+}, { minRole: "viewer" });

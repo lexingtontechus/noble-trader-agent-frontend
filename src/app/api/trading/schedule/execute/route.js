@@ -2,6 +2,7 @@ import { getAlpacaKeys } from "@/lib/clerk-metadata";
 import { createOrder, getOrders, getAccount } from "@/lib/alpaca-client";
 import { yahooToAlpacaSymbol } from "@/lib/symbol-utils";
 import { db } from "@/lib/db";
+import { withAuth } from "@/lib/withAuth";
 
 const CRON_SECRET = process.env.CRON_SECRET;
 const TELEGRAM_BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN;
@@ -71,8 +72,10 @@ async function sendTelegramMessage(chatId, text) {
 }
 
 /**
- * Check if the request has a valid CRON_SECRET.
- * The secret can be passed via `x-cron-secret` header or `?secret=` query param.
+ * Legacy cron secret check — retained for reference.
+ * CRON auth is now handled by withAuth({ allowCron: true }), which checks
+ * Authorization: Bearer <CRON_SECRET> or ?cron_secret=<CRON_SECRET>.
+ * The handler receives authContext.isCron to distinguish cron vs user requests.
  */
 function verifyCronSecret(request) {
   if (!CRON_SECRET) return false;
@@ -83,13 +86,10 @@ function verifyCronSecret(request) {
 }
 
 // GET /api/trading/schedule/execute
-// Health check endpoint. If CRON_SECRET is provided, returns queue status.
-export async function GET(request) {
-  const hasCronHeader = request.headers.get("x-cron-secret") || new URL(request.url).searchParams.get("secret");
-  if (hasCronHeader) {
-    if (!verifyCronSecret(request)) {
-      return Response.json({ error: "Unauthorized — invalid cron secret", code: "UNAUTHORIZED" }, { status: 401 });
-    }
+// Health check endpoint. Cron requests get queue status; admin users get basic info.
+export const GET = withAuth(async (request, context, authContext) => {
+  // Cron requests get queue status (was previously behind manual CRON_SECRET check)
+  if (authContext.isCron) {
     const queuedCount = await db.scheduledOrder.count({ where: { status: "queued" } });
     return Response.json({
       status: "ok",
@@ -100,19 +100,19 @@ export async function GET(request) {
     });
   }
 
-  // Default health check (no CRON_SECRET required)
+  // Authenticated admin health check
   return Response.json({
     status: "ok",
     endpoint: "/api/trading/schedule/execute",
-    description: "Process scheduled orders. POST to execute. Add ?secret=CRON_SECRET for cron auth.",
+    description: "Process scheduled orders. POST to execute. Cron auth handled by withAuth.",
     timestamp: new Date().toISOString(),
   });
-}
+}, { minRole: "admin", allowCron: true });
 
 // POST /api/trading/schedule/execute
 // Process scheduled orders that are due and whose dependencies are met.
-export async function POST(request) {
-  const isCronRequest = verifyCronSecret(request);
+export const POST = withAuth(async (request, context, authContext) => {
+  const isCronRequest = authContext.isCron;
 
   try {
     const keys = await resolveAlpacaKeys();
@@ -325,4 +325,4 @@ export async function POST(request) {
       { status: 500 }
     );
   }
-}
+}, { minRole: "admin", allowCron: true });

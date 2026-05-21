@@ -4,6 +4,7 @@ import { alpacaToYahooSymbol } from "@/lib/symbol-utils";
 import { getPositions } from "@/lib/alpaca-client";
 import { getAlpacaKeys } from "@/lib/clerk-metadata";
 import { db } from "@/lib/db";
+import { withAuth } from "@/lib/withAuth";
 
 const CRON_SECRET = process.env.CRON_SECRET;
 const TELEGRAM_BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN;
@@ -165,7 +166,7 @@ function localTDAScan(prices, symbol) {
 }
 
 // GET /api/tda/scan — Health check + last scan info
-export async function GET(request) {
+export const GET = withAuth(async (request, context, authContext) => {
   const hasCronHeader = request.headers.get("x-cron-secret") || new URL(request.url).searchParams.get("secret");
   if (hasCronHeader && !verifyCronSecret(request)) {
     return Response.json({ error: "Unauthorized — invalid cron secret", code: "UNAUTHORIZED" }, { status: 401 });
@@ -176,8 +177,7 @@ export async function GET(request) {
     const alertCount = await db.earlyWarningAlert.count({ where: { acknowledged: false } });
     const totalScans = await db.tDAScanResult.count();
 
-    return Response.json({
-      status: "ok",
+    return Response.json({ status: "ok",
       endpoint: "/api/tda/scan",
       description: "TDA Early Warning Scanner. POST to scan symbols. Add ?secret=CRON_SECRET for cron auth.",
       thresholds: {
@@ -202,7 +202,7 @@ export async function GET(request) {
   } catch (error) {
     return Response.json({ error: error.message }, { status: 500 });
   }
-}
+}, { minRole: "trader" });
 
 /**
  * POST /api/tda/scan
@@ -213,7 +213,7 @@ export async function GET(request) {
  *
  * Cron trigger: POST with x-cron-secret header or ?secret= param
  */
-export async function POST(request) {
+export const POST = withAuth(async (request, context, authContext) => {
   const isCronRequest = verifyCronSecret(request);
 
   try {
@@ -490,4 +490,4 @@ export async function POST(request) {
     console.error("TDA scan error:", error);
     return Response.json({ error: `TDA scan failed: ${error.message}` }, { status: 500 });
   }
-}
+}, { minRole: "trader" });

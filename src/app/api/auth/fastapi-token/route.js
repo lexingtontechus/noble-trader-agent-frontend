@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server'
+import { withAuth } from "@/lib/withAuth";
 
 const FASTAPI_BASE = process.env.NEXT_PUBLIC_FASTAPI_BASE_URL || 'https://noble-trader-fastapi-backend.onrender.com'
 const FASTAPI_USER = process.env.FASTAPI_USER || ''
@@ -10,7 +11,7 @@ const FASTAPI_PASSWORD = process.env.FASTAPI_PASSWORD || ''
  *
  * Tries OAuth2 password flow first, falls back to API key exchange.
  */
-export async function POST(request) {
+export const POST = withAuth(async (request, context, authContext) => {
   try {
     // Strategy 1: Try OAuth2 password flow (POST /auth/token)
     try {
@@ -72,4 +73,4 @@ export async function POST(request) {
       { status: 502 }
     )
   }
-}
+}, { minRole: "trader" });

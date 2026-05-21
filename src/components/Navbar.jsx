@@ -16,12 +16,12 @@ const NotificationCenter = dynamic(
 const NAV_ITEMS = [
   { key: "dashboard", label: "Dashboard", icon: "📊", shortLabel: "Home" },
   { key: "orders", label: "Orders", icon: "📋", shortLabel: "Orders" },
-  { key: "trade", label: "Trade", icon: "⚡", shortLabel: "Trade" },
+  { key: "trade", label: "Trade", icon: "⚡", shortLabel: "Trade", minRole: "trader" },
   { key: "renko", label: "Renko", icon: "🧱", shortLabel: "Renko" },
   { key: "simulate", label: "Simulate", icon: "🎲", shortLabel: "Sim" },
   { key: "portfolio", label: "Portfolio", icon: "📈", shortLabel: "Port" },
   { key: "search", label: "Search", icon: "🔍", shortLabel: "Search" },
-  { key: "ops", label: "Ops", icon: "🛡️", shortLabel: "Ops" },
+  { key: "ops", label: "P&L", icon: "🛡️", shortLabel: "P&L", minRole: "admin" },
   // Admin is role-gated — only shown for admin users via useRole()
   // Also accessible via UserButton custom menu item
   { key: "admin", label: "Admin", icon: "⚙️", shortLabel: "Admin", minRole: "admin" },
@@ -227,7 +227,7 @@ export default function Navbar({ activeView, setActiveView }) {
                     onClick={() => setActiveView("admin")}
                   />
                   <UserButton.Action
-                    label="Ops Controls"
+                    label="P&L Controls"
                     labelIcon={<span style={{ fontSize: 14 }}>🛡️</span>}
                     onClick={() => setActiveView("ops")}
                   />

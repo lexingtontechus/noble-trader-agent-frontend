@@ -7,6 +7,7 @@
 import { getFastAPIAuthHeaders } from "@/lib/fastapi-auth";
 import { FASTAPI_BASE } from "@/lib/config";
 import { checkRateLimit, getClientIp } from "@/lib/rate-limiter";
+import { withAuth } from "@/lib/withAuth";
 
 const RENKO_BASE = `${FASTAPI_BASE}/renko`;
 
@@ -188,10 +189,5 @@ async function proxyRequest(request, params) {
   }
 }
 
-export async function GET(request, { params }) {
-  return proxyRequest(request, params);
-}
-
-export async function POST(request, { params }) {
-  return proxyRequest(request, params);
-}
+export const GET = withAuth(async (request, { params }) => proxyRequest(request, params), { minRole: "viewer" });
+export const POST = withAuth(async (request, { params }) => proxyRequest(request, params), { minRole: "trader" });

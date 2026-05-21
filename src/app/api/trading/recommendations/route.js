@@ -1,10 +1,12 @@
+import { withAuth } from "@/lib/withAuth";
+
 /**
  * GET /api/trading/recommendations
  * Get trade recommendations for the latest (or specified) analysis run.
  * DB-resilient: handles database unavailability gracefully.
  */
 
-export async function GET(request) {
+export const GET = withAuth(async (request, _context, _authContext) => {
   let dbAvailable = true;
   let db;
 
@@ -77,4 +79,4 @@ export async function GET(request) {
       { status: 500 }
     );
   }
-}
+}, { minRole: "viewer" });

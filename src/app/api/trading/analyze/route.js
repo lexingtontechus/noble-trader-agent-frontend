@@ -1,3 +1,4 @@
+import { withAuth } from "@/lib/withAuth";
 import { getAlpacaKeys } from "@/lib/clerk-metadata";
 import { getPositions, getAccount } from "@/lib/alpaca-client";
 import { detectRegimeV2, strategySignal, analyzeRisk, detectCorrelation, optimisePortfolio, extractTDAFeatures } from "@/lib/fastapi-client";
@@ -190,7 +191,7 @@ function localRiskAnalyze(prices) {
  *
  * Phase 2 pipeline: detectRegimeV2 → strategySignal → analyzeRisk → detectCorrelation → optimisePortfolio
  */
-export async function POST(request) {
+export const POST = withAuth(async (request, _context, _authContext) => {
   try {
     // 1. Get Alpaca keys
     const keys = await resolveAlpacaKeys();
@@ -738,4 +739,4 @@ export async function POST(request) {
       { status: 500 }
     );
   }
-}
+}, { minRole: "trader" });

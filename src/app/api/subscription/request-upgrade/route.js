@@ -8,9 +8,10 @@
  * In production, this will be replaced by the Helio checkout flow.
  */
 
+import { withAuth } from "@/lib/withAuth";
 import { auth, clerkClient } from "@clerk/nextjs/server";
 
-export async function POST(request) {
+export const POST = withAuth(async (request, _context, _authContext) => {
   try {
     const { userId } = await auth();
     if (!userId) {
@@ -44,4 +45,4 @@ export async function POST(request) {
   } catch (error) {
     return Response.json({ error: error.message }, { status: 500 });
   }
-}
+}, { minRole: "viewer" });

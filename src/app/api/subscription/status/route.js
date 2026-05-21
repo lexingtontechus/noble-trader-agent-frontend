@@ -5,10 +5,11 @@
  * Returns plan details from Supabase (authoritative) with Clerk metadata fallback.
  */
 
+import { withAuth } from "@/lib/withAuth";
 import { getUserPlan } from "@/lib/credentials";
 import { PLANS } from "@/lib/plans";
 
-export async function GET() {
+export const GET = withAuth(async (request, _context, _authContext) => {
   try {
     const plan = await getUserPlan();
     const planDetails = PLANS[plan] || PLANS.free;
@@ -30,4 +31,4 @@ export async function GET() {
     }
     return Response.json({ error: error.message }, { status: 500 });
   }
-}
+}, { minRole: "viewer" });

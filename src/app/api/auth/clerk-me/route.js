@@ -4,6 +4,7 @@
  * Lightweight — no verifyToken() to avoid heavy JWKS download.
  */
 
+import { withAuth } from "@/lib/withAuth";
 import { auth } from '@clerk/nextjs/server'
 
 const FASTAPI_BASE =
@@ -56,7 +57,7 @@ async function getClerkJWT(sessionId) {
   return null
 }
 
-export async function GET() {
+export const GET = withAuth(async (request, _context, _authContext) => {
   try {
     const { userId, sessionId } = await auth()
 
@@ -118,4 +119,4 @@ export async function GET() {
       { status: 502 }
     )
   }
-}
+}, { minRole: "viewer" });

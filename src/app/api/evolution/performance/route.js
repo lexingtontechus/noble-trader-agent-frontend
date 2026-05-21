@@ -8,8 +8,9 @@
  *   source?: string ('live' or 'backtest')
  */
 import { getPerformance, getActiveVariant } from "@/lib/strategy-evolution";
+import { withAuth } from "@/lib/withAuth";
 
-export async function GET(request) {
+export const GET = withAuth(async (request, context, authContext) => {
   try {
     const { searchParams } = new URL(request.url);
     const variantId = searchParams.get("variantId");
@@ -36,4 +37,4 @@ export async function GET(request) {
       { status: 500 }
     );
   }
-}
+}, { minRole: "viewer" });

@@ -5,13 +5,15 @@
  */
 import { getFastAPIAuthHeaders } from "@/lib/fastapi-auth";
 import { FASTAPI_BASE } from "@/lib/config";
+import { withAuth } from "@/lib/withAuth";
 
-export async function GET(
+export const GET = withAuth(async (
   request: Request,
-  { params }: { params: Promise<{ id: string }> }
-) {
+  context: { params: Promise<{ id: string }> },
+  authContext: any
+) => {
   try {
-    const { id } = await params;
+    const { id } = await context.params;
     const authHeaders = await getFastAPIAuthHeaders();
 
     const resp = await fetch(`${FASTAPI_BASE}/backtest/${id}`, {
@@ -38,19 +40,20 @@ export async function GET(
       { status: 500 }
     );
   }
-}
+}, { minRole: "viewer" });
 
 /**
  * DELETE /api/backtest/detail/[id]
  *
  * BFF proxy: deletes a backtest result by ID from FastAPI backend.
  */
-export async function DELETE(
+export const DELETE = withAuth(async (
   request: Request,
-  { params }: { params: Promise<{ id: string }> }
-) {
+  context: { params: Promise<{ id: string }> },
+  authContext: any
+) => {
   try {
-    const { id } = await params;
+    const { id } = await context.params;
     const authHeaders = await getFastAPIAuthHeaders();
 
     const resp = await fetch(`${FASTAPI_BASE}/backtest/${id}`, {
@@ -81,4 +84,4 @@ export async function DELETE(
       { status: 500 }
     );
   }
-}
+}, { minRole: "trader" });

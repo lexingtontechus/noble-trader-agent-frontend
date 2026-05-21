@@ -3,6 +3,7 @@ import { createOrder, getOrders } from "@/lib/alpaca-client";
 import { yahooToAlpacaSymbol, getAssetClass } from "@/lib/symbol-utils";
 import { db } from "@/lib/db";
 import { recordPerformance, getActiveVariant } from "@/lib/strategy-evolution";
+import { withAuth } from "@/lib/withAuth";
 
 // Fallback Alpaca keys from env vars
 const ALPACA_API_KEY = process.env.ALPACA_API_KEY;
@@ -26,7 +27,7 @@ async function resolveAlpacaKeys() {
  * Execute approved trades via Alpaca.
  * Body: { trades: Array<{ id, symbol, side, order_type, qty, limit_price, time_in_force }> }
  */
-export async function POST(request) {
+export const POST = withAuth(async (request, context, authContext) => {
   try {
     const keys = await resolveAlpacaKeys();
     if (!keys?.apiKey || !keys?.secretKey) {
@@ -191,4 +192,4 @@ export async function POST(request) {
       { status: 500 }
     );
   }
-}
+}, { minRole: "trader" });

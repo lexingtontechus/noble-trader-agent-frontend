@@ -16,6 +16,7 @@ import { FASTAPI_BASE } from "@/lib/config";
 import { db } from "@/lib/supabase/db";
 import { redis } from "@/lib/redis";
 import { sendAlert, ALERT_TYPES } from "@/lib/alerting";
+import { withAuth } from "@/lib/withAuth";
 
 const RENKO_BASE = `${FASTAPI_BASE}/renko`;
 
@@ -24,7 +25,7 @@ const CHUNK_SIZE = 150;
 
 // ── GET: Load cached snapshot (Redis L1 → Supabase L2) ──────────────────────
 
-export async function GET(request) {
+export const GET = withAuth(async (request, context, authContext) => {
   try {
     const url = new URL(request.url);
     const symbol = url.searchParams.get("symbol") || "SPY";
@@ -118,11 +119,11 @@ export async function GET(request) {
     console.error("[warmup GET] Error:", err);
     return Response.json({ cached: false, error: err.message });
   }
-}
+}, { minRole: "viewer" });
 
 // ── POST: Warm up pipeline and save to Redis L1 + Supabase L2 ───────────────
 
-export async function POST(request) {
+export const POST = withAuth(async (request, context, authContext) => {
   try {
     const body = await request.json();
     const symbol = body.symbol || "SPY";
@@ -399,4 +400,4 @@ export async function POST(request) {
       { status: 500 }
     );
   }
-}
+}, { minRole: "trader" });

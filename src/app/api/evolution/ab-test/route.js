@@ -21,8 +21,9 @@
  * Body: { testId: string, activateWinner?: boolean }
  */
 import { createABTest, getActiveABTest, completeABTest, activateVariant } from "@/lib/strategy-evolution";
+import { withAuth } from "@/lib/withAuth";
 
-export async function GET(request) {
+export const GET = withAuth(async (request, context, authContext) => {
   try {
     const { searchParams } = new URL(request.url);
     const symbol = searchParams.get("symbol") || null;
@@ -40,9 +41,9 @@ export async function GET(request) {
       { status: 500 }
     );
   }
-}
+}, { minRole: "viewer" });
 
-export async function POST(request) {
+export const POST = withAuth(async (request, context, authContext) => {
   try {
     const body = await request.json();
     const { name, variantAId, variantBId, allocationPct } = body;
@@ -69,9 +70,9 @@ export async function POST(request) {
       { status: 500 }
     );
   }
-}
+}, { minRole: "trader" });
 
-export async function DELETE(request) {
+export const DELETE = withAuth(async (request, context, authContext) => {
   try {
     const body = await request.json();
     const { testId, activateWinner } = body;
@@ -95,4 +96,4 @@ export async function DELETE(request) {
       { status: 500 }
     );
   }
-}
+}, { minRole: "trader" });

@@ -15,10 +15,11 @@
 
 import { tickCampaigns, feedCampaignResults } from "@/lib/campaign-engine";
 import { createApiError, sanitizeError } from "@/lib/error-messages";
+import { withAuth } from "@/lib/withAuth";
 
 const CRON_SECRET = process.env.CRON_SECRET;
 
-export async function POST(request) {
+export const POST = withAuth(async (request, context, authContext) => {
   try {
     // Verify cron auth (optional for manual testing, required for cron)
     const authHeader = request.headers.get("Authorization");
@@ -66,9 +67,4 @@ export async function POST(request) {
     const { message, code, status } = sanitizeError(error, { context: "campaign" });
     return Response.json({ error: message, code }, { status });
   }
-}
-
-// GET for easy browser/cron testing
-export async function GET(request) {
-  return POST(request);
-}
+}, { minRole: "trader" });

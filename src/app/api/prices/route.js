@@ -3,8 +3,9 @@ import { getCached } from "@/lib/cache";
 import { checkRateLimit, getClientIp } from "@/lib/rate-limiter";
 import { RATE_LIMIT } from "@/lib/config";
 import { normalizeToYahooSymbol } from "@/lib/symbol-utils";
+import { withAuth } from "@/lib/withAuth";
 
-export async function GET(request) {
+export const GET = withAuth(async (request, context, authContext) => {
   // Rate limit: 10 requests per minute per IP for historical data
   const ip = getClientIp(request);
   const rateCheck = checkRateLimit(
@@ -52,4 +53,4 @@ export async function GET(request) {
       { status: 500 },
     );
   }
-}
+}, { minRole: "viewer" });

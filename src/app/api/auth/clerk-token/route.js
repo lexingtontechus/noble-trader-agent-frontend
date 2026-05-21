@@ -4,9 +4,10 @@
  * Minimal version — uses Clerk REST API only, no heavy SDK imports.
  */
 
+import { withAuth } from "@/lib/withAuth";
 import { auth } from '@clerk/nextjs/server'
 
-export async function GET() {
+export const GET = withAuth(async (request, _context, _authContext) => {
   try {
     const { userId, sessionId } = await auth()
 
@@ -99,4 +100,4 @@ export async function GET() {
       { status: 502 }
     )
   }
-}
+}, { minRole: "viewer" });

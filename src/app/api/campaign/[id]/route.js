@@ -15,8 +15,9 @@ import {
   feedCampaignResults,
 } from "@/lib/campaign-engine";
 import { createApiError, sanitizeError } from "@/lib/error-messages";
+import { withAuth } from "@/lib/withAuth";
 
-export async function GET(request, { params }) {
+export const GET = withAuth(async (request, { params }, authContext) => {
   try {
     const { id } = await params;
     const campaign = await getCampaign(id);
@@ -28,9 +29,9 @@ export async function GET(request, { params }) {
     const { message, code, status } = sanitizeError(error, { context: "campaign" });
     return Response.json({ error: message, code }, { status });
   }
-}
+}, { minRole: "viewer" });
 
-export async function PATCH(request, { params }) {
+export const PATCH = withAuth(async (request, { params }, authContext) => {
   try {
     const { id } = await params;
     const body = await request.json();
@@ -68,16 +69,12 @@ export async function PATCH(request, { params }) {
     const { message, code, status } = sanitizeError(error, { context: "campaign" });
     return Response.json({ error: message, code }, { status });
   }
-}
+}, { minRole: "trader" });
 
-export async function DELETE(request, { params }) {
+export const DELETE = withAuth(async (request, { params }, authContext) => {
   try {
     const { id } = await params;
-    const { auth } = await import("@clerk/nextjs/server");
-    const { userId } = await auth();
-    if (!userId) {
-      return Response.json({ error: "Not authenticated" }, { status: 401 });
-    }
+    const { userId } = authContext;
 
     const { createClient } = await import("@supabase/supabase-js");
     const client = createClient(
@@ -117,4 +114,4 @@ export async function DELETE(request, { params }) {
     const { message, code, status } = sanitizeError(error, { context: "campaign" });
     return Response.json({ error: message, code }, { status });
   }
-}
+}, { minRole: "trader" });

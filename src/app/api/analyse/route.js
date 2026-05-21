@@ -2,6 +2,7 @@ import YahooFinance from "yahoo-finance2";
 import { analyseFull } from "@/lib/fastapi-client";
 import { getCached, setCache } from "@/lib/cache";
 import { normalizeToYahooSymbol } from "@/lib/symbol-utils";
+import { withAuth } from "@/lib/withAuth";
 
 const yahooFinance = new YahooFinance({ suppressNotices: ["ripHistorical"] });
 
@@ -23,7 +24,7 @@ function getPeriodDates(period) {
   return { period1, period2: now };
 }
 
-export async function POST(request) {
+export const POST = withAuth(async (request, context, authContext) => {
   try {
     const body = await request.json();
     const { symbol, period = "6mo", kelly_fraction, target_vol, base_risk_limit } = body;
@@ -72,4 +73,4 @@ export async function POST(request) {
       { status: 500 }
     );
   }
-}
+}, { minRole: "trader" });

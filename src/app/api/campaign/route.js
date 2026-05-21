@@ -10,8 +10,9 @@ import {
   createCampaign,
 } from "@/lib/campaign-engine";
 import { createApiError, sanitizeError } from "@/lib/error-messages";
+import { withAuth } from "@/lib/withAuth";
 
-export async function GET(request) {
+export const GET = withAuth(async (request, context, authContext) => {
   try {
     const { searchParams } = new URL(request.url);
     const status = searchParams.get("status") || undefined;
@@ -23,9 +24,9 @@ export async function GET(request) {
     const { message, code, status } = sanitizeError(error, { context: "campaign" });
     return Response.json({ error: message, code }, { status });
   }
-}
+}, { minRole: "viewer" });
 
-export async function POST(request) {
+export const POST = withAuth(async (request, context, authContext) => {
   try {
     const body = await request.json();
 
@@ -88,4 +89,4 @@ export async function POST(request) {
     const { message, code, status } = sanitizeError(error, { context: "campaign" });
     return Response.json({ error: message, code }, { status });
   }
-}
+}, { minRole: "trader" });

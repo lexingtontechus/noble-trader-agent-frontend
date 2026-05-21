@@ -2,8 +2,9 @@ import { NextResponse } from "next/server";
 import { getFastAPIAuthHeaders } from "@/lib/fastapi-auth";
 import { getCached, setCache } from "@/lib/cache";
 import { FASTAPI_BASE, CACHE_TTL } from "@/lib/config";
+import { withAuth } from "@/lib/withAuth";
 
-export async function POST(request) {
+export const POST = withAuth(async (request, context, authContext) => {
   try {
     const { symbol } = await request.json();
     if (!symbol)
@@ -61,4 +62,4 @@ export async function POST(request) {
   } catch (err) {
     return NextResponse.json({ error: err.message }, { status: 500 });
   }
-}
+}, { minRole: "trader" });

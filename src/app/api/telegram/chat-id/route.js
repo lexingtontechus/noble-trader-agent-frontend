@@ -1,11 +1,12 @@
 const TELEGRAM_BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN;
+import { withAuth } from "@/lib/withAuth";
 
 /**
  * GET /api/telegram/chat-id
  * Get the Telegram chat ID by polling getUpdates.
  * The user must have sent a message to the bot first.
  */
-export async function GET(request) {
+export const GET = withAuth(async (request, context, authContext) => {
   if (!TELEGRAM_BOT_TOKEN) {
     return Response.json(
       { error: "Telegram bot token not configured" },
@@ -67,4 +68,4 @@ export async function GET(request) {
       { status: 500 }
     );
   }
-}
+}, { minRole: "viewer" });

@@ -12,8 +12,9 @@
 import { getFastAPIAuthHeaders } from "@/lib/fastapi-auth";
 import { FASTAPI_BASE } from "@/lib/config";
 import { checkRateLimit, getClientIp } from "@/lib/rate-limiter";
+import { withAuth } from "@/lib/withAuth";
 
-export async function GET(request) {
+export const GET = withAuth(async (request, context, authContext) => {
   // ── Rate limiting: 10 req/min per IP (exports are heavier) ──
   const clientIp = getClientIp(request);
   const rateCheck = checkRateLimit(`pnl:export:${clientIp}`, 10, 60000);
@@ -66,4 +67,4 @@ export async function GET(request) {
       { status: 500 }
     );
   }
-}
+}, { minRole: "viewer" });

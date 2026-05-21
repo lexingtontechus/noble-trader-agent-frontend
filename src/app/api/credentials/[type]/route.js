@@ -11,6 +11,7 @@
  * PUT    — Validate credentials against Alpaca API
  */
 
+import { withAuth } from "@/lib/withAuth";
 import {
   hasCredentials,
   saveCredentials,
@@ -20,7 +21,7 @@ import {
 import { getAlpacaKeys, setAlpacaKeys, deleteAlpacaKeys, hasAlpacaKeys } from "@/lib/clerk-metadata";
 import { createApiError, sanitizeError } from "@/lib/error-messages";
 
-export async function GET(request, { params }) {
+export const GET = withAuth(async (request, { params }, _authContext) => {
   try {
     const { type } = await params;
     if (!["paper", "live"].includes(type)) {
@@ -49,13 +50,24 @@ export async function GET(request, { params }) {
   } catch (error) {
     return createApiError(error, { context: "credentials" });
   }
-}
+}, { minRole: "viewer" });
 
-export async function POST(request, { params }) {
+export const POST = withAuth(async (request, { params }, authContext) => {
   try {
     const { type } = await params;
     if (!["paper", "live"].includes(type)) {
       return Response.json({ error: "Invalid credential type. Use 'paper' or 'live'." }, { status: 400 });
+    }
+
+    // Plan gating for live credentials — enforced at middleware level
+    if (type === "live") {
+      const allowedPlans = ["premium", "institutional"];
+      if (!allowedPlans.includes(authContext.plan)) {
+        return Response.json(
+          { error: "Live trading requires a Premium or Institutional plan", code: "PLAN_REQUIRED" },
+          { status: 403 }
+        );
+      }
     }
 
     const body = await request.json();
@@ -73,30 +85,6 @@ export async function POST(request, { params }) {
     } catch (supabaseErr) {
       console.error(`[credentials/POST] Supabase save failed for type=${type}:`, supabaseErr.message);
       console.error("[credentials/POST] Full error:", supabaseErr.stack || supabaseErr);
-
-      // Plan gating check — even in Clerk fallback, enforce live trading plan requirement
-      if (type === "live") {
-        try {
-          const { auth, clerkClient } = await import("@clerk/nextjs/server");
-          const { userId } = await auth();
-          if (userId) {
-            const client = await clerkClient();
-            const user = await client.users.getUser(userId);
-            const plan = user?.privateMetadata?.plan || "free";
-            if (plan !== "premium" && plan !== "institutional") {
-              return Response.json(
-                { error: "Live trading requires a Premium or Institutional plan", code: "PLAN_REQUIRED" },
-                { status: 403 }
-              );
-            }
-          }
-        } catch {
-          return Response.json(
-            { error: "Live trading requires a Premium or Institutional plan", code: "PLAN_REQUIRED" },
-            { status: 403 }
-          );
-        }
-      }
 
       // Fallback: Clerk privateMetadata (paper keys only)
       if (type === "paper") {
@@ -123,9 +111,9 @@ export async function POST(request, { params }) {
     const { message, code, status } = sanitizeError(error, { context: "credentials" });
     return Response.json({ error: message, code }, { status });
   }
-}
+}, { minRole: "viewer" });
 
-export async function DELETE(request, { params }) {
+export const DELETE = withAuth(async (request, { params }, _authContext) => {
   try {
     const { type } = await params;
     if (!["paper", "live"].includes(type)) {
@@ -155,9 +143,9 @@ export async function DELETE(request, { params }) {
   } catch (error) {
     return createApiError(error, { context: "credentials" });
   }
-}
+}, { minRole: "trader" });
 
-export async function PUT(request, { params }) {
+export const PUT = withAuth(async (request, { params }, _authContext) => {
   try {
     const { type } = await params;
     if (!["paper", "live"].includes(type)) {
@@ -169,4 +157,4 @@ export async function PUT(request, { params }) {
   } catch (error) {
     return createApiError(error, { context: "credentials" });
   }
-}
+}, { minRole: "viewer" });

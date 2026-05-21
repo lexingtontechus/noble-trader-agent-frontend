@@ -7,6 +7,7 @@
  * PATCH  — Migrate Clerk keys to Supabase (one-time)
  */
 
+import { withAuth } from "@/lib/withAuth";
 import {
   getOnboardingStatus,
   updateOnboarding,
@@ -15,7 +16,7 @@ import {
   getAllCredentialStatus,
 } from "@/lib/credentials";
 
-export async function GET() {
+export const GET = withAuth(async (request, _context, _authContext) => {
   try {
     const [status, credStatus] = await Promise.all([
       getOnboardingStatus(),
@@ -33,9 +34,9 @@ export async function GET() {
     }
     return Response.json({ error: error.message }, { status: 500 });
   }
-}
+}, { minRole: "viewer" });
 
-export async function POST(request) {
+export const POST = withAuth(async (request, _context, _authContext) => {
   try {
     const updates = await request.json();
     const result = await updateOnboarding(updates);
@@ -46,9 +47,9 @@ export async function POST(request) {
     }
     return Response.json({ error: error.message }, { status: 500 });
   }
-}
+}, { minRole: "viewer" });
 
-export async function PUT() {
+export const PUT = withAuth(async (request, _context, _authContext) => {
   try {
     const result = await completeOnboarding();
     return Response.json(result);
@@ -58,9 +59,9 @@ export async function PUT() {
     }
     return Response.json({ error: error.message }, { status: 500 });
   }
-}
+}, { minRole: "viewer" });
 
-export async function PATCH() {
+export const PATCH = withAuth(async (request, _context, _authContext) => {
   try {
     const result = await migrateClerkKeysToSupabase();
     return Response.json(result);
@@ -70,4 +71,4 @@ export async function PATCH() {
     }
     return Response.json({ error: error.message }, { status: 500 });
   }
-}
+}, { minRole: "viewer" });

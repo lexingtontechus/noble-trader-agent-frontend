@@ -12,8 +12,9 @@
 import { runOptunaOptimization } from "@/lib/strategy-evolution";
 import { fetchHistoricalPrices } from "@/lib/yahoo-prices";
 import { alpacaToYahooSymbol } from "@/lib/symbol-utils";
+import { withAuth } from "@/lib/withAuth";
 
-export async function POST(request) {
+export const POST = withAuth(async (request, context, authContext) => {
   try {
     const body = await request.json();
     const { symbol, nTrials, studyName, prices: providedPrices } = body;
@@ -84,4 +85,4 @@ export async function POST(request) {
       { status: 500 }
     );
   }
-}
+}, { minRole: "admin" });

@@ -5,8 +5,9 @@
  */
 import { getFastAPIAuthHeaders } from "@/lib/fastapi-auth";
 import { FASTAPI_BASE } from "@/lib/config";
+import { withAuth } from "@/lib/withAuth";
 
-export async function POST(request: Request) {
+export const POST = withAuth(async (request: Request, context: any, authContext: any) => {
   try {
     const body = await request.json();
     const { ids } = body;
@@ -46,4 +47,4 @@ export async function POST(request: Request) {
       { status: 500 }
     );
   }
-}
+}, { minRole: "trader" });

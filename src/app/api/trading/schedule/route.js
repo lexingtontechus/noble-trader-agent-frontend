@@ -2,13 +2,14 @@ import { getAlpacaKeys } from "@/lib/clerk-metadata";
 import { createOrder, getOrders } from "@/lib/alpaca-client";
 import { yahooToAlpacaSymbol } from "@/lib/symbol-utils";
 import { db } from "@/lib/db";
+import { withAuth } from "@/lib/withAuth";
 
 /**
  * POST /api/trading/schedule
  * Create a scheduled order for later execution.
  * Body: { symbol, side, orderType, qty, limitPrice?, timeInForce, scheduleAt?, dependsOnOrders?[] }
  */
-export async function POST(request) {
+export const POST = withAuth(async (request, context, authContext) => {
   try {
     const body = await request.json();
     const {
@@ -54,13 +55,13 @@ export async function POST(request) {
       { status: 500 }
     );
   }
-}
+}, { minRole: "trader" });
 
 /**
  * GET /api/trading/schedule
  * Get all scheduled orders, optionally filtered by status.
  */
-export async function GET(request) {
+export const GET = withAuth(async (request, context, authContext) => {
   try {
     const { searchParams } = new URL(request.url);
     const status = searchParams.get("status");
@@ -81,4 +82,4 @@ export async function GET(request) {
       { status: 500 }
     );
   }
-}
+}, { minRole: "viewer" });

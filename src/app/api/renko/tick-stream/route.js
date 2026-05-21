@@ -11,10 +11,11 @@
 
 import { getFastAPIAuthHeaders } from "@/lib/fastapi-auth";
 import { FASTAPI_BASE } from "@/lib/config";
+import { withAuth } from "@/lib/withAuth";
 
 const RENKO_BASE = `${FASTAPI_BASE}/renko`;
 
-export async function POST(request) {
+export const POST = withAuth(async (request, context, authContext) => {
   try {
     const body = await request.json();
     const { symbol = "SPY", ticks = [] } = body;
@@ -109,4 +110,4 @@ export async function POST(request) {
       { status: 500 }
     );
   }
-}
+}, { minRole: "viewer" });

@@ -7,10 +7,11 @@
  */
 
 import { sendAlert, getRecentAlerts, formatAlertMessage } from "@/lib/alerting";
+import { withAuth } from "@/lib/withAuth";
 
 // ── GET: Load recent alerts ────────────────────────────────────────────────
 
-export async function GET(request) {
+export const GET = withAuth(async (request, context, authContext) => {
   try {
     const { searchParams } = new URL(request.url);
     const symbol = searchParams.get("symbol") || undefined;
@@ -30,11 +31,11 @@ export async function GET(request) {
       { status: 500 }
     );
   }
-}
+}, { minRole: "viewer" });
 
 // ── POST: Create and send an alert ─────────────────────────────────────────
 
-export async function POST(request) {
+export const POST = withAuth(async (request, context, authContext) => {
   try {
     const body = await request.json();
     const { type, symbol, message, severity, data } = body;
@@ -82,11 +83,11 @@ export async function POST(request) {
       { status: 500 }
     );
   }
-}
+}, { minRole: "trader" });
 
 // ── DELETE: Clear all alerts ───────────────────────────────────────────────
 
-export async function DELETE(request) {
+export const DELETE = withAuth(async (request, context, authContext) => {
   try {
     const { searchParams } = new URL(request.url);
     const symbol = searchParams.get("symbol");
@@ -108,4 +109,4 @@ export async function DELETE(request) {
       { status: 500 }
     );
   }
-}
+}, { minRole: "trader" });

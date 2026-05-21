@@ -1,3 +1,4 @@
+import { withAuth } from "@/lib/withAuth";
 import { getAlpacaKeys } from "@/lib/clerk-metadata";
 import { getOrders } from "@/lib/alpaca-client";
 import { db } from "@/lib/db";
@@ -6,7 +7,7 @@ import { db } from "@/lib/db";
  * GET /api/trading/status
  * Check status of all trades in an analysis run, and update from Alpaca.
  */
-export async function GET(request) {
+export const GET = withAuth(async (request, _context, _authContext) => {
   try {
     const { searchParams } = new URL(request.url);
     const analysisId = searchParams.get("analysisId");
@@ -73,4 +74,4 @@ export async function GET(request) {
       { status: 500 }
     );
   }
-}
+}, { minRole: "viewer" });

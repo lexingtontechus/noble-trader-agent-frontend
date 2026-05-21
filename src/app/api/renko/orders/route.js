@@ -8,10 +8,11 @@
 
 import { getOrders, createOrder, alpacaFetch } from "@/lib/alpaca-client";
 import { getAlpacaKeys } from "@/lib/clerk-metadata";
+import { withAuth } from "@/lib/withAuth";
 
 // ── GET: List recent orders ────────────────────────────────────────────────────
 
-export async function GET(request) {
+export const GET = withAuth(async (request, context, authContext) => {
   try {
     const keys = await getAlpacaKeys();
     if (!keys?.apiKey || !keys?.secretKey) {
@@ -55,11 +56,11 @@ export async function GET(request) {
       { status: 500 }
     );
   }
-}
+}, { minRole: "viewer" });
 
 // ── POST: Submit a Renko signal for execution ─────────────────────────────────
 
-export async function POST(request) {
+export const POST = withAuth(async (request, context, authContext) => {
   try {
     const keys = await getAlpacaKeys();
     if (!keys?.apiKey || !keys?.secretKey) {
@@ -167,11 +168,11 @@ export async function POST(request) {
       { status: 500 }
     );
   }
-}
+}, { minRole: "trader" });
 
 // ── DELETE: Cancel all open orders ─────────────────────────────────────────────
 
-export async function DELETE(request) {
+export const DELETE = withAuth(async (request, context, authContext) => {
   try {
     const keys = await getAlpacaKeys();
     if (!keys?.apiKey || !keys?.secretKey) {
@@ -205,7 +206,7 @@ export async function DELETE(request) {
       { status: 500 }
     );
   }
-}
+}, { minRole: "trader" });
 
 // ── Helpers ────────────────────────────────────────────────────────────────────
 
