@@ -24,6 +24,10 @@ const PortfolioContext = createContext(null);
  *   equityCurvePeriod: string,
  *   setEquityCurvePeriod: (p: string) => void,
  *   priceTicks: Record<string, { price: number, timestamp: number }>,
+ *   recentTrades: array,
+ *   realizedPnl: number,
+ *   realizedPnlBySymbol: Record<string, number>,
+ *   tradesLoading: boolean,
  *   totalUnrealizedPnl: number,
  *   totalUnrealizedPnlPc: number,
  *   totalMarketValue: number,
@@ -35,6 +39,7 @@ const PortfolioContext = createContext(null);
  *   isStale: boolean,
  *   sseConnected: boolean,
  *   refresh: () => Promise<void>,
+ *   refreshTrades: () => Promise<void>,
  * }}
  */
 export function usePortfolio() {
@@ -72,8 +77,11 @@ export function PortfolioProvider({ children }) {
   const [isStale, setIsStale] = useState(false);
   const [hasKeys, setHasKeys] = useState(null);
   const [sseConnected, setSseConnected] = useState(false);
+  const [recentTrades, setRecentTrades] = useState([]);
+  const [tradesLoading, setTradesLoading] = useState(false);
 
   const intervalRef = useRef(null);
+  const tradesFetchedRef = useRef(false);
   const staleTimerRef = useRef(null);
   const sseRef = useRef(null);
   const SSE_ACTIVE_INTERVAL = 30000; // 30s polling when SSE is connected (safety net)
@@ -344,6 +352,34 @@ export function PortfolioProvider({ children }) {
     };
   }, [hasKeys]);
 
+  // ── Trade history fetch ──────────────────────────────────
+  const refreshTrades = useCallback(async () => {
+    if (!hasKeys) return;
+    setTradesLoading(true);
+    try {
+      const res = await fetch("/api/alpaca/activities?activity_types=FILL&period=3m&direction=desc&page_size=100");
+      if (!res.ok) {
+        setRecentTrades([]);
+        return;
+      }
+      const fills = await res.json();
+      const trades = Array.isArray(fills) ? fills : [];
+      setRecentTrades(trades);
+    } catch {
+      setRecentTrades([]);
+    } finally {
+      setTradesLoading(false);
+    }
+  }, [hasKeys]);
+
+  // Fetch trades on first key resolution + after SSE fill events
+  useEffect(() => {
+    if (hasKeys && !tradesFetchedRef.current) {
+      tradesFetchedRef.current = true;
+      refreshTrades();
+    }
+  }, [hasKeys, refreshTrades]);
+
   // ── Computed P&L values ────────────────────────────────────
   const totalUnrealizedPnl = useMemo(
     () => positions.reduce((sum, p) => sum + (parseFloat(p.unrealized_pl) || 0), 0),
@@ -380,6 +416,21 @@ export function PortfolioProvider({ children }) {
     [account, dayPnl]
   );
 
+  // ── Realized P&L from trade history ─────────────────────────
+  const { realizedPnl, realizedPnlBySymbol } = useMemo(() => {
+    if (!recentTrades.length) return { realizedPnl: 0, realizedPnlBySymbol: {} };
+    let total = 0;
+    const bySymbol = {};
+    for (const trade of recentTrades) {
+      // Alpaca FILL activity: net_amount is the P&L for that fill
+      const netAmt = parseFloat(trade.net_amount) || 0;
+      const symbol = trade.symbol || "";
+      total += netAmt;
+      bySymbol[symbol] = (bySymbol[symbol] || 0) + netAmt;
+    }
+    return { realizedPnl: total, realizedPnlBySymbol: bySymbol };
+  }, [recentTrades]);
+
   // ── Context value ──────────────────────────────────────────
   const value = useMemo(
     () => ({
@@ -390,6 +441,10 @@ export function PortfolioProvider({ children }) {
       equityCurvePeriod,
       setEquityCurvePeriod,
       priceTicks,
+      recentTrades,
+      realizedPnl,
+      realizedPnlBySymbol,
+      tradesLoading,
       totalUnrealizedPnl,
       totalUnrealizedPnlPc,
       totalMarketValue,
@@ -402,6 +457,7 @@ export function PortfolioProvider({ children }) {
       sseConnected,
       hasKeys,
       refresh,
+      refreshTrades,
     }),
     [
       account,
@@ -410,6 +466,10 @@ export function PortfolioProvider({ children }) {
       equityCurveLoading,
       equityCurvePeriod,
       priceTicks,
+      recentTrades,
+      realizedPnl,
+      realizedPnlBySymbol,
+      tradesLoading,
       totalUnrealizedPnl,
       totalUnrealizedPnlPc,
       totalMarketValue,
@@ -422,6 +482,7 @@ export function PortfolioProvider({ children }) {
       sseConnected,
       hasKeys,
       refresh,
+      refreshTrades,
     ]
   );
 

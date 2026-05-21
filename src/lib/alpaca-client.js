@@ -115,3 +115,23 @@ export async function getPortfolioHistory(apiKey, secretKey, { period = "1M", ti
   const params = new URLSearchParams({ period, timeframe });
   return alpacaFetch(`/account/portfolio/history?${params}`, { apiKey, secretKey, mode });
 }
+
+/**
+ * Get account activities (trade fills, dividends, cash transactions, etc.)
+ * @param {string} apiKey
+ * @param {string} secretKey
+ * @param {{ activity_types?: string, after?: string, until?: string, direction?: string, page_size?: number, mode?: string }} opts
+ *   activity_types: comma-separated — "FILL", "DIV", "CSD", "CWD", "INT", "ASC", etc.
+ *   after: ISO date string — start of date range
+ *   until: ISO date string — end of date range
+ *   direction: "asc" | "desc" (default "desc")
+ *   page_size: max items to return (default 100, max 1000)
+ */
+export async function getActivities(apiKey, secretKey, { activity_types = "FILL", after = null, until = null, direction = "desc", page_size = 100, mode = "paper" } = {}) {
+  const params = new URLSearchParams({ direction, page_size: String(page_size) });
+  if (activity_types) params.set("activity_types", activity_types);
+  if (after) params.set("after", after);
+  if (until) params.set("until", until);
+  const result = await alpacaFetch(`/account/activities?${params}`, { apiKey, secretKey, mode });
+  return Array.isArray(result) ? result : [];
+}

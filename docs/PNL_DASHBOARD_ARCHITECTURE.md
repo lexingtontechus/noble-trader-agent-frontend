@@ -1,6 +1,6 @@
 # Real-Time P&L Dashboard — Architecture Design
 
-> **Status**: Phase 2+3 Complete (Backend SSE + Frontend EventSource wired)
+> **Status**: Phase 4 Complete (Realized P&L + Trade History)
 > **Last Updated**: 2025-05-21
 > **Decision**: Option C — Alpaca Streaming → FastAPI Backend → SSE → Frontend
 
@@ -317,11 +317,14 @@ The `AlpacaStreamManager` opens streaming connections per-user after resolving c
 - Auto-reconnect with exponential backoff (max 20 attempts)
 - Polling continues as safety net at 10s intervals
 
-### Phase 4: Realized P&L + Trade History
-- Add `/api/alpaca/activities` BFF route
-- Add "Recent Trades" section to dashboard
-- Daily/weekly realized P&L tracking
-- P&L breakdown: realized vs unrealized
+### Phase 4: Realized P&L + Trade History ✅ Complete
+- Add `getActivities()` to `alpaca-client.js` — calls Alpaca `/v2/account/activities` API
+- Add `/api/alpaca/activities` BFF route (FILL type, period shorthand, pagination)
+- Add `recentTrades`, `realizedPnl`, `realizedPnlBySymbol`, `refreshTrades` to `PortfolioContext`
+- Add "Realized P&L (3M)" metric card to LivePnLDashboard (5-card grid: equity + day + unrealized + realized + buying power)
+- Add "Recent Trades" table section with time, symbol, side, qty, price, P&L columns
+- Add "Realized P&L by Symbol" breakdown (top 10 symbols sorted by realized P&L)
+- Trade history fetched on first key resolution (not on every poll)
 
 ### Phase 5: Risk Metrics + Intraday + Export
 - Sharpe ratio, max drawdown from equity curve

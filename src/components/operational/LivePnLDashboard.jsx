@@ -49,6 +49,11 @@ export default function LivePnLDashboard({ compact = false }) {
     totalMarketValue,
     dayPnl,
     dayPnlPc,
+    recentTrades,
+    realizedPnl,
+    realizedPnlBySymbol,
+    tradesLoading,
+    refreshTrades,
   } = usePortfolio();
 
   const [sortBy, setSortBy] = useState("unrealized_pl");
@@ -219,7 +224,7 @@ export default function LivePnLDashboard({ compact = false }) {
         </div>
 
         {/* Top Metric Cards */}
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mt-2">
+        <div className="grid grid-cols-2 md:grid-cols-5 gap-3 mt-2">
           {/* Total Equity */}
           <div className="stat bg-base-200 rounded-lg p-3">
             <div className="stat-title text-xs">Portfolio Value</div>
@@ -250,6 +255,17 @@ export default function LivePnLDashboard({ compact = false }) {
             </div>
             <div className={`stat-desc text-xs ${pnlColor(totalUnrealizedPnlPc)}`}>
               {formatPercent(totalUnrealizedPnlPc)}
+            </div>
+          </div>
+
+          {/* Realized P&L */}
+          <div className="stat bg-base-200 rounded-lg p-3">
+            <div className="stat-title text-xs">Realized P&L (3M)</div>
+            <div className={`stat-value text-xl font-bold ${pnlColor(realizedPnl)}`}>
+              {tradesLoading ? <span className="loading loading-spinner loading-xs" /> : formatCurrency(realizedPnl)}
+            </div>
+            <div className="stat-desc text-xs">
+              {recentTrades.length} trade{recentTrades.length !== 1 ? "s" : ""}
             </div>
           </div>
 
@@ -480,6 +496,97 @@ export default function LivePnLDashboard({ compact = false }) {
             </div>
           </div>
         )}
+
+        {/* Recent Trades Section */}
+        <div className="mt-4">
+          <div className="flex items-center justify-between mb-2">
+            <h3 className="font-bold text-sm">Recent Trades</h3>
+            <div className="flex items-center gap-2">
+              {tradesLoading && <span className="loading loading-spinner loading-xs text-primary" />}
+              <button
+                className="btn btn-xs btn-ghost"
+                onClick={refreshTrades}
+                disabled={tradesLoading}
+              >
+                Refresh
+              </button>
+            </div>
+          </div>
+
+          {recentTrades.length === 0 ? (
+            <div className="text-center py-6 text-base-content/40 text-sm">
+              {tradesLoading ? "Loading trades..." : "No recent trades found"}
+            </div>
+          ) : (
+            <>
+              <div className="overflow-x-auto">
+                <table className="table table-sm">
+                  <thead>
+                    <tr>
+                      <th>Time</th>
+                      <th>Symbol</th>
+                      <th>Side</th>
+                      <th className="text-right">Qty</th>
+                      <th className="text-right">Price</th>
+                      <th className="text-right">P&L</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {recentTrades.slice(0, 20).map((trade, idx) => {
+                      const netAmt = parseFloat(trade.net_amount) || 0;
+                      const tradeTime = trade.transaction_timestamp
+                        ? new Date(trade.transaction_timestamp)
+                        : trade.date
+                          ? new Date(trade.date)
+                          : null;
+                      return (
+                        <tr key={trade.id || idx}>
+                          <td className="text-xs font-mono">
+                            {tradeTime
+                              ? tradeTime.toLocaleDateString("en-US", { month: "short", day: "numeric" }) +
+                                " " +
+                                tradeTime.toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit" })
+                              : "-"}
+                          </td>
+                          <td className="font-bold">{trade.symbol || "-"}</td>
+                          <td>
+                            <span className={`badge badge-xs ${trade.side === "buy" ? "badge-success" : "badge-error"}`}>
+                              {(trade.side || "-").toUpperCase()}
+                            </span>
+                          </td>
+                          <td className="text-right font-mono">{parseFloat(trade.qty) || 0}</td>
+                          <td className="text-right font-mono">${parseFloat(trade.price || trade.fill_price || 0).toFixed(2)}</td>
+                          <td className={`text-right font-mono ${pnlColor(netAmt)}`}>
+                            {netAmt !== 0 ? formatCurrency(netAmt) : "-"}
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+
+              {/* Realized P&L by Symbol Breakdown */}
+              {Object.keys(realizedPnlBySymbol).length > 0 && (
+                <div className="mt-3">
+                  <h4 className="font-semibold text-xs text-base-content/60 mb-1">Realized P&L by Symbol</h4>
+                  <div className="flex flex-wrap gap-2">
+                    {Object.entries(realizedPnlBySymbol)
+                      .sort(([, a], [, b]) => b - a)
+                      .slice(0, 10)
+                      .map(([symbol, pnl]) => (
+                        <span key={symbol} className="text-xs flex items-center gap-1">
+                          <span className={`inline-block w-2 h-2 rounded-full ${pnl >= 0 ? "bg-success" : "bg-error"}`} />
+                          <span className="font-bold">{symbol}</span>{" "}
+                          <span className={pnlColor(pnl)}>{formatCurrency(pnl)}</span>
+                        </span>
+                      ))}
+                  </div>
+                </div>
+              )}
+            </>
+          )}
+        </div>
       </div>
     </div>
   );
