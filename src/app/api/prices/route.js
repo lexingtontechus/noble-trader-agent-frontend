@@ -1,32 +1,18 @@
+/**
+ * GET /api/prices
+ *
+ * Fetch historical price data from Yahoo Finance with caching.
+ *
+ * Rate limiting: auto-detected "data" tier via withAuth (60 req/min × plan multiplier)
+ * Previously used RATE_LIMIT.HISTORICAL (10/min) — now uses plan-aware tier system.
+ */
+
 import { fetchHistoricalPrices } from "@/lib/yahoo-prices";
 import { getCached } from "@/lib/cache";
-import { checkRateLimit, getClientIp } from "@/lib/rate-limiter";
-import { RATE_LIMIT } from "@/lib/config";
 import { normalizeToYahooSymbol } from "@/lib/symbol-utils";
 import { withAuth } from "@/lib/withAuth";
 
 export const GET = withAuth(async (request, context, authContext) => {
-  // Rate limit: 10 requests per minute per IP for historical data
-  const ip = getClientIp(request);
-  const rateCheck = checkRateLimit(
-    `historical:${ip}`,
-    RATE_LIMIT.HISTORICAL.max,
-    RATE_LIMIT.HISTORICAL.windowMs,
-  );
-  if (!rateCheck.allowed) {
-    return Response.json(
-      { error: "Rate limited. Try again in a moment." },
-      {
-        status: 429,
-        headers: {
-          "Retry-After": String(
-            Math.ceil((rateCheck.resetAt - Date.now()) / 1000),
-          ),
-        },
-      },
-    );
-  }
-
   const { searchParams } = new URL(request.url);
   const rawSymbol = searchParams.get("symbol");
   const period = searchParams.get("period") || "6mo";

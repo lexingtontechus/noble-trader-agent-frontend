@@ -5,25 +5,16 @@
  * POST /api/pnl/alerts       — Create a P&L alert threshold
  * DELETE /api/pnl/alerts/:id — Delete a P&L alert threshold
  *
- * Proxies to FastAPI /pnl/alerts
+ * Rate limiting:
+ *   GET: auto-detected "data" tier (60 req/min × plan multiplier)
+ *   POST/DELETE: "write" tier (10 req/min × plan multiplier)
  */
 
 import { getFastAPIAuthHeaders } from "@/lib/fastapi-auth";
 import { FASTAPI_BASE } from "@/lib/config";
-import { checkRateLimit, getClientIp } from "@/lib/rate-limiter";
 import { withAuth } from "@/lib/withAuth";
 
 export const GET = withAuth(async (request, context, authContext) => {
-  // ── Rate limiting: 30 req/min per IP ───────────────────
-  const clientIp = getClientIp(request);
-  const rateCheck = checkRateLimit(`pnl:alerts:${clientIp}`, 30, 60000);
-  if (!rateCheck.allowed) {
-    return Response.json(
-      { error: "Rate limit exceeded. Please try again later.", code: "RATE_LIMITED" },
-      { status: 429, headers: { "Retry-After": String(Math.ceil((rateCheck.resetAt - Date.now()) / 1000)) } }
-    );
-  }
-
   const authHeaders = await getFastAPIAuthHeaders();
 
   if (!authHeaders["Authorization"] && !authHeaders["X-API-Key"]) {
@@ -54,16 +45,6 @@ export const GET = withAuth(async (request, context, authContext) => {
 }, { minRole: "viewer" });
 
 export const POST = withAuth(async (request, context, authContext) => {
-  // ── Rate limiting: 10 req/min per IP (writes are heavier) ──
-  const clientIp = getClientIp(request);
-  const rateCheck = checkRateLimit(`pnl:alerts:write:${clientIp}`, 10, 60000);
-  if (!rateCheck.allowed) {
-    return Response.json(
-      { error: "Rate limit exceeded. Please try again later.", code: "RATE_LIMITED" },
-      { status: 429, headers: { "Retry-After": String(Math.ceil((rateCheck.resetAt - Date.now()) / 1000)) } }
-    );
-  }
-
   const authHeaders = await getFastAPIAuthHeaders();
 
   if (!authHeaders["Authorization"] && !authHeaders["X-API-Key"]) {
@@ -98,19 +79,9 @@ export const POST = withAuth(async (request, context, authContext) => {
       { status: 500 }
     );
   }
-}, { minRole: "viewer" });
+}, { minRole: "viewer", rateTier: "write" });
 
 export const DELETE = withAuth(async (request, context, authContext) => {
-  // ── Rate limiting: 10 req/min per IP (writes are heavier) ──
-  const clientIp = getClientIp(request);
-  const rateCheck = checkRateLimit(`pnl:alerts:write:${clientIp}`, 10, 60000);
-  if (!rateCheck.allowed) {
-    return Response.json(
-      { error: "Rate limit exceeded. Please try again later.", code: "RATE_LIMITED" },
-      { status: 429, headers: { "Retry-After": String(Math.ceil((rateCheck.resetAt - Date.now()) / 1000)) } }
-    );
-  }
-
   const authHeaders = await getFastAPIAuthHeaders();
 
   if (!authHeaders["Authorization"] && !authHeaders["X-API-Key"]) {
@@ -146,4 +117,4 @@ export const DELETE = withAuth(async (request, context, authContext) => {
       { status: 500 }
     );
   }
-}, { minRole: "viewer" });
+}, { minRole: "viewer", rateTier: "write" });

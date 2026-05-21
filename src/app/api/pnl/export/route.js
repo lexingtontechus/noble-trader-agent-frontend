@@ -4,27 +4,14 @@
  * BFF proxy for P&L CSV export from FastAPI /pnl/export.
  * Streams the CSV response directly to the client.
  *
- * Query params:
- *   period: 1W, 1M, 3M, 6M, 1A, all
- *   sections: comma-separated (positions, trades, equity_curve, risk_metrics, all)
+ * Rate limiting: "write" tier (10 req/min × plan multiplier) — exports are heavier
  */
 
 import { getFastAPIAuthHeaders } from "@/lib/fastapi-auth";
 import { FASTAPI_BASE } from "@/lib/config";
-import { checkRateLimit, getClientIp } from "@/lib/rate-limiter";
 import { withAuth } from "@/lib/withAuth";
 
 export const GET = withAuth(async (request, context, authContext) => {
-  // ── Rate limiting: 10 req/min per IP (exports are heavier) ──
-  const clientIp = getClientIp(request);
-  const rateCheck = checkRateLimit(`pnl:export:${clientIp}`, 10, 60000);
-  if (!rateCheck.allowed) {
-    return Response.json(
-      { error: "Rate limit exceeded. Please try again later.", code: "RATE_LIMITED" },
-      { status: 429, headers: { "Retry-After": String(Math.ceil((rateCheck.resetAt - Date.now()) / 1000)) } }
-    );
-  }
-
   const authHeaders = await getFastAPIAuthHeaders();
 
   if (!authHeaders["Authorization"] && !authHeaders["X-API-Key"]) {
@@ -67,4 +54,4 @@ export const GET = withAuth(async (request, context, authContext) => {
       { status: 500 }
     );
   }
-}, { minRole: "viewer" });
+}, { minRole: "viewer", rateTier: "write" });

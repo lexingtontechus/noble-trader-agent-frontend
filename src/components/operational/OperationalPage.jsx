@@ -10,6 +10,7 @@ import LivePnLDashboard from "./LivePnLDashboard";
 import ComplianceReport from "./ComplianceReport";
 import HistoricalEquityCurve from "./HistoricalEquityCurve";
 import SmokeTestPanel from "./SmokeTestPanel";
+import RateLimitDashboard from "./RateLimitDashboard";
 
 /**
  * OperationalPage — Phase 8: Operational Hardening
@@ -110,6 +111,9 @@ export default function OperationalPage({ bffFetch }) {
         <ReconciliationPanel bffFetch={bffFetch} />
         <AuditLogViewer bffFetch={bffFetch} />
       </div>
+
+      {/* P4-6A: Rate Limit Dashboard — full width */}
+      <RateLimitDashboard />
 
       {/* P3-5E: Smoke Test Panel — full width */}
       <SmokeTestPanel />

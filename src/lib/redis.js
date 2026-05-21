@@ -216,12 +216,63 @@ function isAvailable() {
   return !!(url && token);
 }
 
+// ── Rate Limiting Primitives ────────────────────────────────────────────────
+
+/**
+ * Increment a counter in Redis (atomic INCR).
+ * Returns the new value after increment.
+ * Returns -1 on error or if Redis is unavailable.
+ */
+async function incr(key) {
+  try {
+    const client = getClient();
+    if (!client) return -1;
+    return await client.incr(key);
+  } catch (err) {
+    console.warn(`[redis] INCR ${key} failed:`, err.message);
+    return -1;
+  }
+}
+
+/**
+ * Set expiry on a key (seconds).
+ * Returns false on error or if Redis is unavailable.
+ */
+async function expire(key, seconds) {
+  try {
+    const client = getClient();
+    if (!client) return false;
+    return await client.expire(key, seconds);
+  } catch (err) {
+    console.warn(`[redis] EXPIRE ${key} failed:`, err.message);
+    return false;
+  }
+}
+
+/**
+ * Get remaining TTL of a key (seconds).
+ * Returns -2 if key doesn't exist, -1 if no expiry, -3 on error.
+ */
+async function ttl(key) {
+  try {
+    const client = getClient();
+    if (!client) return -3;
+    return await client.ttl(key);
+  } catch (err) {
+    console.warn(`[redis] TTL ${key} failed:`, err.message);
+    return -3;
+  }
+}
+
 // ── Export ───────────────────────────────────────────────────────────────────
 
 export const redis = {
   get,
   set,
   del,
+  incr,
+  expire,
+  ttl,
   getSnapshot,
   setSnapshot,
   delSnapshot,

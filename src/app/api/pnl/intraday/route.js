@@ -3,27 +3,14 @@
  *
  * BFF proxy for intraday P&L time-bucketed data from FastAPI /pnl/intraday.
  *
- * Query params:
- *   timeframe: 5Min, 15Min, 1Hour, 1Day
- *   period: 1D, 1W, 1M, 3M, 6M, 1A, all
+ * Rate limiting: auto-detected "data" tier via withAuth (60 req/min × plan multiplier)
  */
 
 import { getFastAPIAuthHeaders } from "@/lib/fastapi-auth";
 import { FASTAPI_BASE } from "@/lib/config";
-import { checkRateLimit, getClientIp } from "@/lib/rate-limiter";
 import { withAuth } from "@/lib/withAuth";
 
 export const GET = withAuth(async (request, context, authContext) => {
-  // ── Rate limiting: 30 req/min per IP ───────────────────
-  const clientIp = getClientIp(request);
-  const rateCheck = checkRateLimit(`pnl:intraday:${clientIp}`, 30, 60000);
-  if (!rateCheck.allowed) {
-    return Response.json(
-      { error: "Rate limit exceeded. Please try again later.", code: "RATE_LIMITED" },
-      { status: 429, headers: { "Retry-After": String(Math.ceil((rateCheck.resetAt - Date.now()) / 1000)) } }
-    );
-  }
-
   const authHeaders = await getFastAPIAuthHeaders();
 
   if (!authHeaders["Authorization"] && !authHeaders["X-API-Key"]) {

@@ -7,7 +7,7 @@ export const FASTAPI_BASE =
   process.env.NEXT_PUBLIC_FASTAPI_BASE_URL ||
   "https://noble-trader-fastapi-backend.onrender.com";
 
-export const APP_VERSION = "v6.0.0";
+export const APP_VERSION = "v7.0.0";
 
 /** Cache TTLs (milliseconds) */
 export const CACHE_TTL = {
@@ -33,8 +33,11 @@ export const POLL_INTERVAL = {
   SLOW: 60_000,     // 60s when market is quiet
 };
 
-/** Rate limits */
+/** Rate limits — now managed by rate-limiter.js tiers */
 export const RATE_LIMIT = {
-  PRICE: { max: 30, windowMs: 60_000 },     // 30 req/min for prices
-  HISTORICAL: { max: 10, windowMs: 60_000 }, // 10 req/min for historical
+  PRICE: { max: 30, windowMs: 60_000 },     // 30 req/min for prices (legacy compat)
+  HISTORICAL: { max: 10, windowMs: 60_000 }, // 10 req/min for historical (legacy compat)
+  // New tier-based system: see src/lib/rate-limiter.js → RATE_TIERS
+  // Plan multipliers: free=1x, premium=3x, institutional=10x
+  // Auto-detection via PATH_TIER_MAP in rate-limiter.js
 };

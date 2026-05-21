@@ -1,29 +1,17 @@
+/**
+ * GET /api/stream/latest-price
+ *
+ * Fetch the latest real-time price for a symbol from Yahoo Finance with caching.
+ *
+ * Rate limiting: auto-detected "data" tier via withAuth (60 req/min × plan multiplier)
+ */
+
 import { NextResponse } from "next/server";
 import { getCached, setCache } from "@/lib/cache";
-import { checkRateLimit, getClientIp } from "@/lib/rate-limiter";
-import { CACHE_TTL, RATE_LIMIT } from "@/lib/config";
+import { CACHE_TTL } from "@/lib/config";
 import { withAuth } from "@/lib/withAuth";
 
 export const GET = withAuth(async (request, context, authContext) => {
-  // Rate limit: 30 requests per minute per IP
-  const ip = getClientIp(request);
-  const rateCheck = checkRateLimit(
-    `price:${ip}`,
-    RATE_LIMIT.PRICE.max,
-    RATE_LIMIT.PRICE.windowMs,
-  );
-  if (!rateCheck.allowed) {
-    return NextResponse.json(
-      { error: "Rate limited. Try again in a moment." },
-      {
-        status: 429,
-        headers: {
-          "Retry-After": String(Math.ceil((rateCheck.resetAt - Date.now()) / 1000)),
-        },
-      },
-    );
-  }
-
   try {
     const { searchParams } = new URL(request.url);
     const symbol = searchParams.get("symbol");
