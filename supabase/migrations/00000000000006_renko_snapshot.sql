@@ -1,5 +1,5 @@
 -- ============================================================
--- Phase 6: Renko HFT Pipeline — Snapshot Persistence Table
+-- Noble Trader — Migration 06: Renko Snapshot Persistence
 -- Stores warm-up results per symbol for instant cache loading.
 -- ============================================================
 
@@ -24,7 +24,7 @@ CREATE TABLE IF NOT EXISTS ta_renko_snapshot (
   UNIQUE(symbol, brick_size)
 );
 
--- RLS: Allow full access (the frontend uses the publishable/anon key)
+-- RLS
 ALTER TABLE ta_renko_snapshot ENABLE ROW LEVEL SECURITY;
 CREATE POLICY "Allow full access to renko snapshots" ON ta_renko_snapshot
   FOR ALL USING (true) WITH CHECK (true);
@@ -32,7 +32,7 @@ CREATE POLICY "Allow full access to renko snapshots" ON ta_renko_snapshot
 -- Index for fast lookups by symbol
 CREATE INDEX IF NOT EXISTS idx_renko_snapshot_symbol ON ta_renko_snapshot(symbol);
 
--- Auto-update updated_at on row change
+-- Auto-update updated_at trigger
 CREATE OR REPLACE FUNCTION update_renko_snapshot_updated_at()
 RETURNS TRIGGER AS $$
 BEGIN

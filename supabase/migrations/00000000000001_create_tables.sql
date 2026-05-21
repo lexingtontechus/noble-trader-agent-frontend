@@ -1,10 +1,6 @@
 -- ============================================================
--- Noble Trader Agent — Database Tables Setup
--- Run this in Supabase Dashboard → SQL Editor
--- This creates the tables that Prisma expects.
---
--- PREREQUISITE: Run this AFTER setting up the Supabase project.
--- The DATABASE_URL in Vercel should point to this Supabase database.
+-- Noble Trader — Migration 01: Core Tables
+-- Creates the six base ta_* tables with indexes, triggers, and RLS.
 -- ============================================================
 
 -- 1. Analysis Run table
@@ -157,11 +153,10 @@ CREATE TRIGGER update_ta_scheduled_order_updated_at
   FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 
 -- Grant access to the postgres role (Supabase default)
--- These are needed for Prisma to work with Supabase
 GRANT ALL ON ALL TABLES IN SCHEMA public TO postgres;
 GRANT ALL ON ALL SEQUENCES IN SCHEMA public TO postgres;
 
--- Also grant to the anon and authenticated roles if needed for RLS
+-- Enable Row Level Security
 ALTER TABLE ta_analysis_run ENABLE ROW LEVEL SECURITY;
 ALTER TABLE ta_trade_recommendation ENABLE ROW LEVEL SECURITY;
 ALTER TABLE ta_scheduled_order ENABLE ROW LEVEL SECURITY;
@@ -169,7 +164,7 @@ ALTER TABLE ta_telegram_notification ENABLE ROW LEVEL SECURITY;
 ALTER TABLE ta_tda_scan_result ENABLE ROW LEVEL SECURITY;
 ALTER TABLE ta_early_warning_alert ENABLE ROW LEVEL SECURITY;
 
--- Allow service_role full access (Prisma uses this)
+-- Allow service_role full access
 CREATE POLICY "Service role full access" ON ta_analysis_run FOR ALL USING (true) WITH CHECK (true);
 CREATE POLICY "Service role full access" ON ta_trade_recommendation FOR ALL USING (true) WITH CHECK (true);
 CREATE POLICY "Service role full access" ON ta_scheduled_order FOR ALL USING (true) WITH CHECK (true);

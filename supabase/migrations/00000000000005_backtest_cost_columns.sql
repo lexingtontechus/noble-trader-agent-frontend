@@ -1,12 +1,8 @@
--- Backtest cost tracking columns
--- Phase 2: Transaction Cost Realism — adds aggregate cost columns to ta_backtest_result
--- for efficient querying, sorting, and list-view display without parsing JSONB.
---
--- Per-trade costs (commission, slippage_cost, total_cost) are already stored
--- inside trade_log JSONB. These new top-level columns store the aggregate
--- totals computed by the backtest engine for fast access.
-
--- ── Aggregate cost columns ──────────────────────────────────────────
+-- ============================================================
+-- Noble Trader — Migration 05: Backtest Cost Tracking Columns
+-- Adds aggregate cost columns to ta_backtest_result for efficient
+-- querying, sorting, and list-view display without parsing JSONB.
+-- ============================================================
 
 ALTER TABLE ta_backtest_result
     ADD COLUMN IF NOT EXISTS total_commission     FLOAT NOT NULL DEFAULT 0,
@@ -16,8 +12,7 @@ ALTER TABLE ta_backtest_result
     ADD COLUMN IF NOT EXISTS cost_drag_pct        FLOAT NOT NULL DEFAULT 0,
     ADD COLUMN IF NOT EXISTS avg_cost_per_trade   FLOAT NOT NULL DEFAULT 0;
 
--- ── Indexes for cost-based queries ──────────────────────────────────
-
+-- Indexes for cost-based queries
 CREATE INDEX IF NOT EXISTS idx_backtest_cost_drag
     ON ta_backtest_result (user_id, cost_drag_pct DESC)
     WHERE cost_drag_pct > 0;
@@ -26,10 +21,7 @@ CREATE INDEX IF NOT EXISTS idx_backtest_total_cost
     ON ta_backtest_result (user_id, total_cost DESC)
     WHERE total_cost > 0;
 
--- ── Backfill existing rows from JSONB ───────────────────────────────
--- Existing rows have per-trade cost data inside trade_log JSONB.
--- This extracts and sums the costs to populate the new columns.
-
+-- Backfill existing rows from JSONB
 UPDATE ta_backtest_result
 SET
     total_commission = COALESCE(
@@ -52,7 +44,7 @@ SET
             (SELECT SUM(COALESCE((t->>'total_cost')::float, 0))
              FROM jsonb_array_elements(trade_log) AS t),
             0
-        ) / 100000.0,  -- approximate: cost / initial_equity
+        ) / 100000.0,
         total_return
     ),
     cost_drag_pct = CASE
@@ -61,7 +53,7 @@ SET
                 (SELECT SUM(COALESCE((t->>'total_cost')::float, 0))
                  FROM jsonb_array_elements(trade_log) AS t),
                 0
-            ) / ABS(total_return * 100000.0) * 100  -- cost as % of gross P&L
+            ) / ABS(total_return * 100000.0) * 100
         ELSE 0
     END,
     avg_cost_per_trade = CASE
@@ -73,5 +65,5 @@ SET
             ) / n_trades
         ELSE 0
     END
-WHERE total_commission = 0  -- only backfill rows that haven't been set yet
+WHERE total_commission = 0
   AND trade_log != '[]'::jsonb;
