@@ -1,9 +1,10 @@
 import { getAlpacaKeys } from "@/lib/clerk-metadata";
-import { createOrder, getOrders } from "@/lib/alpaca-client";
+import { createOrder, getOrders, getAccount, getPositions } from "@/lib/alpaca-client";
 import { yahooToAlpacaSymbol, getAssetClass } from "@/lib/symbol-utils";
 import { db } from "@/lib/db";
 import { recordPerformance, getActiveVariant } from "@/lib/strategy-evolution";
 import { withAuth } from "@/lib/withAuth";
+import { checkCircuitBreakers, isHalted } from "@/lib/circuit-breaker";
 
 // Fallback Alpaca keys from env vars
 const ALPACA_API_KEY = process.env.ALPACA_API_KEY;
@@ -47,6 +48,67 @@ export const POST = withAuth(async (request, context, authContext) => {
       );
     }
 
+    // ── Circuit Breaker: Pre-flight check ──────────────────────────────────
+    // Check halt status and circuit breakers before executing any trades
+    const userId = authContext.userId;
+    let account = null;
+    let positions = [];
+    try {
+      [account, positions] = await Promise.all([
+        getAccount(keys.apiKey, keys.secretKey),
+        getPositions(keys.apiKey, keys.secretKey),
+      ]);
+    } catch (err) {
+      console.warn("[trading/execute] Failed to fetch account/positions for circuit breaker check:", err.message);
+    }
+
+    // Check halt status first (quick check)
+    const haltStatus = await isHalted({ userId });
+    if (haltStatus.halted) {
+      return Response.json(
+        {
+          error: `Trading is halted: ${haltStatus.level} — ${haltStatus.reason}`,
+          code: "TRADING_HALTED",
+          details: {
+            level: haltStatus.level,
+            scope: haltStatus.scope,
+            reason: haltStatus.reason,
+            activatedAt: haltStatus.activatedAt,
+          },
+        },
+        { status: 403 }
+      );
+    }
+
+    // Run circuit breaker check for the first trade (representative check)
+    const firstTrade = trades[0];
+    const cbResult = await checkCircuitBreakers({
+      userId,
+      account,
+      positions: Array.isArray(positions) ? positions : [],
+      order: {
+        symbol: firstTrade.symbol,
+        side: firstTrade.side || firstTrade.action,
+        qty: firstTrade.qty || firstTrade.quantity,
+        limit_price: firstTrade.limit_price,
+      },
+    });
+
+    if (!cbResult.allowed) {
+      return Response.json(
+        {
+          error: cbResult.reason,
+          code: "CIRCUIT_BREAKER",
+          details: {
+            breakerType: cbResult.breakerType,
+            action: cbResult.action,
+            ...cbResult.details,
+          },
+        },
+        { status: 403 }
+      );
+    }
+
     // Sort trades: sells first (priority < 50), then buys
     const sorted = [...trades].sort((a, b) => (a.priority || 0) - (b.priority || 0));
 
@@ -54,6 +116,23 @@ export const POST = withAuth(async (request, context, authContext) => {
     const filledOrders = [];
 
     for (const trade of sorted) {
+      // ── Circuit Breaker: Check halt status before each trade ────────────
+      try {
+        const midBatchHalt = await isHalted({ userId, symbol: trade.symbol });
+        if (midBatchHalt.halted) {
+          results.push({
+            id: trade.id || trade.symbol,
+            symbol: trade.symbol,
+            side: trade.side,
+            qty: trade.qty,
+            status: "blocked",
+            error: `Trading halted mid-batch: ${midBatchHalt.reason}`,
+          });
+          continue; // Skip this trade but continue processing remaining
+        }
+      } catch (cbErr) {
+        console.warn("[trading/execute] Mid-batch halt check failed (non-fatal):", cbErr.message);
+      }
       try {
         // Convert symbol if needed
         const alpacaSymbol = yahooToAlpacaSymbol(trade.symbol) || trade.symbol;
@@ -176,14 +255,17 @@ export const POST = withAuth(async (request, context, authContext) => {
     const filled = results.filter((r) => r.status === "filled").length;
     const failed = results.filter((r) => r.status === "failed").length;
     const deferred = results.filter((r) => r.insufficient_buying_power).length;
+    const blocked = results.filter((r) => r.status === "blocked").length;
 
     return Response.json({
       total: results.length,
       filled,
       failed,
       deferred,
+      blocked,
       results,
-      summary: `${filled} filled, ${failed} failed, ${deferred} deferred`,
+      summary: `${filled} filled, ${failed} failed, ${deferred} deferred, ${blocked} blocked by circuit breaker`,
+      circuitBreakerWarning: cbResult.warning || null,
     });
   } catch (error) {
     console.error("Trading execute error:", error);

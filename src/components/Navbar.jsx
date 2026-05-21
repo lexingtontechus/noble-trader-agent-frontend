@@ -31,6 +31,7 @@ export default function Navbar({ activeView, setActiveView }) {
   const { isAdmin, isTrader, isLoaded: roleLoaded } = useRole();
   const [backendHealthy, setBackendHealthy] = useState(null);
   const [tradingMode, setTradingMode] = useState("paper");
+  const [circuitBreakerStatus, setCircuitBreakerStatus] = useState(null); // null | 'clear' | 'warning' | 'halted'
 
   // Role hierarchy for nav filtering
   const ROLE_LEVEL = { viewer: 0, trader: 1, admin: 2 };
@@ -68,6 +69,25 @@ export default function Navbar({ activeView, setActiveView }) {
       }
     }
 
+    async function checkCircuitBreakerStatus() {
+      try {
+        const res = await fetch("/api/circuit-breakers/halts");
+        if (!res.ok) return;
+        const data = await res.json();
+        if (!cancelled) {
+          if (data.isHalted) {
+            setCircuitBreakerStatus("halted");
+          } else if (data.halts?.length > 0) {
+            setCircuitBreakerStatus("warning");
+          } else {
+            setCircuitBreakerStatus("clear");
+          }
+        }
+      } catch {
+        // Silently fail
+      }
+    }
+
     function startInterval() {
       stopInterval();
       interval = setInterval(checkHealth, 30000);
@@ -82,6 +102,7 @@ export default function Navbar({ activeView, setActiveView }) {
 
     // Initial check + start interval
     checkHealth();
+    checkCircuitBreakerStatus();
     startInterval();
 
     const handleVisibility = () => {
@@ -182,6 +203,28 @@ export default function Navbar({ activeView, setActiveView }) {
                   ? "Online"
                   : "Offline"}
             </span>
+            {/* Circuit breaker status indicator */}
+            {circuitBreakerStatus && (
+              <button
+                className={`badge badge-sm cursor-pointer ${
+                  circuitBreakerStatus === "halted"
+                    ? "badge-error animate-pulse"
+                    : circuitBreakerStatus === "warning"
+                      ? "badge-warning"
+                      : "badge-success"
+                }`}
+                onClick={() => setActiveView("ops")}
+                title={
+                  circuitBreakerStatus === "halted"
+                    ? "Trading HALTED — Click to view"
+                    : circuitBreakerStatus === "warning"
+                      ? "Circuit breaker warnings — Click to view"
+                      : "Circuit breakers OK"
+                }
+              >
+                {circuitBreakerStatus === "halted" ? "HALTED" : circuitBreakerStatus === "warning" ? "WARN" : "CB ✓"}
+              </button>
+            )}
           </div>
           <div className="flex sm:hidden items-center">
             <span

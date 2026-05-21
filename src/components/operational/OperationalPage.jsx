@@ -1,6 +1,7 @@
 "use client";
 import { useCallback } from "react";
 import KillSwitchPanel from "./KillSwitchPanel";
+import CircuitBreakerPanel from "./CircuitBreakerPanel";
 import AuditLogViewer from "./AuditLogViewer";
 import ModeToggle from "./ModeToggle";
 import ReconciliationPanel from "./ReconciliationPanel";
@@ -95,6 +96,9 @@ export default function OperationalPage({ bffFetch }) {
         <KillSwitchPanel bffFetch={bffFetch} />
         <ModeToggle bffFetch={bffFetch} />
       </div>
+
+      {/* Circuit Breaker Panel — full width */}
+      <CircuitBreakerPanel />
 
       {/* Middle Row: Reconciliation + Audit Log */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">

@@ -1,8 +1,9 @@
-import { createOrder } from "@/lib/alpaca-client";
+import { createOrder, getAccount, getPositions } from "@/lib/alpaca-client";
 import { getAlpacaCredentialKeys, resolveCredentialType } from "@/lib/alpaca-credentials";
 import { yahooToAlpacaSymbol, getAssetClass, isAlpacaTradable, getAlpacaTradeabilityReason } from "@/lib/symbol-utils";
 import { createApiError } from "@/lib/error-messages";
 import { withAuth } from "@/lib/withAuth";
+import { checkCircuitBreakers } from "@/lib/circuit-breaker";
 
 const VALID_TYPES = {
   equity: ["market", "limit", "stop", "stop_limit", "trailing_stop"],
@@ -80,6 +81,52 @@ export const POST = withAuth(async (request, context, authContext) => {
     }
     if (orderType === "trailing_stop" && !trail_price && !trail_percent) {
       return Response.json({ error: "trail_price or trail_percent required for trailing_stop orders" }, { status: 400 });
+    }
+
+    // ── Circuit Breaker: Pre-flight check ──────────────────────────────────
+    const userId = authContext.userId;
+    try {
+      let account = null;
+      let positions = [];
+      try {
+        [account, positions] = await Promise.all([
+          getAccount(keys.apiKey, keys.secretKey, credentialType),
+          getPositions(keys.apiKey, keys.secretKey, credentialType),
+        ]);
+      } catch (fetchErr) {
+        console.warn("[orders/create] Failed to fetch account/positions for circuit breaker:", fetchErr.message);
+      }
+
+      const cbResult = await checkCircuitBreakers({
+        userId,
+        account,
+        positions: Array.isArray(positions) ? positions : [],
+        order: {
+          symbol: alpacaSymbol,
+          side,
+          qty: qty || 100,
+          limit_price,
+        },
+      });
+
+      if (!cbResult.allowed) {
+        return Response.json(
+          {
+            error: cbResult.reason,
+            code: "CIRCUIT_BREAKER",
+            details: {
+              breakerType: cbResult.breakerType,
+              action: cbResult.action,
+              ...cbResult.details,
+            },
+          },
+          { status: 403 }
+        );
+      }
+    } catch (cbErr) {
+      // If circuit breaker check itself fails, log but allow the trade
+      // (fail open — don't block trading if CB engine is broken)
+      console.error("[orders/create] Circuit breaker check failed (fail-open):", cbErr.message);
     }
 
     const order = await createOrder(keys.apiKey, keys.secretKey, {

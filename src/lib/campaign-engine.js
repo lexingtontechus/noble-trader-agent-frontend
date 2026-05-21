@@ -19,6 +19,7 @@ import { createClient } from "@supabase/supabase-js";
 import { createOrder, getOrders } from "@/lib/alpaca-client";
 import { getCredentials } from "@/lib/credentials";
 import { getAlpacaKeys } from "@/lib/clerk-metadata";
+import { isHalted } from "@/lib/circuit-breaker";
 
 // ── Supabase service client ──────────────────────────────────────────────────
 const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL;
@@ -309,6 +310,26 @@ export async function tickCampaigns(cronSecret) {
 
   for (const campaign of campaigns) {
     try {
+      // ── Circuit Breaker: Check halt status before processing each campaign ──
+      try {
+        const haltStatus = await isHalted({ userId: campaign.clerk_user_id });
+        if (haltStatus.halted) {
+          // Pause the campaign with halt reason
+          await client
+            .from("trade_campaign")
+            .update({
+              status: "paused",
+              stopped_reason: `Trading halted: ${haltStatus.level} — ${haltStatus.reason}`,
+            })
+            .eq("id", campaign.id);
+          actions.push(`campaign ${campaign.id.slice(0, 8)}: PAUSED due to trading halt (${haltStatus.reason})`);
+          continue;
+        }
+      } catch (cbErr) {
+        console.warn(`[campaign/tick] Halt check failed for campaign ${campaign.id}:`, cbErr.message);
+        // Fail open — continue processing if CB engine is down
+      }
+
       const action = await processCampaignTick(campaign, client);
       actions.push(`campaign ${campaign.id.slice(0, 8)}: ${action}`);
     } catch (err) {
@@ -615,6 +636,26 @@ async function placeNextTrade(campaignId, clerkUserId, client) {
       })
       .eq("id", campaignId);
     return;
+  }
+
+  // ── Circuit Breaker: Check halt status before placing trade ──────────────
+  try {
+    const haltStatus = await isHalted({ userId: clerkUserId, symbol: nextTrade.symbol });
+    if (haltStatus.halted) {
+      // Pause the campaign
+      await client
+        .from("trade_campaign")
+        .update({
+          status: "paused",
+          stopped_reason: `Trading halted before placing trade: ${haltStatus.level} — ${haltStatus.reason}`,
+        })
+        .eq("id", campaignId);
+      console.warn(`[campaign] Paused campaign ${campaignId}: trading halted (${haltStatus.reason})`);
+      return;
+    }
+  } catch (cbErr) {
+    console.warn(`[campaign] Halt check failed before placing trade:`, cbErr.message);
+    // Fail open — continue if CB engine is down
   }
 
   // Resolve Alpaca keys
