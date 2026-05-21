@@ -5,7 +5,7 @@
 ```
 supabase/
   config.toml            — Supabase CLI configuration
-  migrations/            — 18 sequential migrations (run in order)
+  migrations/            — 19 sequential migrations (run in order)
 ```
 
 ## Migration Inventory
@@ -30,6 +30,7 @@ supabase/
 | 16 | `org_credentials.sql` | ALTER `credentials` (org_id column) |
 | 17 | `trade_campaign.sql` | `trade_campaign`, `campaign_trades`, `campaign_tick()` function |
 | 18 | `cron_jobs_consolidated.sql` | All 5 pg_cron jobs (single source of truth) |
+| 19 | `portfolio_snapshot.sql` | `portfolio_snapshots` table + pg_cron daily snapshot job |
 
 ## Two Credentials Tables
 
@@ -61,7 +62,7 @@ Run each migration in order via **Dashboard → SQL Editor**.
 Migrations are idempotent (IF NOT EXISTS throughout) so re-running is safe.
 
 ### Production Note
-All 18 migrations have already been applied to the production Supabase instance.
+All 19 migrations have already been applied to the production Supabase instance.
 If connecting the Supabase CLI to an existing project, run:
 ```bash
 supabase db pull  # generates a single migration from current state

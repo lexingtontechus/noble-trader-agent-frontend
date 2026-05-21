@@ -8,17 +8,19 @@ import { PLANS, PLAN_HIERARCHY } from "@/lib/plans";
 import PlanGate from "@/components/shared/PlanGate";
 import CredentialCard from "./CredentialCard";
 import PlanCard from "./PlanCard";
+import NotificationPreferences from "./NotificationPreferences";
 
 /**
  * SettingsPage — Centralized account management.
  *
- * Tabs: Profile | Paper Account | Live Account | Plan
+ * Tabs: Profile | Paper Account | Live Account | Notifications | Plan
  * Accessible from Clerk UserButton menu.
  */
 const TABS = [
   { key: "profile", label: "Profile", icon: "👤" },
   { key: "paper", label: "Paper Account", icon: "📝" },
   { key: "live", label: "Live Account", icon: "🔴" },
+  { key: "notifications", label: "Notifications", icon: "🔔" },
   { key: "plan", label: "Plan & Billing", icon: "💎" },
 ];
 
@@ -255,6 +257,11 @@ export default function SettingsPage({ initialTab = "profile" }) {
               dangerZone
             />
           </PlanGate>
+        )}
+
+        {/* Notifications Tab */}
+        {activeTab === "notifications" && (
+          <NotificationPreferences />
         )}
 
         {/* Plan & Billing Tab */}

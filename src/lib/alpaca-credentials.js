@@ -20,6 +20,8 @@
 import { getCredentials, hasCredentials } from "@/lib/credentials";
 import { getAlpacaKeys } from "@/lib/clerk-metadata";
 import { getUserPlan } from "@/lib/credentials";
+import { BROKER_IDS } from "@/lib/brokers/index";
+import { getBrokerIdFromCredentialType } from "@/lib/brokers/broker-factory";
 
 /**
  * Resolve the credential type based on plan and request context.
@@ -87,4 +89,43 @@ export async function getAlpacaCredentialKeys(type, request) {
   }
 
   return null;
+}
+
+// ── Broker abstraction helpers ──────────────────────────────────────────────
+
+/**
+ * Resolve the broker ID based on the user's credential type and request context.
+ * This bridges the existing credential system with the new broker abstraction.
+ *
+ * @param {Request} [request] — Optional request for mode resolution
+ * @returns {Promise<string>} Broker ID (e.g., 'alpaca_paper' or 'alpaca_live')
+ */
+export async function resolveBrokerId(request) {
+  const credentialType = await resolveCredentialType(request);
+  return getBrokerIdFromCredentialType(credentialType);
+}
+
+/**
+ * Resolve the full broker configuration needed by the factory.
+ * Returns { brokerId, credentials } ready for createBroker().
+ *
+ * @param {Request} [request] — Optional request for mode resolution
+ * @returns {Promise<{brokerId: string, credentials: {apiKey: string, secretKey: string}}|null>}
+ *   Returns null if no credentials are found
+ */
+export async function resolveBrokerConfig(request) {
+  const credentialType = await resolveCredentialType(request);
+  const keys = await getAlpacaCredentialKeys(credentialType, request);
+
+  if (!keys?.apiKey || !keys?.secretKey) {
+    return null;
+  }
+
+  return {
+    brokerId: getBrokerIdFromCredentialType(credentialType),
+    credentials: {
+      apiKey: keys.apiKey,
+      secretKey: keys.secretKey,
+    },
+  };
 }

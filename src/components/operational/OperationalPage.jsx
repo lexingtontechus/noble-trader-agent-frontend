@@ -5,6 +5,8 @@ import AuditLogViewer from "./AuditLogViewer";
 import ModeToggle from "./ModeToggle";
 import ReconciliationPanel from "./ReconciliationPanel";
 import LivePnLDashboard from "./LivePnLDashboard";
+import ComplianceReport from "./ComplianceReport";
+import HistoricalEquityCurve from "./HistoricalEquityCurve";
 
 /**
  * OperationalPage — Phase 8: Operational Hardening
@@ -14,6 +16,8 @@ import LivePnLDashboard from "./LivePnLDashboard";
  * - Mode Toggle (paper/live with confirmation)
  * - Audit Log Viewer (immutable trade trail)
  * - Fill Reconciliation (fill verification)
+ * - Compliance Report (P2-4A: compliance reporting summary)
+ * - Historical Equity Curve (P2-4C: long-term portfolio tracking with daily snapshots)
  */
 export default function OperationalPage({ bffFetch }) {
   if (!bffFetch) {
@@ -75,13 +79,16 @@ export default function OperationalPage({ bffFetch }) {
       <div className="alert alert-info shadow-sm">
         <span className="text-sm">
           <strong>Phase 8: Operational Hardening</strong> — Emergency controls,
-          audit trail, paper/live toggle, and fill reconciliation. These tools
-          are required before enabling live trading.
+          audit trail, paper/live toggle, fill reconciliation, and compliance reporting.
+          These tools are required before enabling live trading.
         </span>
       </div>
 
       {/* Live P&L Dashboard — full width */}
       <LivePnLDashboard />
+
+      {/* Historical Equity Curve — P2-4C: Long-term portfolio tracking */}
+      <HistoricalEquityCurve />
 
       {/* Top Row: Kill Switch + Mode Toggle */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
@@ -89,11 +96,14 @@ export default function OperationalPage({ bffFetch }) {
         <ModeToggle bffFetch={bffFetch} />
       </div>
 
-      {/* Bottom Row: Reconciliation + Audit Log */}
+      {/* Middle Row: Reconciliation + Audit Log */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
         <ReconciliationPanel bffFetch={bffFetch} />
         <AuditLogViewer bffFetch={bffFetch} />
       </div>
+
+      {/* Bottom Row: Compliance Report — full width */}
+      <ComplianceReport />
     </div>
   );
 }

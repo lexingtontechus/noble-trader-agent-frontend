@@ -1,9 +1,6 @@
 # Noble Trader — Supabase Configuration
 # For use with the Supabase CLI: https://supabase.com/docs/guides/cli
 
-[project]
-id = "noble-trader"
-
 [api]
 port = 54321
 schemas = ["public"]
