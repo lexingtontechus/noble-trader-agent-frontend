@@ -4,6 +4,7 @@ import { yahooToAlpacaSymbol, getAssetClass, isAlpacaTradable, getAlpacaTradeabi
 import { createApiError } from "@/lib/error-messages";
 import { withAuth } from "@/lib/withAuth";
 import { checkCircuitBreakers } from "@/lib/circuit-breaker";
+import { logAuditEvent, AUDIT_EVENTS } from "@/lib/audit-logger";
 
 const VALID_TYPES = {
   equity: ["market", "limit", "stop", "stop_limit", "trailing_stop"],
@@ -110,6 +111,17 @@ export const POST = withAuth(async (request, context, authContext) => {
       });
 
       if (!cbResult.allowed) {
+        // Audit: circuit breaker denied the order
+        logAuditEvent({
+          eventType: AUDIT_EVENTS.CIRCUIT_BREAKER_CHECK,
+          userId,
+          symbol: alpacaSymbol,
+          direction: side,
+          quantity: qty || 100,
+          price: limit_price,
+          metadata: { result: "denied", breakerType: cbResult.breakerType, reason: cbResult.reason, ...cbResult.details },
+        });
+
         return Response.json(
           {
             error: cbResult.reason,
@@ -123,6 +135,16 @@ export const POST = withAuth(async (request, context, authContext) => {
           { status: 403 }
         );
       }
+
+      // Audit: circuit breaker check passed
+      logAuditEvent({
+        eventType: AUDIT_EVENTS.CIRCUIT_BREAKER_CHECK,
+        userId,
+        symbol: alpacaSymbol,
+        direction: side,
+        quantity: qty || 100,
+        metadata: { result: "allowed", warning: cbResult.warning || null },
+      });
     } catch (cbErr) {
       // If circuit breaker check itself fails, log but allow the trade
       // (fail open — don't block trading if CB engine is broken)
@@ -141,8 +163,33 @@ export const POST = withAuth(async (request, context, authContext) => {
       trail_percent,
     }, credentialType);
 
+    // Audit: order submitted successfully
+    logAuditEvent({
+      eventType: AUDIT_EVENTS.ORDER_SUBMITTED,
+      userId,
+      symbol: alpacaSymbol,
+      orderId: order.id,
+      direction: side,
+      quantity: qty || 100,
+      price: limit_price,
+      orderType,
+      metadata: { alpacaOrderId: order.id, timeInForce: tif, credentialType },
+    });
+
     return Response.json(order);
   } catch (error) {
+    // Audit: order rejected
+    logAuditEvent({
+      eventType: AUDIT_EVENTS.ORDER_REJECTED,
+      userId: authContext.userId,
+      symbol,
+      direction: side,
+      quantity: qty,
+      price: limit_price,
+      orderType,
+      metadata: { error: error.message },
+    });
+
     return createApiError(error, { context: "orders" });
   }
 }, { minRole: "trader" });

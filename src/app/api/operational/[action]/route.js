@@ -4,6 +4,7 @@
  * Handles auth, Render cold starts, and error recovery.
  *
  * Phase 8 P0: Kill Switch, Audit Log, Mode Toggle, Reconciliation
+ * Phase P3-5B: Kill switch audit logging added
  *
  * Auth: GET (status queries) require viewer+, POST (mutations) require admin+.
  */
@@ -11,6 +12,7 @@
 import { withAuth } from "@/lib/withAuth";
 import { getFastAPIAuthHeaders } from "@/lib/fastapi-auth";
 import { FASTAPI_BASE } from "@/lib/config";
+import { logAuditEvent, AUDIT_EVENTS } from "@/lib/audit-logger";
 
 const OPERATIONAL_BASE = `${FASTAPI_BASE}/operational`;
 
@@ -27,6 +29,14 @@ const GET_ACTIONS = new Set([
   "executor-status",
   "throttle-status",
 ]);
+
+// Kill switch actions that require audit logging
+const KILL_SWITCH_AUDIT_MAP = {
+  "kill-switch-activate": AUDIT_EVENTS.KILL_SWITCH_ACTIVATED,
+  "kill-switch-deactivate": AUDIT_EVENTS.KILL_SWITCH_DEACTIVATED,
+  "kill-switch-cancel-all": AUDIT_EVENTS.KILL_SWITCH_ACTIVATED,
+  "kill-switch-close-all": AUDIT_EVENTS.KILL_SWITCH_ACTIVATED,
+};
 
 // Map frontend action to backend path
 function actionToPath(action) {
@@ -58,7 +68,7 @@ function actionToPath(action) {
   return mapping[action] || `/${action}`;
 }
 
-async function proxyRequest(request, params) {
+async function proxyRequest(request, params, authContext) {
   const { action } = await params;
   const url = new URL(request.url);
   const backendPath = actionToPath(action);
@@ -73,6 +83,16 @@ async function proxyRequest(request, params) {
   // Get auth headers
   const authHeaders = await getFastAPIAuthHeaders();
 
+  // Capture body for audit logging + forwarding
+  let requestBody = null;
+  if (!isGet && request.body) {
+    try {
+      requestBody = await request.json();
+    } catch {
+      // No body or invalid JSON
+    }
+  }
+
   const fetchOptions = {
     method,
     headers: {
@@ -83,13 +103,8 @@ async function proxyRequest(request, params) {
   };
 
   // Forward body for POST requests
-  if (!isGet && request.body) {
-    try {
-      const body = await request.json();
-      fetchOptions.body = JSON.stringify(body);
-    } catch {
-      // No body or invalid JSON
-    }
+  if (!isGet && requestBody) {
+    fetchOptions.body = JSON.stringify(requestBody);
   }
 
   // Retry logic for Render cold starts
@@ -127,6 +142,23 @@ async function proxyRequest(request, params) {
 
       if (res.ok) {
         const data = await res.json();
+
+        // P3-5B: Audit logging for kill switch actions
+        const auditEventType = KILL_SWITCH_AUDIT_MAP[action];
+        if (auditEventType) {
+          logAuditEvent({
+            eventType: auditEventType,
+            userId: authContext?.userId,
+            metadata: {
+              action,
+              level: requestBody?.level,
+              scope: requestBody?.scope,
+              reason: requestBody?.reason,
+              responseSummary: typeof data === "object" ? Object.keys(data).join(",") : "ok",
+            },
+          });
+        }
+
         return Response.json(data);
       }
 
@@ -150,5 +182,5 @@ async function proxyRequest(request, params) {
   }
 }
 
-export const GET = withAuth(async (request, { params }) => proxyRequest(request, params), { minRole: "viewer" });
-export const POST = withAuth(async (request, { params }) => proxyRequest(request, params), { minRole: "admin" });
+export const GET = withAuth(async (request, { params }, authContext) => proxyRequest(request, params, authContext), { minRole: "viewer" });
+export const POST = withAuth(async (request, { params }, authContext) => proxyRequest(request, params, authContext), { minRole: "admin" });

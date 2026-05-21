@@ -18,6 +18,7 @@
 import { createClient } from "@supabase/supabase-js";
 import { sendAlert, ALERT_TYPES } from "@/lib/alerting";
 import { redis } from "@/lib/redis";
+import { logAuditEvent, AUDIT_EVENTS } from "@/lib/audit-logger";
 
 // ── Supabase service client ──────────────────────────────────────────────────
 const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL;
@@ -197,6 +198,15 @@ export async function activateHalt({ level, scope, reason, triggeredBy, metadata
     }
 
     console.warn(`[circuit-breaker] HALT ACTIVATED: ${level}/${scope} — ${reason}${triggeredBy ? ` (${triggeredBy})` : ""}`);
+
+    // Audit: halt activated
+    logAuditEvent({
+      eventType: AUDIT_EVENTS.HALT_ACTIVATED,
+      userId: level === "user_halt" ? scope : undefined,
+      symbol: level === "symbol_halt" ? scope : undefined,
+      metadata: { level, scope, reason, triggeredBy, haltId: data.id },
+    });
+
     return { id: data.id, level, reason };
   } catch (err) {
     console.error("[circuit-breaker] activateHalt error:", err.message);
@@ -230,6 +240,13 @@ export async function deactivateHalt({ haltId }) {
     }
 
     console.info(`[circuit-breaker] Halt deactivated: ${haltId}`);
+
+    // Audit: halt deactivated
+    logAuditEvent({
+      eventType: AUDIT_EVENTS.HALT_DEACTIVATED,
+      metadata: { haltId },
+    });
+
     return { success: true };
   } catch (err) {
     console.error("[circuit-breaker] deactivateHalt error:", err.message);
@@ -367,7 +384,8 @@ export async function checkCircuitBreakers({ userId, account, positions, order, 
         await recordTrigger(client, userId, "max_position_size");
         return buildRejection(breaker, "max_position_size",
           `Order value $${orderValue.toFixed(2)} exceeds max position size ${breaker.threshold_unit === 'percent' ? `${breaker.threshold_value}% of equity` : `$${breaker.threshold_value}`} ($${maxAllowed.toFixed(2)})`,
-          { orderValue, maxAllowed, equity }
+          { orderValue, maxAllowed, equity },
+          userId, orderSymbol
         );
       }
     }
@@ -386,7 +404,8 @@ export async function checkCircuitBreakers({ userId, account, positions, order, 
         await recordTrigger(client, userId, "max_open_positions");
         return buildRejection(breaker, "max_open_positions",
           `Open positions (${openCount}) would exceed max (${breaker.threshold_value})`,
-          { openCount, maxAllowed: breaker.threshold_value }
+          { openCount, maxAllowed: breaker.threshold_value },
+          userId, orderSymbol
         );
       }
     }
@@ -405,7 +424,8 @@ export async function checkCircuitBreakers({ userId, account, positions, order, 
         await recordTrigger(client, userId, "single_stock_concentration");
         return buildRejection(breaker, "single_stock_concentration",
           `${orderSymbol} concentration ${concentrationPct.toFixed(1)}% would exceed max ${breaker.threshold_value}%`,
-          { symbol: orderSymbol, concentrationPct, maxAllowed: breaker.threshold_value, totalValue: totalValueAfterOrder }
+          { symbol: orderSymbol, concentrationPct, maxAllowed: breaker.threshold_value, totalValue: totalValueAfterOrder },
+          userId, orderSymbol
         );
       }
     }
@@ -440,7 +460,8 @@ export async function checkCircuitBreakers({ userId, account, positions, order, 
 
         return buildRejection(breaker, "daily_loss_limit",
           `Daily P&L ${breaker.threshold_unit === 'percent' ? `${dayPnlPct.toFixed(2)}%` : `$${dayPnl.toFixed(2)}`} exceeds limit ${breaker.threshold_unit === 'percent' ? `${breaker.threshold_value}%` : `$${breaker.threshold_value}`}`,
-          { dayPnl, dayPnlPct, threshold: breaker.threshold_value }
+          { dayPnl, dayPnlPct, threshold: breaker.threshold_value },
+          userId, orderSymbol
         );
       }
     }
@@ -483,7 +504,8 @@ export async function checkCircuitBreakers({ userId, account, positions, order, 
 
         return buildRejection(breaker, "max_drawdown",
           `Drawdown ${drawdownPct.toFixed(2)}% exceeds max ${maxDD}%`,
-          { drawdownPct, maxDD, peakEquity, currentEquity }
+          { drawdownPct, maxDD, peakEquity, currentEquity },
+          userId, orderSymbol
         );
       }
     }
@@ -513,7 +535,8 @@ export async function checkCircuitBreakers({ userId, account, positions, order, 
 
         return buildRejection(breaker, "consecutive_loss_stop",
           `${consecutiveLosses} consecutive losses exceeds limit of ${breaker.threshold_value}`,
-          { consecutiveLosses, threshold: breaker.threshold_value }
+          { consecutiveLosses, threshold: breaker.threshold_value },
+          userId, orderSymbol
         );
       }
     }
@@ -529,7 +552,8 @@ export async function checkCircuitBreakers({ userId, account, positions, order, 
           await recordTrigger(client, userId, "order_rate_limit");
           return buildRejection(breaker, "order_rate_limit",
             `Order rate ${current}/min exceeds limit of ${breaker.threshold_value}/min`,
-            { currentRate: current, maxRate: breaker.threshold_value }
+            { currentRate: current, maxRate: breaker.threshold_value },
+            userId, orderSymbol
           );
         }
 
@@ -576,7 +600,7 @@ async function recordTrigger(client, userId, breakerType) {
  * If the breaker action is 'halt', also activate a halt.
  * If 'alert', log the warning but don't reject.
  */
-function buildRejection(breaker, breakerType, reason, details) {
+function buildRejection(breaker, breakerType, reason, details, userId, symbol) {
   // For 'alert' action, log but allow the trade
   if (breaker.action === "alert") {
     console.warn(`[circuit-breaker] ALERT: ${reason}`, details);
@@ -587,6 +611,14 @@ function buildRejection(breaker, breakerType, reason, details) {
       details,
     };
   }
+
+  // Audit: circuit breaker triggered
+  logAuditEvent({
+    eventType: AUDIT_EVENTS.CIRCUIT_BREAKER_TRIGGERED,
+    userId: userId || undefined,
+    symbol: symbol || undefined,
+    metadata: { breakerType, action: breaker.action, reason, details },
+  });
 
   return {
     allowed: false,

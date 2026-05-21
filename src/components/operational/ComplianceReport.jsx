@@ -38,6 +38,35 @@ function getDateRange(preset) {
   }
 }
 
+// ── Event type badge styling ─────────────────────────────────────────────────
+
+function eventBadgeClass(eventType) {
+  if (!eventType) return "badge-ghost";
+  const t = eventType.toUpperCase();
+  if (t.includes("REJECTED") || t.includes("FAILED") || t.includes("TRIGGERED") || t.includes("HALT_ACTIVATED") || t.includes("KILL_SWITCH_ACTIVATED")) return "badge-error";
+  if (t.includes("FILLED") || t.includes("APPROVED") || t.includes("PASSED") || t.includes("DEACTIVATED")) return "badge-success";
+  if (t.includes("SUBMITTED") || t.includes("STARTED") || t.includes("PLACED") || t.includes("EXECUTED")) return "badge-info";
+  if (t.includes("CANCELLED") || t.includes("PAUSED") || t.includes("STOPPED") || t.includes("CHECK")) return "badge-warning";
+  if (t.includes("SCHEDULED") || t.includes("PARTIAL")) return "badge-accent";
+  return "badge-ghost";
+}
+
+function formatTimestamp(ts) {
+  if (!ts) return "—";
+  try {
+    const d = new Date(ts);
+    return d.toLocaleString(undefined, {
+      month: "short",
+      day: "numeric",
+      hour: "2-digit",
+      minute: "2-digit",
+      second: "2-digit",
+    });
+  } catch {
+    return String(ts);
+  }
+}
+
 export default function ComplianceReport() {
   const [report, setReport] = useState(null);
   const [loading, setLoading] = useState(false);
@@ -46,6 +75,16 @@ export default function ComplianceReport() {
   const [datePreset, setDatePreset] = useState("30d");
   const [customFrom, setCustomFrom] = useState("");
   const [customTo, setCustomTo] = useState("");
+
+  // P3-5B: Audit events state
+  const [auditEvents, setAuditEvents] = useState([]);
+  const [auditLoading, setAuditLoading] = useState(false);
+  const [auditError, setAuditError] = useState(null);
+  const [auditNote, setAuditNote] = useState(null);
+
+  // P3-5B: Fill polling state
+  const [fillPollActive, setFillPollActive] = useState(false);
+  const [fillPollLoading, setFillPollLoading] = useState(false);
 
   const fetchReport = useCallback(async () => {
     setLoading(true);
@@ -82,9 +121,74 @@ export default function ComplianceReport() {
     setLoading(false);
   }, [datePreset, customFrom, customTo]);
 
+  // Fetch audit events (last 50)
+  const fetchAuditEvents = useCallback(async () => {
+    setAuditLoading(true);
+    setAuditError(null);
+    setAuditNote(null);
+    try {
+      const params = new URLSearchParams({ limit: "50" });
+      const res = await fetch(`/api/compliance/audit-log?${params}`);
+      if (res.ok) {
+        const data = await res.json();
+        setAuditEvents(data.events || []);
+        setAuditNote(data.note || null);
+      } else {
+        const errData = await res.json().catch(() => ({}));
+        setAuditError(errData.error || `HTTP ${res.status}`);
+      }
+    } catch (e) {
+      setAuditError(e.message);
+    }
+    setAuditLoading(false);
+  }, []);
+
+  // Check fill polling status
+  const checkFillPollStatus = useCallback(async () => {
+    try {
+      const res = await fetch("/api/fills/poll");
+      if (res.ok) {
+        const data = await res.json();
+        setFillPollActive(data.active || false);
+      }
+    } catch {
+      // Silently ignore
+    }
+  }, []);
+
+  // Toggle fill polling
+  const toggleFillPolling = async () => {
+    setFillPollLoading(true);
+    try {
+      const action = fillPollActive ? "stop" : "start";
+      const res = await fetch("/api/fills/poll", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action }),
+      });
+      if (res.ok) {
+        await checkFillPollStatus();
+      }
+    } catch (e) {
+      console.error("Fill polling toggle error:", e);
+    }
+    setFillPollLoading(false);
+  };
+
   useEffect(() => {
     fetchReport();
   }, [fetchReport]);
+
+  useEffect(() => {
+    fetchAuditEvents();
+    checkFillPollStatus();
+    // Refresh audit events and fill poll status every 30s
+    const interval = setInterval(() => {
+      fetchAuditEvents();
+      checkFillPollStatus();
+    }, 30000);
+    return () => clearInterval(interval);
+  }, [fetchAuditEvents, checkFillPollStatus]);
 
   const handleExportCsv = async () => {
     if (!report) return;
@@ -130,9 +234,31 @@ export default function ComplianceReport() {
         <div className="flex items-center justify-between flex-wrap gap-2">
           <h2 className="card-title">Compliance Report</h2>
           <div className="flex gap-2 items-center flex-wrap">
+            {/* P3-5B: Fill polling toggle */}
+            <div className="flex items-center gap-2">
+              {fillPollActive && (
+                <span className="badge badge-success badge-sm gap-1">
+                  <span className="w-2 h-2 bg-success rounded-full animate-pulse"></span>
+                  Live
+                </span>
+              )}
+              <button
+                className={`btn btn-sm ${fillPollActive ? "btn-warning" : "btn-outline btn-sm"}`}
+                onClick={toggleFillPolling}
+                disabled={fillPollLoading}
+              >
+                {fillPollLoading ? (
+                  <span className="loading loading-spinner loading-xs"></span>
+                ) : fillPollActive ? (
+                  "Stop Fill Poll"
+                ) : (
+                  "Start Fill Poll"
+                )}
+              </button>
+            </div>
             <button
               className="btn btn-primary btn-sm"
-              onClick={fetchReport}
+              onClick={() => { fetchReport(); fetchAuditEvents(); }}
               disabled={loading}
             >
               {loading ? (
@@ -290,6 +416,114 @@ export default function ComplianceReport() {
         {!loading && !report && !error && !note && (
           <div className="text-center opacity-50 py-8">
             Click &quot;Refresh&quot; to generate a compliance report
+          </div>
+        )}
+
+        {/* ── P3-5B: Recent Audit Events ─────────────────────────────────── */}
+        <div className="divider mt-4 mb-2"></div>
+        <div className="flex items-center justify-between">
+          <h3 className="font-semibold text-sm flex items-center gap-2">
+            Recent Audit Events
+            {fillPollActive && (
+              <span className="badge badge-success badge-xs gap-1">
+                <span className="w-1.5 h-1.5 bg-success rounded-full animate-pulse"></span>
+                Live
+              </span>
+            )}
+          </h3>
+          <button
+            className="btn btn-ghost btn-xs"
+            onClick={fetchAuditEvents}
+            disabled={auditLoading}
+          >
+            {auditLoading ? (
+              <span className="loading loading-spinner loading-xs"></span>
+            ) : "Refresh"}
+          </button>
+        </div>
+
+        {auditNote && (
+          <div className="alert alert-warning mt-1 py-1">
+            <span className="text-xs">{auditNote}</span>
+          </div>
+        )}
+
+        {auditError && (
+          <div className="alert alert-error mt-1 py-1">
+            <span className="text-xs">{auditError}</span>
+          </div>
+        )}
+
+        {auditLoading && auditEvents.length === 0 && (
+          <div className="flex justify-center py-4">
+            <span className="loading loading-spinner loading-md text-primary"></span>
+          </div>
+        )}
+
+        {auditEvents.length > 0 && (
+          <div className="mt-2 max-h-96 overflow-y-auto rounded-lg border border-base-300" style={{ scrollbarGutter: "stable" }}>
+            <table className="table table-xs w-full">
+              <thead className="sticky top-0 bg-base-200 z-10">
+                <tr>
+                  <th>Time</th>
+                  <th>Event</th>
+                  <th>Symbol</th>
+                  <th>Direction</th>
+                  <th>Qty</th>
+                  <th>Price</th>
+                  <th>Details</th>
+                </tr>
+              </thead>
+              <tbody>
+                {auditEvents.map((evt, i) => (
+                  <tr key={evt.id || i} className="hover">
+                    <td className="whitespace-nowrap text-xs opacity-70">
+                      {formatTimestamp(evt.created_at)}
+                    </td>
+                    <td>
+                      <span className={`badge badge-xs ${eventBadgeClass(evt.event_type)}`}>
+                        {evt.event_type?.replace(/_/g, " ").toLowerCase()}
+                      </span>
+                    </td>
+                    <td className="font-mono text-xs">
+                      {evt.symbol || "—"}
+                    </td>
+                    <td className="text-xs">
+                      {evt.direction ? (
+                        <span className={evt.direction === "buy" ? "text-success" : "text-error"}>
+                          {evt.direction.toUpperCase()}
+                        </span>
+                      ) : "—"}
+                    </td>
+                    <td className="text-xs">{evt.quantity || "—"}</td>
+                    <td className="text-xs">{evt.price ? `$${evt.price}` : "—"}</td>
+                    <td className="text-xs max-w-32 truncate" title={JSON.stringify(evt.metadata || evt.risk_metrics || {})}>
+                      {evt.order_id ? (
+                        <span className="font-mono" title={evt.order_id}>
+                          {evt.order_id.slice(0, 8)}…
+                        </span>
+                      ) : evt.metadata?.reason ? (
+                        String(evt.metadata.reason).slice(0, 30)
+                      ) : evt.metadata?.error ? (
+                        <span className="text-error">{String(evt.metadata.error).slice(0, 30)}</span>
+                      ) : evt.metadata?.result ? (
+                        <span className={evt.metadata.result === "allowed" ? "text-success" : "text-error"}>
+                          {evt.metadata.result}
+                        </span>
+                      ) : (
+                        "—"
+                      )}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+
+        {!auditLoading && auditEvents.length === 0 && !auditError && !auditNote && (
+          <div className="text-center opacity-50 py-4 text-sm">
+            No audit events found. Execute a trade or start fill polling to populate the audit trail.
           </div>
         )}
       </div>

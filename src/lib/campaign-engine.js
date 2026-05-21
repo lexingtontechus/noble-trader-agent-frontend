@@ -20,6 +20,7 @@ import { createOrder, getOrders } from "@/lib/alpaca-client";
 import { getCredentials } from "@/lib/credentials";
 import { getAlpacaKeys } from "@/lib/clerk-metadata";
 import { isHalted } from "@/lib/circuit-breaker";
+import { logAuditEvent, AUDIT_EVENTS } from "@/lib/audit-logger";
 
 // ── Supabase service client ──────────────────────────────────────────────────
 const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL;
@@ -174,6 +175,13 @@ export async function startCampaign(campaignId) {
   // Place the first trade
   await placeNextTrade(campaignId, userId);
 
+  // Audit: campaign started
+  logAuditEvent({
+    eventType: AUDIT_EVENTS.CAMPAIGN_STARTED,
+    userId,
+    metadata: { campaignId, maxTrades: campaign.max_trades },
+  });
+
   return { success: true, campaignId };
 }
 
@@ -194,6 +202,14 @@ export async function pauseCampaign(campaignId) {
     .eq("status", "running");
 
   if (error) throw new Error(`Failed to pause campaign: ${error.message}`);
+
+  // Audit: campaign paused
+  logAuditEvent({
+    eventType: AUDIT_EVENTS.CAMPAIGN_PAUSED,
+    userId,
+    metadata: { campaignId },
+  });
+
   return { success: true };
 }
 
@@ -225,6 +241,14 @@ export async function stopCampaign(campaignId) {
     .in("status", ["running", "paused", "draft"]);
 
   if (error) throw new Error(`Failed to stop campaign: ${error.message}`);
+
+  // Audit: campaign stopped
+  logAuditEvent({
+    eventType: AUDIT_EVENTS.CAMPAIGN_STOPPED,
+    userId,
+    metadata: { campaignId, reason: "Stopped by user" },
+  });
+
   return { success: true };
 }
 
@@ -698,6 +722,18 @@ async function placeNextTrade(campaignId, clerkUserId, client) {
       .eq("id", campaignId);
 
     console.info(`[campaign] Placed trade ${nextTrade.trade_index}/${campaign.max_trades}: ${nextTrade.side} ${nextTrade.qty} ${nextTrade.symbol}`);
+
+    // Audit: campaign trade placed
+    logAuditEvent({
+      eventType: AUDIT_EVENTS.CAMPAIGN_TRADE_PLACED,
+      userId: clerkUserId,
+      symbol: nextTrade.symbol,
+      orderId: alpacaOrder.id,
+      direction: nextTrade.side,
+      quantity: nextTrade.qty,
+      orderType: nextTrade.order_type,
+      metadata: { campaignId, tradeIndex: nextTrade.trade_index, alpacaOrderId: alpacaOrder.id },
+    });
   } catch (err) {
     console.error(`[campaign] Failed to place trade:`, err.message);
 

@@ -5,6 +5,7 @@ import { db } from "@/lib/db";
 import { recordPerformance, getActiveVariant } from "@/lib/strategy-evolution";
 import { withAuth } from "@/lib/withAuth";
 import { checkCircuitBreakers, isHalted } from "@/lib/circuit-breaker";
+import { logAuditEvent, AUDIT_EVENTS } from "@/lib/audit-logger";
 
 // Fallback Alpaca keys from env vars
 const ALPACA_API_KEY = process.env.ALPACA_API_KEY;
@@ -95,6 +96,17 @@ export const POST = withAuth(async (request, context, authContext) => {
     });
 
     if (!cbResult.allowed) {
+      // Audit: circuit breaker denied the trade
+      logAuditEvent({
+        eventType: AUDIT_EVENTS.CIRCUIT_BREAKER_CHECK,
+        userId,
+        symbol: firstTrade.symbol,
+        direction: firstTrade.side || firstTrade.action,
+        quantity: firstTrade.qty || firstTrade.quantity,
+        price: firstTrade.limit_price,
+        metadata: { result: "denied", breakerType: cbResult.breakerType, reason: cbResult.reason, ...cbResult.details },
+      });
+
       return Response.json(
         {
           error: cbResult.reason,
@@ -108,6 +120,15 @@ export const POST = withAuth(async (request, context, authContext) => {
         { status: 403 }
       );
     }
+
+    // Audit: circuit breaker check passed
+    logAuditEvent({
+      eventType: AUDIT_EVENTS.CIRCUIT_BREAKER_CHECK,
+      userId,
+      symbol: firstTrade.symbol,
+      direction: firstTrade.side || firstTrade.action,
+      metadata: { result: "allowed", warning: cbResult.warning || null },
+    });
 
     // Sort trades: sells first (priority < 50), then buys
     const sorted = [...trades].sort((a, b) => (a.priority || 0) - (b.priority || 0));
@@ -152,6 +173,30 @@ export const POST = withAuth(async (request, context, authContext) => {
         }
 
         const order = await createOrder(keys.apiKey, keys.secretKey, orderPayload);
+
+        // Audit: order submitted successfully
+        logAuditEvent({
+          eventType: AUDIT_EVENTS.ORDER_SUBMITTED,
+          userId,
+          symbol: trade.symbol,
+          orderId: order.id,
+          direction: trade.side || trade.action,
+          quantity: trade.qty || trade.quantity,
+          price: trade.limit_price,
+          orderType: orderPayload.type,
+          metadata: { alpacaOrderId: order.id, timeInForce: orderPayload.time_in_force },
+        });
+
+        // Audit: trade approved
+        logAuditEvent({
+          eventType: AUDIT_EVENTS.TRADE_APPROVED,
+          userId,
+          symbol: trade.symbol,
+          orderId: order.id,
+          direction: trade.side || trade.action,
+          quantity: trade.qty || trade.quantity,
+          price: trade.limit_price,
+        });
 
         results.push({
           id: trade.id || trade.symbol,
@@ -213,6 +258,28 @@ export const POST = withAuth(async (request, context, authContext) => {
       } catch (err) {
         console.error(`Order failed for ${trade.symbol}:`, err.message);
 
+        // Audit: order rejected
+        logAuditEvent({
+          eventType: AUDIT_EVENTS.ORDER_REJECTED,
+          userId,
+          symbol: trade.symbol,
+          direction: trade.side || trade.action,
+          quantity: trade.qty || trade.quantity,
+          price: trade.limit_price,
+          orderType: trade.order_type || trade.type || "market",
+          metadata: { error: err.message, insufficientBuyingPower: err.message?.toLowerCase().includes("buying power") || err.message?.toLowerCase().includes("insufficient") },
+        });
+
+        // Audit: trade rejected
+        logAuditEvent({
+          eventType: AUDIT_EVENTS.TRADE_REJECTED,
+          userId,
+          symbol: trade.symbol,
+          direction: trade.side || trade.action,
+          quantity: trade.qty || trade.quantity,
+          metadata: { reason: err.message },
+        });
+
         const isBuyingPower = err.message?.toLowerCase().includes("buying power") ||
           err.message?.toLowerCase().includes("insufficient");
 
@@ -243,6 +310,18 @@ export const POST = withAuth(async (request, context, authContext) => {
                   status: "queued",
                   dependsOnOrders: JSON.stringify(filledOrders.map((o) => o.id)),
                 },
+              });
+
+              // Audit: scheduled order created (deferred due to buying power)
+              logAuditEvent({
+                eventType: AUDIT_EVENTS.SCHEDULED_ORDER_CREATED,
+                userId,
+                symbol: trade.symbol,
+                direction: trade.side,
+                quantity: trade.qty,
+                price: trade.limit_price,
+                orderType: trade.order_type || "limit",
+                metadata: { reason: "insufficient_buying_power", dependsOn: filledOrders.map((o) => o.id) },
               });
             }
           } catch (dbErr) {
