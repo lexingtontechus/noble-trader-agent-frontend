@@ -1,5 +1,6 @@
 "use client";
 import { useCallback } from "react";
+import SystemHealthDashboard from "./SystemHealthDashboard";
 import KillSwitchPanel from "./KillSwitchPanel";
 import CircuitBreakerPanel from "./CircuitBreakerPanel";
 import AuditLogViewer from "./AuditLogViewer";
@@ -84,6 +85,9 @@ export default function OperationalPage({ bffFetch }) {
           These tools are required before enabling live trading.
         </span>
       </div>
+
+      {/* P3-5D: System Health Dashboard — placed near top for admin visibility */}
+      <SystemHealthDashboard />
 
       {/* Live P&L Dashboard — full width */}
       <LivePnLDashboard />

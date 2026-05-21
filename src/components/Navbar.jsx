@@ -29,7 +29,7 @@ const NAV_ITEMS = [
 
 export default function Navbar({ activeView, setActiveView }) {
   const { isAdmin, isTrader, isLoaded: roleLoaded } = useRole();
-  const [backendHealthy, setBackendHealthy] = useState(null);
+  const [backendHealthy, setBackendHealthy] = useState(null); // null | 'healthy' | 'degraded' | 'unhealthy'
   const [tradingMode, setTradingMode] = useState("paper");
   const [circuitBreakerStatus, setCircuitBreakerStatus] = useState(null); // null | 'clear' | 'warning' | 'halted'
 
@@ -58,14 +58,22 @@ export default function Navbar({ activeView, setActiveView }) {
         if (!res.ok) throw new Error("unhealthy");
         const data = await res.json();
         if (!cancelled) {
-          setBackendHealthy(data?.status === "ok" || data?.healthy === true);
+          // Three-state health: healthy / degraded / unhealthy
+          const status = data?.status;
+          if (status === "ok" || data?.healthy === true) {
+            setBackendHealthy("healthy");
+          } else if (status === "degraded") {
+            setBackendHealthy("degraded");
+          } else {
+            setBackendHealthy("unhealthy");
+          }
           // Also extract trading mode from health response
           if (data?.operational?.trading_mode) {
             setTradingMode(data.operational.trading_mode);
           }
         }
       } catch {
-        if (!cancelled) setBackendHealthy(false);
+        if (!cancelled) setBackendHealthy("unhealthy");
       }
     }
 
@@ -186,23 +194,37 @@ export default function Navbar({ activeView, setActiveView }) {
             <TradingModeToggle />
           </div>
 
-          {/* Backend health indicator */}
+          {/* Backend health indicator — clickable, navigates to Ops/Health page */}
           <div className="hidden sm:flex items-center gap-1">
-            <span
-              className={`badge badge-sm ${
+            <button
+              className={`badge badge-sm cursor-pointer transition-colors ${
                 backendHealthy === null
                   ? "badge-ghost"
-                  : backendHealthy
-                    ? "badge-success"
-                    : "badge-error"
+                  : backendHealthy === "healthy"
+                    ? "badge-success hover:badge-success/80"
+                    : backendHealthy === "degraded"
+                      ? "badge-warning hover:badge-warning/80"
+                      : "badge-error hover:badge-error/80"
               }`}
+              onClick={() => setActiveView("ops")}
+              title={
+                backendHealthy === null
+                  ? "Checking system status..."
+                  : backendHealthy === "healthy"
+                    ? "All Systems Operational"
+                    : backendHealthy === "degraded"
+                      ? "Degraded Performance"
+                      : "System Issues Detected"
+              }
             >
               {backendHealthy === null
                 ? "..."
-                : backendHealthy
+                : backendHealthy === "healthy"
                   ? "Online"
-                  : "Offline"}
-            </span>
+                  : backendHealthy === "degraded"
+                    ? "Degraded"
+                    : "Offline"}
+            </button>
             {/* Circuit breaker status indicator */}
             {circuitBreakerStatus && (
               <button
@@ -227,17 +249,29 @@ export default function Navbar({ activeView, setActiveView }) {
             )}
           </div>
           <div className="flex sm:hidden items-center">
-            <span
-              className={`badge badge-sm ${
+            <button
+              className={`badge badge-sm cursor-pointer ${
                 backendHealthy === null
                   ? "badge-ghost"
-                  : backendHealthy
+                  : backendHealthy === "healthy"
                     ? "badge-success"
-                    : "badge-error"
+                    : backendHealthy === "degraded"
+                      ? "badge-warning"
+                      : "badge-error"
               }`}
+              onClick={() => setActiveView("ops")}
+              title={
+                backendHealthy === null
+                  ? "Checking..."
+                  : backendHealthy === "healthy"
+                    ? "All Systems Operational"
+                    : backendHealthy === "degraded"
+                      ? "Degraded Performance"
+                      : "System Issues Detected"
+              }
             >
-              {backendHealthy === null ? "●" : backendHealthy ? "●" : "●"}
-            </span>
+              {backendHealthy === null ? "●" : backendHealthy === "healthy" ? "●" : backendHealthy === "degraded" ? "●" : "●"}
+            </button>
           </div>
 
           {/* Clerk Organization Switcher — org-scoped multi-tenancy */}
