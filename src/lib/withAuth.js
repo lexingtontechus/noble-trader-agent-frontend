@@ -39,6 +39,7 @@ import {
 } from "@/lib/rate-limiter";
 import { PLAN_HIERARCHY } from "@/lib/plans";
 import { createClient } from "@supabase/supabase-js";
+import { hashPII } from "@/lib/encryption";
 
 // ── Supabase client for violation logging ─────────────────────────────────
 
@@ -299,7 +300,7 @@ export function withAuth(handler, options = {}) {
           windowMs: effectiveLimit.windowMs,
           currentCount: rateCheck.remaining + 1, // Approximate: they exceeded by 1
           userAgent: request.headers.get("user-agent"),
-          ipAddress: request.headers.get("x-forwarded-for")?.split(",")[0]?.trim(),
+          ipAddress: request.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ? hashPII(request.headers.get("x-forwarded-for").split(",")[0].trim()) : null,
           plan,
           role,
         });

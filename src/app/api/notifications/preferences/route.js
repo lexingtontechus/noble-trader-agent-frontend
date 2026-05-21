@@ -11,6 +11,7 @@
 
 import { createClient } from "@supabase/supabase-js";
 import { withAuth } from "@/lib/withAuth";
+import { encrypt, decrypt } from "@/lib/encryption";
 
 // ── Default preferences ──────────────────────────────────────────────────────
 
@@ -150,7 +151,7 @@ export const GET = withAuth(async (request, context, authContext) => {
         alert_types: data.alert_types || DEFAULT_ALERT_TYPES,
         quiet_hours: data.quiet_hours || DEFAULT_QUIET_HOURS,
         digest_settings: data.digest_settings || DEFAULT_DIGEST_SETTINGS,
-        discord_webhook_url: data.discord_webhook_url || null,
+        discord_webhook_url: data.discord_webhook_url ? _decryptWebhook(data.discord_webhook_url) : null,
       },
       isDefault: false,
       updatedAt: data.updated_at,
@@ -200,9 +201,9 @@ export const PUT = withAuth(async (request, context, authContext) => {
       updated_at: new Date().toISOString(),
     };
 
-    // Include discord_webhook_url if provided
+    // Include discord_webhook_url if provided (encrypted at rest)
     if (discord_webhook_url !== undefined) {
-      mergedData.discord_webhook_url = discord_webhook_url || null;
+      mergedData.discord_webhook_url = discord_webhook_url ? _encryptWebhook(discord_webhook_url) : null;
     } else if (existing?.discord_webhook_url) {
       mergedData.discord_webhook_url = existing.discord_webhook_url;
     }
@@ -225,7 +226,7 @@ export const PUT = withAuth(async (request, context, authContext) => {
         alert_types: data.alert_types,
         quiet_hours: data.quiet_hours,
         digest_settings: data.digest_settings,
-        discord_webhook_url: data.discord_webhook_url || null,
+        discord_webhook_url: data.discord_webhook_url ? _decryptWebhook(data.discord_webhook_url) : null,
       },
       updatedAt: data.updated_at,
     });
@@ -237,3 +238,46 @@ export const PUT = withAuth(async (request, context, authContext) => {
     );
   }
 }, { minRole: "trader" });
+
+// ── Encryption helpers ────────────────────────────────────────────────────────
+
+/**
+ * Encrypt a Discord webhook URL for storage.
+ * Webhook URLs are sensitive — anyone with the URL can send messages.
+ */
+function _encryptWebhook(url) {
+  try {
+    return encrypt(url);
+  } catch (err) {
+    console.warn("[notifications] Failed to encrypt webhook URL:", err.message);
+    // If encryption fails, store as-is (better than losing the URL)
+    return url;
+  }
+}
+
+/**
+ * Decrypt a Discord webhook URL from storage.
+ * Handles both encrypted (v{n}:...) and plaintext formats.
+ */
+function _decryptWebhook(stored) {
+  if (!stored) return null;
+  try {
+    // Check if this looks like encrypted data (versioned format or base64 blob)
+    if (stored.startsWith("v") && stored.includes(":")) {
+      return decrypt(stored);
+    }
+    // Legacy: might be a base64 blob from old encryption
+    if (!stored.startsWith("http")) {
+      try {
+        return decrypt(stored);
+      } catch {
+        // Not encrypted — return as-is
+      }
+    }
+    // Plaintext URL — return as-is (will be encrypted on next save)
+    return stored;
+  } catch (err) {
+    console.warn("[notifications] Failed to decrypt webhook URL:", err.message);
+    return null;
+  }
+}

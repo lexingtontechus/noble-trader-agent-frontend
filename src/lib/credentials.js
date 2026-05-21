@@ -13,53 +13,14 @@
 
 import { auth, clerkClient } from "@clerk/nextjs/server";
 import { createClient } from "@supabase/supabase-js";
-import crypto from "crypto";
+import { encrypt, decrypt, needsReEncryption, reEncrypt, getEncryptionStatus } from "@/lib/encryption";
 
-// ── Encryption config ──────────────────────────────────────────────────────
-const ENCRYPTION_KEY = process.env.SUPABASE_ENCRYPTION_KEY;
-const ALGORITHM = "aes-256-gcm";
-const IV_LENGTH = 16;
-const TAG_LENGTH = 16;
-
-/**
- * Encrypt a plaintext string using AES-256-GCM.
- * Returns a base64 string containing: iv + tag + ciphertext
- */
-function encrypt(plainText) {
-  if (!ENCRYPTION_KEY) {
-    console.error("[credentials] Missing SUPABASE_ENCRYPTION_KEY env var");
-    throw new Error("Service configuration is incomplete. Please try again later or contact support.");
-  }
-  const iv = crypto.randomBytes(IV_LENGTH);
-  const key = Buffer.from(ENCRYPTION_KEY.padEnd(32).slice(0, 32), "utf8");
-  const cipher = crypto.createCipheriv(ALGORITHM, key, iv);
-  let encrypted = cipher.update(plainText, "utf8", "base64");
-  encrypted += cipher.final("base64");
-  const tag = cipher.getAuthTag();
-  // Combine: iv (16 bytes) + tag (16 bytes) + ciphertext
-  return Buffer.concat([iv, tag, Buffer.from(encrypted, "base64")]).toString("base64");
-}
-
-/**
- * Decrypt a base64-encoded AES-256-GCM ciphertext.
- * Input format: base64(iv + tag + ciphertext)
- */
-function decrypt(encoded) {
-  if (!ENCRYPTION_KEY) {
-    console.error("[credentials] Missing SUPABASE_ENCRYPTION_KEY env var");
-    throw new Error("Service configuration is incomplete. Please try again later or contact support.");
-  }
-  const key = Buffer.from(ENCRYPTION_KEY.padEnd(32).slice(0, 32), "utf8");
-  const combined = Buffer.from(encoded, "base64");
-  const iv = combined.subarray(0, IV_LENGTH);
-  const tag = combined.subarray(IV_LENGTH, IV_LENGTH + TAG_LENGTH);
-  const ciphertext = combined.subarray(IV_LENGTH + TAG_LENGTH);
-  const decipher = crypto.createDecipheriv(ALGORITHM, key, iv);
-  decipher.setAuthTag(tag);
-  let decrypted = decipher.update(ciphertext, undefined, "utf8");
-  decrypted += decipher.final("utf8");
-  return decrypted;
-}
+// ── Encryption ──────────────────────────────────────────────────────────────
+// Encryption is now handled by src/lib/encryption.js which provides:
+//  - AES-256-GCM with PBKDF2 key derivation (no more weak-key padding)
+//  - Key versioning for rotation support
+//  - Backward compatibility with legacy encrypted data
+//  - Automatic re-encryption during reads when key is rotated
 
 // ── Supabase admin client ──────────────────────────────────────────────────
 // IMPORTANT: SUPABASE_SERVICE_ROLE_KEY is a server-side-only env var.
@@ -170,6 +131,27 @@ export async function getCredentials(credentialType) {
   try {
     const apiKey = decrypt(data.api_key_encrypted);
     const secretKey = decrypt(data.secret_key_encrypted);
+
+    // Auto re-encrypt if key version has changed (transparent key rotation)
+    if (needsReEncryption(data.api_key_encrypted) || needsReEncryption(data.secret_key_encrypted)) {
+      try {
+        const newEncApiKey = reEncrypt(data.api_key_encrypted);
+        const newEncSecretKey = reEncrypt(data.secret_key_encrypted);
+        await client
+          .from("user_credentials")
+          .update({
+            api_key_encrypted: newEncApiKey,
+            secret_key_encrypted: newEncSecretKey,
+          })
+          .eq("clerk_user_id", userId)
+          .eq("credential_type", credentialType);
+        console.info(`[credentials] Re-encrypted ${credentialType} keys for user ${userId.substring(0, 8)}...`);
+      } catch (reEncErr) {
+        // Non-fatal: re-encryption failed, but we can still return the decrypted keys
+        console.warn("[credentials] Auto re-encryption failed (non-fatal):", reEncErr.message);
+      }
+    }
+
     return { apiKey, secretKey, isValid: data.is_valid };
   } catch (decErr) {
     console.error("[credentials] Failed to decrypt credentials:", decErr.message);

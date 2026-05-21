@@ -21,6 +21,7 @@ import { getAccount } from "@/lib/alpaca-client";
 import { getAlpacaCredentialKeys, resolveCredentialType } from "@/lib/alpaca-credentials";
 import { getActiveHalts, getBreakerConfig } from "@/lib/circuit-breaker";
 import { getActivePollers, isPollingActive } from "@/lib/fill-poller";
+import { getEncryptionStatus } from "@/lib/encryption";
 import { FASTAPI_BASE, APP_VERSION } from "@/lib/config";
 
 // ── Server start time (set once per process) ──────────────────────────────────
@@ -399,7 +400,7 @@ export const GET = withAuth(async (request, _context, authContext) => {
   const { userId } = authContext || {};
 
   // Run all checks in parallel for speed
-  const [backend, supabase, alpaca, cronJobs, dataFreshness, circuitBreakers, auditTrail, fillPoller, recentErrors] =
+  const [backend, supabase, alpaca, cronJobs, dataFreshness, circuitBreakers, auditTrail, fillPoller, recentErrors, encryption] =
     await Promise.all([
       checkBackend(),
       checkSupabase(),
@@ -410,6 +411,7 @@ export const GET = withAuth(async (request, _context, authContext) => {
       checkAuditTrail(),
       Promise.resolve(checkFillPoller(userId)),
       getRecentErrors(),
+      Promise.resolve(getEncryptionStatus()),
     ]);
 
   const checks = {
@@ -424,6 +426,10 @@ export const GET = withAuth(async (request, _context, authContext) => {
     circuitBreakers,
     auditTrail,
     fillPoller,
+    encryption: {
+      status: encryption.configured ? "healthy" : "unhealthy",
+      ...encryption,
+    },
   };
 
   const overall = determineOverallStatus(checks);
