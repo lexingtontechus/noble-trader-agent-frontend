@@ -1,6 +1,6 @@
 # Real-Time P&L Dashboard — Architecture Design
 
-> **Status**: Phase 1 In Progress
+> **Status**: Phase 2+3 Complete (Backend SSE + Frontend EventSource wired)
 > **Last Updated**: 2025-05-21
 > **Decision**: Option C — Alpaca Streaming → FastAPI Backend → SSE → Frontend
 
@@ -290,7 +290,7 @@ The `AlpacaStreamManager` opens streaming connections per-user after resolving c
 
 ## 8. Build Phases
 
-### Phase 1: Foundation — PortfolioProvider + Dedup ✅ In Progress
+### Phase 1: Foundation — PortfolioProvider + Dedup ✅ Complete
 - Create `PortfolioContext.jsx` with `PortfolioProvider` + `usePortfolio()`
 - Refactor `usePortfolioData.js` to be internal-only (used by context)
 - Mount `PortfolioProvider` in `page.js` alongside `StreamProvider`
@@ -299,21 +299,23 @@ The `AlpacaStreamManager` opens streaming connections per-user after resolving c
 - Both pages now read from single shared context
 - **Result**: Eliminates duplicate polling, single source of truth
 
-### Phase 2: Alpaca Stream Manager (Backend)
-- Create `app/core/alpaca_stream.py`
-- Alpaca trade WebSocket (`wss://api.alpaca.markets/stream`)
-- Alpaca data WebSocket (`wss://stream.data.alpaca.markets/v2/iex`)
-- Auto-reconnect with exponential backoff
-- Per-user position cache in Redis
-- Credential resolution from Supabase → Clerk fallback
-- Lifecycle: start on SSE connect, stop on SSE disconnect
+### Phase 2: Alpaca Stream Manager (Backend) ✅ Complete
+- Create `regime_platform/services/alpaca_stream.py` — AlpacaStreamManager singleton
+- Per-user credential resolution (Supabase → global env var fallback)
+- Trade WebSocket: fills, account updates, position changes (auto-reconnect with exponential backoff)
+- Data WebSocket: real-time quotes for held positions (throttled 1/s, IEX feed)
+- Periodic P&L snapshot every 5s (aggregate from positions cache)
+- Bootstrap: fetches current positions/account via REST on first connect
+- Fan-out via asyncio.Queue per SSE consumer (30s grace period after last disconnect)
+- Add `/sse/pnl` and `/sse/pnl/status` endpoints to `stream_ws.py`
+- Add `websockets>=12.0` to `requirements.txt`
 
-### Phase 3: SSE P&L Endpoint + Frontend Wiring
-- Add `/sse/pnl` to `stream_ws.py` with JWT auth
-- Define event schemas in `app/schemas/pnl.py`
-- Wire `EventSource` in `PortfolioProvider`
-- Real-time position/fill updates flowing to UI
-- Polling automatically throttles to 30s fallback when SSE active
+### Phase 3: SSE P&L Endpoint + Frontend Wiring ✅ Complete
+- Add `/api/stream/pnl` BFF route (proxies SSE with JWT auth — EventSource can't send headers)
+- Wire EventSource in `PortfolioProvider` (auto-connect when `hasKeys` is true)
+- Handle all 4 SSE event types: position_update, price_tick, pnl_snapshot, account_update
+- Auto-reconnect with exponential backoff (max 20 attempts)
+- Polling continues as safety net at 10s intervals
 
 ### Phase 4: Realized P&L + Trade History
 - Add `/api/alpaca/activities` BFF route

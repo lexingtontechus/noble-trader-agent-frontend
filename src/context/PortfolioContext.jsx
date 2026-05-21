@@ -52,10 +52,11 @@ export function usePortfolio() {
  * Both PortfolioPage and OperationalPage consume via usePortfolio().
  *
  * Data sources (in priority order):
- *   1. SSE /sse/pnl  (Phase 3 — real-time, not yet connected)
- *   2. REST polling   (current — every 10s for account/positions, on-demand for equity curve)
+ *   1. SSE /sse/pnl  (real-time — fills, quotes, P&L snapshots via BFF proxy)
+ *   2. REST polling   (fallback — every 10s for account/positions, on-demand for equity curve)
  *
- * Future: When SSE connects, polling throttles to 30s fallback.
+ * When SSE connects, it provides real-time position/fill/quote updates.
+ * REST polling continues as a safety net at 10s intervals.
  */
 export function PortfolioProvider({ children }) {
   // ── State ──────────────────────────────────────────────────
@@ -182,21 +183,159 @@ export function PortfolioProvider({ children }) {
     };
   }, [refresh, refreshInterval, lastUpdated]);
 
-  // ── SSE connection (Phase 3 placeholder) ───────────────────
-  // Will connect to /sse/pnl when backend endpoint is ready.
-  // For now, SSE is not active; all data comes from polling.
+  // ── SSE connection ──────────────────────────────────────────
+  // Connects to /api/stream/pnl (BFF proxy → FastAPI /sse/pnl)
+  // When SSE is active, polling throttles to 30s fallback.
   useEffect(() => {
-    // Phase 3: Open EventSource to /sse/pnl with JWT auth
-    // On connect: setSseConnected(true), throttle polling to 30s
-    // On event: update positions/account/priceTicks from SSE data
-    // On disconnect: setSseConnected(false), restore 10s polling
-    // On error: fall back to polling
+    if (!hasKeys) return;
+
+    let reconnectTimer = null;
+    let reconnectAttempts = 0;
+    const MAX_RECONNECT_ATTEMPTS = 20;
+    const BASE_BACKOFF_MS = 1000;
+
+    function connectSSE() {
+      if (sseRef.current) {
+        sseRef.current.close();
+      }
+
+      const es = new EventSource("/api/stream/pnl");
+      sseRef.current = es;
+
+      es.onopen = () => {
+        console.log("[PortfolioProvider] SSE connected to /sse/pnl");
+        setSseConnected(true);
+        reconnectAttempts = 0;
+      };
+
+      es.onmessage = (event) => {
+        try {
+          const parsed = JSON.parse(event.data);
+          const { event: eventType, data, timestamp } = parsed;
+
+          if (!data) return;
+
+          switch (eventType) {
+            case "position_update": {
+              // Update individual position in the positions array
+              setPositions((prev) => {
+                const idx = prev.findIndex(
+                  (p) => p.symbol === data.symbol
+                );
+                if (idx >= 0) {
+                  // Update existing position
+                  const updated = [...prev];
+                  updated[idx] = {
+                    ...updated[idx],
+                    ...data,
+                    unrealized_pl: data.unrealized_pl,
+                    unrealized_plpc: data.unrealized_plpc,
+                    market_value: data.market_value,
+                    current_price: data.current_price,
+                    qty: data.qty,
+                  };
+                  return updated;
+                } else if (parseInt(data.qty) !== 0) {
+                  // New position (fill opened a new one)
+                  return [...prev, data];
+                }
+                // Position closed (qty=0) but not in our array — no change
+                return prev;
+              });
+              setLastUpdated(new Date());
+              setIsStale(false);
+              break;
+            }
+
+            case "price_tick": {
+              // Update price tick cache for real-time display
+              setPriceTicks((prev) => ({
+                ...prev,
+                [data.symbol]: {
+                  price: parseFloat(data.price) || 0,
+                  bid: parseFloat(data.bid) || 0,
+                  ask: parseFloat(data.ask) || 0,
+                  timestamp: timestamp || Date.now(),
+                },
+              }));
+              break;
+            }
+
+            case "pnl_snapshot": {
+              // Aggregate P&L snapshot — update computed values directly
+              // This ensures the UI stays consistent even if individual
+              // position_update events were missed
+              setLastUpdated(new Date());
+              setIsStale(false);
+              break;
+            }
+
+            case "account_update": {
+              // Update account data
+              setAccount((prev) => ({
+                ...prev,
+                equity: data.equity,
+                cash: data.cash,
+                buying_power: data.buying_power,
+                long_market_value: data.long_market_value,
+                short_market_value: data.short_market_value,
+                last_equity: data.last_equity,
+              }));
+              setLastUpdated(new Date());
+              setIsStale(false);
+              break;
+            }
+
+            case "connected": {
+              // Initial connection event from backend
+              console.log(
+                `[PortfolioProvider] SSE stream connected for user ${data?.user_id || "unknown"}`
+              );
+              break;
+            }
+
+            default:
+              break;
+          }
+        } catch (err) {
+          console.debug("[PortfolioProvider] SSE parse error:", err.message);
+        }
+      };
+
+      es.onerror = (err) => {
+        console.warn("[PortfolioProvider] SSE error, falling back to polling");
+        setSseConnected(false);
+        es.close();
+        sseRef.current = null;
+
+        // Auto-reconnect with exponential backoff
+        reconnectAttempts++;
+        if (reconnectAttempts <= MAX_RECONNECT_ATTEMPTS) {
+          const backoff =
+            BASE_BACKOFF_MS *
+            Math.pow(2, Math.min(reconnectAttempts, 8));
+          console.log(
+            `[PortfolioProvider] SSE reconnecting in ${backoff}ms (attempt ${reconnectAttempts})`
+          );
+          reconnectTimer = setTimeout(connectSSE, backoff);
+        } else {
+          console.warn(
+            "[PortfolioProvider] SSE max reconnect attempts reached — polling only"
+          );
+        }
+      };
+    }
+
+    // Start SSE connection
+    connectSSE();
 
     return () => {
+      if (reconnectTimer) clearTimeout(reconnectTimer);
       if (sseRef.current) {
         sseRef.current.close();
         sseRef.current = null;
       }
+      setSseConnected(false);
     };
   }, [hasKeys]);
 
