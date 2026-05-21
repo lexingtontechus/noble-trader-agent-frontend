@@ -9,6 +9,7 @@ import ReconciliationPanel from "./ReconciliationPanel";
 import LivePnLDashboard from "./LivePnLDashboard";
 import ComplianceReport from "./ComplianceReport";
 import HistoricalEquityCurve from "./HistoricalEquityCurve";
+import SmokeTestPanel from "./SmokeTestPanel";
 
 /**
  * OperationalPage — Phase 8: Operational Hardening
@@ -109,6 +110,9 @@ export default function OperationalPage({ bffFetch }) {
         <ReconciliationPanel bffFetch={bffFetch} />
         <AuditLogViewer bffFetch={bffFetch} />
       </div>
+
+      {/* P3-5E: Smoke Test Panel — full width */}
+      <SmokeTestPanel />
 
       {/* Bottom Row: Compliance Report — full width */}
       <ComplianceReport />
