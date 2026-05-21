@@ -1,7 +1,7 @@
 # Noble Trader Agent — Project State
 
 **Last Updated:** 2026-05-21
-**Version:** v5.5.0 (Renko HFT Pipeline + Backtesting + Redis Caching + SSE Streaming + Auth Hardening)
+**Version:** v7.0.0 (Renko HFT Pipeline + Live Execution + State Persistence + Rate Limiting + Health Monitoring + Multi-Pipeline UI)
 
 ---
 
@@ -9,8 +9,8 @@
 
 | Layer | Stack | Host |
 |-------|-------|------|
-| **Frontend** | Next.js 16 (App Router) + React 19 + DaisyUI v5 + shadcn/ui | Vercel |
-| **Backend** | FastAPI + Pydantic v2 + hmmlearn + numpy + pandas | Render (Free) |
+| **Frontend** | Next.js 16 (App Router) + React 19 + DaisyUI v5 + Tailwind CSS 4 | Vercel |
+| **Backend** | FastAPI + Pydantic v2 + hmmlearn + numpy + pandas | Render (Starter) |
 | **Auth** | Clerk JWT → BFF proxy → FastAPI JWKS verification | Clerk |
 | **Broker** | Alpaca (paper trading by default) | Alpaca Markets |
 | **Database** | Supabase (PostgreSQL with RLS) | Supabase |
@@ -253,155 +253,36 @@ CLERK_SECRET_KEY=
 
 | # | Gap | Proposal | Priority |
 |---|-----|----------|----------|
-| 4 | **Executor not fully wired to pipeline** | See detailed proposal below | 🔴 High |
-| 10 | **Session filter blocks warmup signals** | Batch warmup uses generated timestamps that fall outside 09:35-15:45 session window, so signals are detected but never filtered → no trades during warmup. Propose: add a `warmup_mode` flag to SignalFilter that bypasses session/time checks during batch warmup. | 🟡 Medium |
-| 11 | **No pipeline state persistence across Render restarts** | Render free tier sleeps after 15min inactivity. On wake, all in-memory pipeline state is lost. Propose: persist pipeline snapshots to Supabase `ta_renko_snapshot` on every batch complete, restore on pipeline creation. Currently only the warmup route saves snapshots. | 🟡 Medium |
-| 12 | **Health monitoring / uptime alerts** | No automated monitoring if the backend goes down or becomes unhealthy. Propose: add a cron-based health check (Vercel cron or Upstash QStash) that pings `/health` every 5 minutes and sends a Discord alert on failure. | 🟢 Low |
-| 13 | **Rate limiting on BFF routes** | Frontend BFF routes have no rate limiting — a single user could spam warmup requests and exhaust Render's free tier. Propose: add IP-based or Clerk-user-based rate limiting using Upstash Redis (sliding window). | 🟡 Medium |
-| 14 | **Single-symbol limitation** | Each pipeline instance is per-symbol, but there's no UI to manage multiple symbols simultaneously. Propose: add a symbol selector/manager component that tracks active pipelines and their states. | 🟢 Low |
+| 4 | **Executor not wired to pipeline** | Router-level async bridge with per-request executor, dry_run/live_enabled flags, admin toggle | ✅ Implemented |
+| 10 | **Session filter blocks warmup signals** | Added `warmup_mode` flag to SignalFilter — bypasses session/cooldown during backtest/warmup | ✅ Implemented |
+| 11 | **No pipeline state persistence across restarts** | Upgraded to Render Starter (no sleep) + Supabase snapshot save/restore every 100 bricks | ✅ Implemented |
+| 12 | **Health monitoring / uptime alerts** | Vercel Cron every 5 min → Discord alerts on 2+ consecutive failures, recovery notifications | ✅ Implemented |
+| 13 | **Rate limiting on BFF routes** | IP-based rate limiting on all Renko and P&L BFF routes (heavy: 10/min, write: 30/min, read: 60/min) | ✅ Implemented |
+| 14 | **Single-symbol limitation** | Multi-pipeline status bar showing all 8 symbols with position/P&L indicators | ✅ Implemented |
 
 ---
 
-## Gap #4 — Detailed Proposal: Wire Executor to Pipeline
+## Gap #4 — Implementation (Completed)
 
-### Problem
-
-The `AlpacaExecutor` exists and is initialized in `RenkoPipeline`, but the actual Alpaca order submission path is **not connected** in the pipeline flow:
-
-- `pipeline._open_position()` only calls `risk_manager.open_position()` (internal tracking)
-- It does **NOT** call `executor.execute()` (actual Alpaca order)
-- The executor falls back to simulation mode when `api_key` is `None`
-- The pipeline has no callback to bridge signal → order → Discord notification
-
-### Current Flow (broken)
+The executor is now fully wired via a **router-level async bridge**:
 
 ```
-PatternDetector → SignalFilter → RiskManager.open_position() → ❌ STOP
-                                                ↑ internal position tracking only
-                                                ❌ executor.execute() never called
+Pipeline (sync) → process_tick() → _pending_execution payload
+Router (async) → consume_pending_execution() → resolve user credentials → executor.execute() → Alpaca API
+Router (async) → consume_pending_close() → executor.close_position() → Alpaca API
 ```
 
-### Proposed Flow (fixed)
+Key design decisions:
+- **Pipeline stays synchronous** — deterministic backtesting preserved
+- **Per-request executors** — user credentials never cached in pipelines
+- **Two-gate safety** — both `dry_run=False` AND `live_enabled=True` required for real orders
+- **Admin toggle** — `POST /renko/live/toggle` with Discord notification
+- **Default safe** — `dry_run=True`, `live_enabled=False` by default
 
-```
-PatternDetector → SignalFilter → RiskManager.open_position()
-                                        ↓
-                                  Executor.execute() → Alpaca API
-                                        ↓
-                                  OrderResult → Discord notification
-                                        ↓
-                                  RiskManager tracks SL/TP
-                                        ↓
-                                  Trade close → Discord notification
-```
-
-### Implementation Plan
-
-#### Step 1: Add async execution support to pipeline
-
-The pipeline's `process_tick()` is synchronous, but `executor.execute()` is async. We need a bridge:
-
-```python
-# In pipeline.py — _open_position method
-def _open_position(self, filtered, brick):
-    # 1. Open risk manager position (internal tracking)
-    self.risk_manager.open_position(...)
-
-    # 2. Submit order via executor
-    if self._on_signal:  # External callback for async execution
-        self._on_signal(filtered)  # Router handles async dispatch
-
-    # 3. Fire-and-forget async execution (if event loop running)
-    try:
-        import asyncio
-        loop = asyncio.get_event_loop()
-        if loop.is_running():
-            asyncio.create_task(self._execute_order(filtered, brick))
-    except RuntimeError:
-        pass  # No event loop (backtest mode)
-```
-
-#### Step 2: Router handles order execution
-
-```python
-# In router.py — enhanced tick handler
-@renko_router.post("/tick")
-async def process_tick(body: TickInput):
-    result = pipeline.process_tick(body.price, body.timestamp)
-
-    # If a filtered signal was produced and we have a position opened
-    if result.get("filtered") and pipeline.risk_manager.has_position:
-        # Get Alpaca keys from Clerk metadata (via request headers)
-        # Submit the order
-        order_result = await pipeline.executor.execute(
-            filtered=FilteredSignal.from_dict(result["filtered"]),
-            symbol=symbol,
-            brick_size=pipeline.config.get_brick_size(),
-        )
-        result["order_result"] = order_result.to_dict()
-
-        # Discord notification
-        _notify_execution(symbol, order_result)
-```
-
-#### Step 3: Trade close triggers executor
-
-When the Risk Manager detects SL/TP hit, the executor should close the Alpaca position:
-
-```python
-# In pipeline.py — _handle_trade_close
-def _handle_trade_close(self, result):
-    self.signal_filter.record_trade_result(result.pnl_bricks)
-    self.journal.record(...)
-
-    # Close Alpaca position
-    try:
-        loop = asyncio.get_event_loop()
-        if loop.is_running():
-            asyncio.create_task(self.executor.close_position(self.config.symbol))
-    except RuntimeError:
-        pass
-```
-
-#### Step 4: Pass Alpaca credentials per-request
-
-Currently, the executor is initialized with config-level credentials. For the Clerk proxy pattern:
-
-```python
-# In router.py — get pipeline with user's Alpaca keys
-def _get_pipeline_with_keys(symbol, api_key, api_secret, base_url):
-    config = RenkoConfig(symbol=symbol, api_key=api_key, api_secret=api_secret, base_url=base_url)
-    pipeline = RenkoPipeline(config)
-    _pipelines[symbol] = pipeline
-    return pipeline
-```
-
-The BFF route forwards Clerk-authenticated requests with the user's Alpaca keys from `private.metadata` (same pattern as `proxy.js`).
-
-#### Step 5: Simulation vs Live mode
-
-- **Simulation (default):** `api_key=None` → executor returns `sim_*` order IDs, no Alpaca calls
-- **Paper trading:** User's Alpaca paper keys → executor submits to `paper-api.alpaca.markets`
-- **Live trading:** User's Alpaca live keys → executor submits to `api.alpaca.markets`
-
-The mode is determined entirely by the credentials passed, not by a config flag.
-
-### Files to Modify
-
-| File | Changes |
-|------|---------|
-| `renko/pipeline.py` | Add async execution in `_open_position()` and `_handle_trade_close()` |
-| `renko/router.py` | Add order execution in tick handler, pass Alpaca creds per-request |
-| `renko/executor.py` | No changes needed — already supports bracket orders and simulation mode |
-| `src/app/api/renko/[action]/route.js` | Pass Clerk Alpaca keys to backend in tick requests |
-| `notifications/discord.py` | Already wired — will automatically notify on executions |
-
-### Risk Considerations
-
-- **Never execute without explicit user consent:** Add a `dry_run` flag to the pipeline config. Default `True`. Only set `False` when user explicitly enables live trading.
-- **Rate limit order submissions:** Alpaca has API rate limits. Add cooldown between orders.
-- **Error isolation:** Executor errors must never crash the pipeline. All exceptions are already caught.
-- **Position reconciliation:** On pipeline restart, reconcile with Alpaca's actual positions.
+New endpoints:
+- `GET /renko/live/status` — check execution mode
+- `POST /renko/live/toggle` — enable/disable live execution (admin only)
+- `POST /renko/snapshot/restore` — restore pipeline from Supabase snapshot
 
 ---
 

@@ -49,8 +49,8 @@ A NextJS v16 full-stack web application for real-time market regime detection, A
 | Language | **JavaScript/JSX** | JS for components/pages; TypeScript for API routes |
 | Auth | **Clerk** | SSO, user management, `private.metadata` for Alpaca keys |
 | Database | **Supabase PostgreSQL** | All persistence — never Prisma |
-| Charts | **Recharts 3** | Price charts, fan charts, visualizations |
-| State | **Zustand** | Lightweight global state |
+| Charts | **Recharts** | Price charts, fan charts, visualizations |
+| State | **React Context** | Global state via StreamContext + PortfolioContext |
 | Streaming | **SSE** (EventSource) | Real-time price ticks via FastAPI |
 | AI Commentary | **OpenAI / Google GenAI** | LLM-powered market insights |
 | Validation | **Zod** | Request/response schema validation |
@@ -81,6 +81,7 @@ src/
 │   │   ├── tda/                 # Topological Data Analysis (alerts, scan)
 │   │   ├── telegram/            # Telegram bot notifications
 │   │   ├── backtest/             # Backtest execution, history, comparison, optimization, export
+│   │   ├── renko/              # Renko HFT pipeline (dynamic proxy, warmup, orders, backtests, signal-alert, tick-stream)
 │   │   └── trading/             # Trading workflow (analyze, validate, approve, execute)
 │   ├── layout.js                # Root layout (ClerkProvider)
 │   ├── page.js                  # Home page (all views, keyboard shortcuts)
@@ -90,25 +91,37 @@ src/
 │   ├── admin/                   # Admin panel
 │   ├── analysis/                # Analysis cards (Regime, Risk, HMM, Recommendations, Commentary)
 │   ├── auth/                    # Clerk auth panel
+│   ├── campaign/                # Campaign management
 │   ├── dashboard/               # Dashboard (TickerCard, ComparisonTable, RegimeSummaryBanner)
 │   ├── evolution/               # Strategy Evolution panel
+│   ├── onboarding/              # Onboarding flow
+│   ├── operational/             # Operational monitoring
 │   ├── orders/                  # Orders page (Alpaca key setup, positions, history, modal)
+│   ├── pnl/                     # P&L tracking
 │   ├── portfolio/               # Portfolio (correlation, optimizer, overview)
 │   ├── search/                  # Symbol search + analysis results
+│   ├── settings/                # App settings
 │   ├── shared/                  # Reusable (EmptyState, ErrorState, LoadingSkeleton, ThemeSwitcher)
 │   ├── simulation/              # Monte Carlo simulation (fan chart)
 │   ├── streaming/               # Live streams (SSE, AlertHistory, LiveBadge)
 │   └── trading/                 # Trading workflow (approve, execute, validate)
 ├── context/
-│   └── StreamContext.jsx        # SSE stream management (subscriptions, price ticks, alerts)
+│   ├── StreamContext.jsx        # SSE stream management (subscriptions, price ticks, alerts)
+│   └── PortfolioContext.jsx     # Portfolio state management
 ├── hooks/
 │   ├── use-mobile.js            # Mobile viewport detection
-│   └── useStreamPrice.js        # Per-symbol streaming price hook
+│   ├── useStreamPrice.js        # Per-symbol streaming price hook
+│   ├── usePortfolioData.js      # Portfolio data aggregation hook
+│   ├── useRenkoStream.js        # Renko pipeline streaming hook
+│   ├── useRole.js               # Role-based access control hook
+│   └── usePlan.js               # Subscription plan hook
 ├── lib/
 │   ├── alpaca-client.js         # Alpaca paper trading API client
+│   ├── alpaca-credentials.js    # Alpaca credential management
 │   ├── cache.js                 # In-memory cache with TTL
 │   ├── clerk-metadata.js        # Clerk private.metadata helpers
 │   ├── config.js                # App configuration constants
+│   ├── credentials.js           # Credential validation helpers
 │   ├── db.js                    # Re-exports from supabase/db.js
 │   ├── fastapi-auth.js          # FastAPI backend auth token
 │   ├── fastapi-client.js        # FastAPI backend HTTP client
@@ -116,11 +129,17 @@ src/
 │   ├── price-poll-coordinator.js# Polling fallback for SSE
 │   ├── rate-limiter.js          # Server-side rate limiting
 │   ├── strategy-evolution.js    # Evolution engine (variant mgmt, A/B, rotation, Optuna)
+│   ├── campaign-engine.js       # Campaign execution engine
+│   ├── plans.js                 # Subscription plan definitions
+│   ├── redis.js                 # Upstash Redis client
+│   ├── alerting.js              # Alert dispatch helpers (Discord, Telegram, Supabase)
+│   ├── error-messages.js        # Centralized error message templates
+│   ├── order-tracker.js         # Order state tracking
+│   ├── symbol-utils.js          # Yahoo ↔ Alpaca symbol mapping, asset class detection
 │   ├── supabase/
 │   │   ├── client.js            # Supabase browser client
 │   │   ├── db.js                # Prisma-compatible Supabase wrapper (all models)
 │   │   └── server.js            # Supabase server client (cookies)
-│   ├── symbol-utils.js          # Yahoo ↔ Alpaca symbol mapping, asset class detection
 │   ├── trade-validation.js      # Walk-forward validation logic + synthetic ID parser
 │   └── yahoo-prices.js          # Yahoo Finance price fetcher
 └── proxy.js                     # Clerk middleware (NextJS v16 requires proxy.js, NOT middleware.ts)
@@ -339,7 +358,9 @@ All backtest operations are available as importable async functions:
 | `Ctrl+4` / `Cmd+4` | Simulate |
 | `Ctrl+5` / `Cmd+5` | Portfolio |
 | `Ctrl+6` / `Cmd+6` | Search |
-| `Ctrl+7` / `Cmd+7` | Admin |
+| `Ctrl+7` / `Cmd+7` | Renko |
+| `Ctrl+8` / `Cmd+8` | Ops |
+| `Ctrl+9` / `Cmd+9` | Admin |
 
 ---
 

@@ -4,6 +4,8 @@ import { useState, useCallback, useMemo } from "react";
 import {
   AreaChart,
   Area,
+  BarChart,
+  Bar,
   XAxis,
   YAxis,
   CartesianGrid,
@@ -22,14 +24,33 @@ const EQUITY_PERIODS = [
   { value: "all", label: "All" },
 ];
 
+const INTRADAY_TIMEFRAMES = [
+  { value: "5Min", label: "5m" },
+  { value: "15Min", label: "15m" },
+  { value: "1Hour", label: "1h" },
+  { value: "1Day", label: "1D" },
+];
+
+const INTRADAY_PERIODS = [
+  { value: "1D", label: "1D" },
+  { value: "1W", label: "1W" },
+  { value: "1M", label: "1M" },
+];
+
+const CHART_MODES = [
+  { value: "daily", label: "Daily" },
+  { value: "intraday", label: "Intraday" },
+];
+
 /**
  * LivePnLDashboard — Real-time portfolio P&L with equity curve + auto-refresh.
  *
- * Shows:
- * - Equity curve chart with period selector
- * - Total P&L cards (unrealized, day, by position)
- * - Positions table with P&L attribution
- * - Auto-refresh every 10s with stale indicator
+ * Phase 5 additions:
+ * - Intraday equity curve toggle (5m/15m/1h timeframes)
+ * - Risk metrics cards (Sharpe, Sortino, Max DD, VaR)
+ * - CSV export button
+ * - P&L alert thresholds panel
+ * - Active alerts toast bar
  */
 export default function LivePnLDashboard({ compact = false }) {
   const {
@@ -54,10 +75,39 @@ export default function LivePnLDashboard({ compact = false }) {
     realizedPnlBySymbol,
     tradesLoading,
     refreshTrades,
+    // Phase 5
+    intradayCurve,
+    intradayLoading,
+    intradayTimeframe,
+    setIntradayTimeframe,
+    intradayPeriod,
+    setIntradayPeriod,
+    riskMetrics,
+    riskMetricsLoading,
+    riskMetricsPeriod,
+    setRiskMetricsPeriod,
+    refreshRiskMetrics,
+    alertThresholds,
+    activeAlerts,
+    createAlertThreshold,
+    deleteAlertThreshold,
+    dismissAlert,
+    exportPnlCsv,
   } = usePortfolio();
 
   const [sortBy, setSortBy] = useState("unrealized_pl");
   const [sortDir, setSortDir] = useState("desc");
+  const [chartMode, setChartMode] = useState("daily"); // "daily" | "intraday"
+  const [showAlertConfig, setShowAlertConfig] = useState(false);
+  const [showRiskMetrics, setShowRiskMetrics] = useState(false);
+
+  // Alert creation form state
+  const [newAlert, setNewAlert] = useState({
+    metric: "drawdown_pct",
+    operator: "lte",
+    value: -5,
+    severity: "warning",
+  });
 
   // Sort positions
   const sortedPositions = useMemo(() => {
@@ -101,11 +151,12 @@ export default function LivePnLDashboard({ compact = false }) {
     return num > 0 ? "badge-success" : num < 0 ? "badge-error" : "badge-ghost";
   };
 
-  // Equity curve chart data — derive P&L from equity
+  // Equity curve chart data
   const chartData = useMemo(() => {
+    if (chartMode === "intraday" && intradayCurve.length) return intradayCurve;
     if (!equityCurve.length) return [];
     return equityCurve;
-  }, [equityCurve]);
+  }, [chartMode, equityCurve, intradayCurve]);
 
   // Compute min/max for Y axis domain
   const equityMinMax = useMemo(() => {
@@ -135,7 +186,7 @@ export default function LivePnLDashboard({ compact = false }) {
           <div className="flex items-center gap-2 mt-1">
             <span className="text-base-content/60">P&L:</span>
             <span className={`font-mono font-bold ${d.pnl >= 0 ? "text-success" : "text-error"}`}>
-              {formatCurrency(d.pnl)} ({formatPercent(d.pnlPc)})
+              {formatCurrency(d.pnl)} ({formatPercent(d.pnlPc || 0)})
             </span>
           </div>
         )}
@@ -199,7 +250,7 @@ export default function LivePnLDashboard({ compact = false }) {
   const curveTrend = chartData.length >= 2
     ? chartData[chartData.length - 1].equity - chartData[0].equity
     : 0;
-  const curveColor = curveTrend >= 0 ? "#22c55e" : "#ef4444"; // success / error
+  const curveColor = curveTrend >= 0 ? "#22c55e" : "#ef4444";
 
   return (
     <div className="card shadow-xl border border-base-300 bg-base-100">
@@ -213,6 +264,31 @@ export default function LivePnLDashboard({ compact = false }) {
                 {isStale ? "Stale" : "Updated"}: {lastUpdated.toLocaleTimeString()}
               </span>
             )}
+            {/* Phase 5: CSV Export */}
+            <button
+              className="btn btn-xs btn-outline"
+              onClick={() => exportPnlCsv("1M", "all")}
+              title="Export P&L data as CSV"
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" className="h-3.5 w-3.5" viewBox="0 0 20 20" fill="currentColor">
+                <path fillRule="evenodd" d="M3 17a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zm3.293-7.707a1 1 0 011.414 0L9 10.586V3a1 1 0 112 0v7.586l1.293-1.293a1 1 0 111.414 1.414l-3 3a1 1 0 01-1.414 0l-3-3a1 1 0 010-1.414z" clipRule="evenodd" />
+              </svg>
+              Export
+            </button>
+            {/* Phase 5: Risk Metrics toggle */}
+            <button
+              className={`btn btn-xs ${showRiskMetrics ? "btn-primary" : "btn-ghost"}`}
+              onClick={() => setShowRiskMetrics(!showRiskMetrics)}
+            >
+              Risk
+            </button>
+            {/* Phase 5: Alerts toggle */}
+            <button
+              className={`btn btn-xs ${showAlertConfig ? "btn-warning" : "btn-ghost"}`}
+              onClick={() => setShowAlertConfig(!showAlertConfig)}
+            >
+              Alerts {activeAlerts.length > 0 && <span className="badge badge-xs badge-error ml-1">{activeAlerts.length}</span>}
+            </button>
             <button
               className="btn btn-xs btn-ghost"
               onClick={refresh}
@@ -222,6 +298,25 @@ export default function LivePnLDashboard({ compact = false }) {
             </button>
           </div>
         </div>
+
+        {/* Phase 5: Active Alerts Bar */}
+        {activeAlerts.length > 0 && (
+          <div className="flex flex-col gap-1 mt-1">
+            {activeAlerts.slice(0, 3).map((alert, idx) => (
+              <div
+                key={alert.alert_id || idx}
+                className={`alert py-1 px-3 text-xs ${
+                  alert.severity === "critical" ? "alert-error" : alert.severity === "warning" ? "alert-warning" : "alert-info"
+                }`}
+              >
+                <span className="font-semibold">{alert.metric}:</span> {alert.message}
+                <button className="btn btn-xs btn-ghost ml-auto" onClick={() => dismissAlert(alert.alert_id)}>
+                  Dismiss
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
 
         {/* Top Metric Cards */}
         <div className="grid grid-cols-2 md:grid-cols-5 gap-3 mt-2">
@@ -281,28 +376,292 @@ export default function LivePnLDashboard({ compact = false }) {
           </div>
         </div>
 
+        {/* Phase 5: Risk Metrics Panel */}
+        {showRiskMetrics && (
+          <div className="mt-3 p-3 bg-base-200 rounded-lg">
+            <div className="flex items-center justify-between mb-2">
+              <h3 className="font-bold text-sm">Risk Metrics</h3>
+              <div className="flex items-center gap-1">
+                {["1M", "3M", "6M", "1A"].map((p) => (
+                  <button
+                    key={p}
+                    className={`btn btn-xs ${riskMetricsPeriod === p ? "btn-primary" : "btn-ghost"}`}
+                    onClick={() => setRiskMetricsPeriod(p)}
+                  >
+                    {p}
+                  </button>
+                ))}
+                <button
+                  className="btn btn-xs btn-ghost"
+                  onClick={() => refreshRiskMetrics()}
+                  disabled={riskMetricsLoading}
+                >
+                  {riskMetricsLoading ? <span className="loading loading-spinner loading-xs" /> : "Refresh"}
+                </button>
+              </div>
+            </div>
+
+            {riskMetricsLoading && !riskMetrics ? (
+              <div className="flex items-center justify-center py-4">
+                <span className="loading loading-spinner loading-md text-primary" />
+              </div>
+            ) : riskMetrics && riskMetrics.n_data_points > 0 ? (
+              <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-2">
+                {/* Sharpe */}
+                <div className="bg-base-100 rounded p-2 text-center">
+                  <div className="text-[10px] text-base-content/50 uppercase tracking-wider">Sharpe</div>
+                  <div className={`font-mono font-bold text-sm ${riskMetrics.sharpe_ratio > 1 ? "text-success" : riskMetrics.sharpe_ratio < 0 ? "text-error" : ""}`}>
+                    {riskMetrics.sharpe_ratio.toFixed(2)}
+                  </div>
+                </div>
+                {/* Sortino */}
+                <div className="bg-base-100 rounded p-2 text-center">
+                  <div className="text-[10px] text-base-content/50 uppercase tracking-wider">Sortino</div>
+                  <div className={`font-mono font-bold text-sm ${riskMetrics.sortino_ratio > 1.5 ? "text-success" : riskMetrics.sortino_ratio < 0 ? "text-error" : ""}`}>
+                    {riskMetrics.sortino_ratio.toFixed(2)}
+                  </div>
+                </div>
+                {/* Max Drawdown */}
+                <div className="bg-base-100 rounded p-2 text-center">
+                  <div className="text-[10px] text-base-content/50 uppercase tracking-wider">Max DD</div>
+                  <div className={`font-mono font-bold text-sm ${riskMetrics.max_drawdown_pct < -10 ? "text-error" : riskMetrics.max_drawdown_pct < -5 ? "text-warning" : ""}`}>
+                    {riskMetrics.max_drawdown_pct.toFixed(2)}%
+                  </div>
+                </div>
+                {/* Current DD */}
+                <div className="bg-base-100 rounded p-2 text-center">
+                  <div className="text-[10px] text-base-content/50 uppercase tracking-wider">Current DD</div>
+                  <div className={`font-mono font-bold text-sm ${riskMetrics.current_drawdown_pct < -5 ? "text-error" : riskMetrics.current_drawdown_pct < -2 ? "text-warning" : ""}`}>
+                    {riskMetrics.current_drawdown_pct.toFixed(2)}%
+                  </div>
+                </div>
+                {/* VaR 95% */}
+                <div className="bg-base-100 rounded p-2 text-center">
+                  <div className="text-[10px] text-base-content/50 uppercase tracking-wider">VaR 95%</div>
+                  <div className="font-mono font-bold text-sm">
+                    ${riskMetrics.var_95.toLocaleString("en-US", { maximumFractionDigits: 0 })}
+                  </div>
+                </div>
+                {/* Win Rate */}
+                <div className="bg-base-100 rounded p-2 text-center">
+                  <div className="text-[10px] text-base-content/50 uppercase tracking-wider">Win Rate</div>
+                  <div className={`font-mono font-bold text-sm ${(riskMetrics.win_rate || 0) > 0.5 ? "text-success" : "text-error"}`}>
+                    {((riskMetrics.win_rate || 0) * 100).toFixed(1)}%
+                  </div>
+                </div>
+                {/* Calmar */}
+                <div className="bg-base-100 rounded p-2 text-center">
+                  <div className="text-[10px] text-base-content/50 uppercase tracking-wider">Calmar</div>
+                  <div className="font-mono font-bold text-sm">
+                    {riskMetrics.calmar_ratio.toFixed(2)}
+                  </div>
+                </div>
+                {/* Annual Vol */}
+                <div className="bg-base-100 rounded p-2 text-center">
+                  <div className="text-[10px] text-base-content/50 uppercase tracking-wider">Ann Vol</div>
+                  <div className="font-mono font-bold text-sm">
+                    {(riskMetrics.annual_vol * 100).toFixed(1)}%
+                  </div>
+                </div>
+                {/* Profit Factor */}
+                <div className="bg-base-100 rounded p-2 text-center">
+                  <div className="text-[10px] text-base-content/50 uppercase tracking-wider">Profit Factor</div>
+                  <div className={`font-mono font-bold text-sm ${riskMetrics.profit_factor > 1 ? "text-success" : "text-error"}`}>
+                    {riskMetrics.profit_factor.toFixed(2)}
+                  </div>
+                </div>
+                {/* Annual Return */}
+                <div className="bg-base-100 rounded p-2 text-center">
+                  <div className="text-[10px] text-base-content/50 uppercase tracking-wider">Ann Return</div>
+                  <div className={`font-mono font-bold text-sm ${riskMetrics.annual_return_pct > 0 ? "text-success" : "text-error"}`}>
+                    {riskMetrics.annual_return_pct.toFixed(2)}%
+                  </div>
+                </div>
+                {/* CVaR 95% */}
+                <div className="bg-base-100 rounded p-2 text-center">
+                  <div className="text-[10px] text-base-content/50 uppercase tracking-wider">CVaR 95%</div>
+                  <div className="font-mono font-bold text-sm">
+                    ${riskMetrics.cvar_95.toLocaleString("en-US", { maximumFractionDigits: 0 })}
+                  </div>
+                </div>
+                {/* Max Consec Losses */}
+                <div className="bg-base-100 rounded p-2 text-center">
+                  <div className="text-[10px] text-base-content/50 uppercase tracking-wider">Max Loss Streak</div>
+                  <div className="font-mono font-bold text-sm">
+                    {riskMetrics.max_consecutive_losses}
+                  </div>
+                </div>
+              </div>
+            ) : (
+              <div className="text-center py-4 text-base-content/40 text-sm">
+                No risk metrics available. Ensure Alpaca keys are connected.
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Phase 5: Alert Thresholds Panel */}
+        {showAlertConfig && (
+          <div className="mt-3 p-3 bg-base-200 rounded-lg">
+            <h3 className="font-bold text-sm mb-2">P&L Alert Thresholds</h3>
+
+            {/* Create new alert */}
+            <div className="flex items-end gap-2 mb-3 flex-wrap">
+              <div className="form-control">
+                <label className="label py-0.5"><span className="label-text text-xs">Metric</span></label>
+                <select
+                  className="select select-bordered select-xs"
+                  value={newAlert.metric}
+                  onChange={(e) => setNewAlert((p) => ({ ...p, metric: e.target.value }))}
+                >
+                  <option value="day_pnl">Day P&L ($)</option>
+                  <option value="unrealized_pnl">Unrealized P&L ($)</option>
+                  <option value="drawdown_pct">Drawdown (%)</option>
+                  <option value="var_breach">VaR Breach</option>
+                  <option value="equity_change_pct">Equity Change (%)</option>
+                </select>
+              </div>
+              <div className="form-control">
+                <label className="label py-0.5"><span className="label-text text-xs">Condition</span></label>
+                <select
+                  className="select select-bordered select-xs"
+                  value={newAlert.operator}
+                  onChange={(e) => setNewAlert((p) => ({ ...p, operator: e.target.value }))}
+                >
+                  <option value="lt">Less than</option>
+                  <option value="gt">Greater than</option>
+                  <option value="lte">Less or equal</option>
+                  <option value="gte">Greater or equal</option>
+                </select>
+              </div>
+              <div className="form-control">
+                <label className="label py-0.5"><span className="label-text text-xs">Value</span></label>
+                <input
+                  type="number"
+                  className="input input-bordered input-xs w-20"
+                  value={newAlert.value}
+                  onChange={(e) => setNewAlert((p) => ({ ...p, value: parseFloat(e.target.value) || 0 }))}
+                />
+              </div>
+              <div className="form-control">
+                <label className="label py-0.5"><span className="label-text text-xs">Severity</span></label>
+                <select
+                  className="select select-bordered select-xs"
+                  value={newAlert.severity}
+                  onChange={(e) => setNewAlert((p) => ({ ...p, severity: e.target.value }))}
+                >
+                  <option value="info">Info</option>
+                  <option value="warning">Warning</option>
+                  <option value="critical">Critical</option>
+                </select>
+              </div>
+              <button
+                className="btn btn-xs btn-primary"
+                onClick={() => createAlertThreshold(newAlert)}
+              >
+                Add Alert
+              </button>
+            </div>
+
+            {/* Existing thresholds */}
+            {alertThresholds.length === 0 ? (
+              <div className="text-center py-2 text-base-content/40 text-xs">
+                No alert thresholds configured. Add one above to get notified when P&L conditions are met.
+              </div>
+            ) : (
+              <div className="flex flex-col gap-1">
+                {alertThresholds.map((t) => (
+                  <div key={t.id} className="flex items-center justify-between bg-base-100 rounded px-2 py-1 text-xs">
+                    <div className="flex items-center gap-2">
+                      <span className={`badge badge-xs ${
+                        t.severity === "critical" ? "badge-error" : t.severity === "warning" ? "badge-warning" : "badge-info"
+                      }`}>
+                        {t.severity}
+                      </span>
+                      <span className="font-semibold">{t.metric}</span>
+                      <span className="text-base-content/50">{t.operator}</span>
+                      <span className="font-mono">{t.value}</span>
+                    </div>
+                    <button
+                      className="btn btn-xs btn-ghost text-error"
+                      onClick={() => deleteAlertThreshold(t.id)}
+                    >
+                      Remove
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+
         {/* Equity Curve Chart */}
         {!compact && (
           <div className="mt-4">
             <div className="flex items-center justify-between mb-2">
               <h3 className="font-bold text-sm">Equity Curve</h3>
               <div className="flex items-center gap-1">
-                {EQUITY_PERIODS.map((p) => (
-                  <button
-                    key={p.value}
-                    className={`btn btn-xs ${
-                      equityCurvePeriod === p.value ? "btn-primary" : "btn-ghost"
-                    }`}
-                    onClick={() => setEquityCurvePeriod(p.value)}
-                    disabled={equityCurveLoading}
-                  >
-                    {p.label}
-                  </button>
-                ))}
+                {/* Phase 5: Chart mode toggle */}
+                <div className="join mr-2">
+                  {CHART_MODES.map((m) => (
+                    <button
+                      key={m.value}
+                      className={`btn btn-xs join-item ${chartMode === m.value ? "btn-primary" : "btn-ghost"}`}
+                      onClick={() => setChartMode(m.value)}
+                    >
+                      {m.label}
+                    </button>
+                  ))}
+                </div>
+
+                {chartMode === "daily" ? (
+                  // Daily period selector
+                  EQUITY_PERIODS.map((p) => (
+                    <button
+                      key={p.value}
+                      className={`btn btn-xs ${
+                        equityCurvePeriod === p.value ? "btn-primary" : "btn-ghost"
+                      }`}
+                      onClick={() => setEquityCurvePeriod(p.value)}
+                      disabled={equityCurveLoading}
+                    >
+                      {p.label}
+                    </button>
+                  ))
+                ) : (
+                  // Intraday timeframe selector
+                  <>
+                    {INTRADAY_TIMEFRAMES.map((tf) => (
+                      <button
+                        key={tf.value}
+                        className={`btn btn-xs ${
+                          intradayTimeframe === tf.value ? "btn-primary" : "btn-ghost"
+                        }`}
+                        onClick={() => setIntradayTimeframe(tf.value)}
+                        disabled={intradayLoading}
+                      >
+                        {tf.label}
+                      </button>
+                    ))}
+                    <span className="text-base-content/30 mx-1">|</span>
+                    {INTRADAY_PERIODS.map((p) => (
+                      <button
+                        key={p.value}
+                        className={`btn btn-xs ${
+                          intradayPeriod === p.value ? "btn-secondary" : "btn-ghost"
+                        }`}
+                        onClick={() => setIntradayPeriod(p.value)}
+                        disabled={intradayLoading}
+                      >
+                        {p.label}
+                      </button>
+                    ))}
+                  </>
+                )}
               </div>
             </div>
 
-            {equityCurveLoading && !chartData.length ? (
+            {(equityCurveLoading || intradayLoading) && !chartData.length ? (
               <div className="flex items-center justify-center h-48 bg-base-200 rounded-lg">
                 <span className="loading loading-spinner loading-md text-primary" />
               </div>

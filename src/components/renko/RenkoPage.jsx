@@ -516,6 +516,37 @@ export default function RenkoPage() {
     }
   };
 
+  // Track active pipelines across all symbols (minimal state for the multi-pipeline bar)
+  const [pipelineStatuses, setPipelineStatuses] = useState({});
+  const pipelineStatusFetched = useRef(false);
+
+  // Fetch all pipeline statuses on mount (lightweight — just /state per symbol)
+  useEffect(() => {
+    if (pipelineStatusFetched.current) return;
+    pipelineStatusFetched.current = true;
+
+    const fetchAllStatuses = async () => {
+      const statuses = {};
+      await Promise.allSettled(
+        SYMBOLS.map(async (sym) => {
+          try {
+            const data = await renkoApiFetch("state", { params: { symbol: sym } });
+            statuses[sym] = {
+              active: (data?.brick_count ?? 0) > 0,
+              bricks: data?.brick_count ?? 0,
+              hasPosition: data?.active_position ?? false,
+              pnl: data?.session_pnl_bricks ?? 0,
+            };
+          } catch {
+            statuses[sym] = { active: false, bricks: 0, hasPosition: false, pnl: 0 };
+          }
+        })
+      );
+      setPipelineStatuses(statuses);
+    };
+    fetchAllStatuses();
+  }, []);
+
   // Warming-up state (used by warmUpSymbol)
   const [warmingUp, setWarmingUp] = useState(false);
 
@@ -541,6 +572,17 @@ export default function RenkoPage() {
             >
               {isActive ? "Active" : "Idle"}
             </span>
+            {/* Execution Mode Badge */}
+            {config?.dry_run === false && config?.live_enabled && (
+              <div className="badge badge-error gap-1 text-xs">
+                LIVE TRADING
+              </div>
+            )}
+            {config?.dry_run !== false && (
+              <div className="badge badge-ghost gap-1 text-xs">
+                DRY RUN
+              </div>
+            )}
           </div>
 
           <div className="flex items-center gap-2 flex-wrap">
@@ -632,6 +674,40 @@ export default function RenkoPage() {
               {streaming ? "🔴 Live" : "⚪ Stream"}
             </button>
           </div>
+        </div>
+
+        {/* Multi-Pipeline Status Bar */}
+        <div className="flex items-center gap-2 overflow-x-auto pb-1">
+          <span className="text-xs text-base-content/40 whitespace-nowrap">Pipelines:</span>
+          {SYMBOLS.map((sym) => {
+            const st = pipelineStatuses[sym];
+            const isSelected = sym === symbol;
+            return (
+              <button
+                key={sym}
+                onClick={() => handleSymbolChange(sym)}
+                className={`btn btn-xs gap-1 font-mono whitespace-nowrap ${
+                  isSelected
+                    ? "btn-primary"
+                    : st?.active
+                    ? "btn-outline btn-success"
+                    : "btn-ghost"
+                }`}
+              >
+                {sym}
+                {st?.active && (
+                  <span className="flex items-center gap-0.5">
+                    {st.hasPosition && (
+                      <span className="w-1.5 h-1.5 rounded-full bg-warning inline-block" title="Has position" />
+                    )}
+                    <span className={`text-[9px] ${st.pnl >= 0 ? "text-success" : "text-error"}`}>
+                      {st.pnl >= 0 ? "+" : ""}{st.pnl}br
+                    </span>
+                  </span>
+                )}
+              </button>
+            );
+          })}
         </div>
 
         {/* Pipeline State Banner */}

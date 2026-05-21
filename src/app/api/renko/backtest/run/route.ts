@@ -9,9 +9,8 @@
  */
 import { getFastAPIAuthHeaders } from "@/lib/fastapi-auth";
 import { redis } from "@/lib/redis";
+import { FASTAPI_BASE } from "@/lib/config";
 import type { RenkoBacktestRequest, RenkoBacktestResponse } from "@/types/backtest";
-
-const FASTAPI_URL = process.env.NEXT_PUBLIC_FASTAPI_URL || "http://localhost:8000";
 
 export async function POST(request: Request) {
   try {
@@ -129,7 +128,7 @@ export async function POST(request: Request) {
     // ── Cache miss: call FastAPI ────────────────────────────────────────
     const authHeaders = await getFastAPIAuthHeaders();
 
-    const resp = await fetch(`${FASTAPI_URL}/renko/backtest/run`, {
+    const resp = await fetch(`${FASTAPI_BASE}/renko/backtest/run`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",

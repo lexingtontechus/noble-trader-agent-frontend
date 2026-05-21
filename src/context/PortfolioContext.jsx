@@ -15,32 +15,6 @@ const PortfolioContext = createContext(null);
 /**
  * usePortfolio — Access the shared portfolio data context.
  * Must be used within a <PortfolioProvider>.
- *
- * @returns {{
- *   account: object|null,
- *   positions: array,
- *   equityCurve: array,
- *   equityCurveLoading: boolean,
- *   equityCurvePeriod: string,
- *   setEquityCurvePeriod: (p: string) => void,
- *   priceTicks: Record<string, { price: number, timestamp: number }>,
- *   recentTrades: array,
- *   realizedPnl: number,
- *   realizedPnlBySymbol: Record<string, number>,
- *   tradesLoading: boolean,
- *   totalUnrealizedPnl: number,
- *   totalUnrealizedPnlPc: number,
- *   totalMarketValue: number,
- *   dayPnl: number,
- *   dayPnlPc: number,
- *   loading: boolean,
- *   error: string|null,
- *   lastUpdated: Date|null,
- *   isStale: boolean,
- *   sseConnected: boolean,
- *   refresh: () => Promise<void>,
- *   refreshTrades: () => Promise<void>,
- * }}
  */
 export function usePortfolio() {
   const ctx = useContext(PortfolioContext);
@@ -60,8 +34,11 @@ export function usePortfolio() {
  *   1. SSE /sse/pnl  (real-time — fills, quotes, P&L snapshots via BFF proxy)
  *   2. REST polling   (fallback — every 10s for account/positions, on-demand for equity curve)
  *
- * When SSE connects, it provides real-time position/fill/quote updates.
- * REST polling continues as a safety net at 10s intervals.
+ * Phase 5 additions:
+ *   - Intraday P&L time-bucketed series
+ *   - Live risk metrics dashboard (Sharpe, Sortino, Max DD, VaR, etc.)
+ *   - P&L alert thresholds (configurable)
+ *   - CSV export
  */
 export function PortfolioProvider({ children }) {
   // ── State ──────────────────────────────────────────────────
@@ -79,6 +56,17 @@ export function PortfolioProvider({ children }) {
   const [sseConnected, setSseConnected] = useState(false);
   const [recentTrades, setRecentTrades] = useState([]);
   const [tradesLoading, setTradesLoading] = useState(false);
+
+  // ── Phase 5: Intraday + Risk + Alerts state ──────────────────
+  const [intradayCurve, setIntradayCurve] = useState([]);
+  const [intradayLoading, setIntradayLoading] = useState(false);
+  const [intradayTimeframe, setIntradayTimeframe] = useState("15Min");
+  const [intradayPeriod, setIntradayPeriod] = useState("1D");
+  const [riskMetrics, setRiskMetrics] = useState(null);
+  const [riskMetricsLoading, setRiskMetricsLoading] = useState(false);
+  const [riskMetricsPeriod, setRiskMetricsPeriod] = useState("1M");
+  const [alertThresholds, setAlertThresholds] = useState([]);
+  const [activeAlerts, setActiveAlerts] = useState([]); // live triggered alerts from SSE
 
   const intervalRef = useRef(null);
   const tradesFetchedRef = useRef(false);
@@ -167,12 +155,170 @@ export function PortfolioProvider({ children }) {
     [hasKeys]
   );
 
+  // ── Phase 5: Intraday P&L fetch ──────────────────────────────
+  const refreshIntraday = useCallback(
+    async (timeframe, period) => {
+      if (!hasKeys) return;
+      setIntradayLoading(true);
+      try {
+        const tf = timeframe || intradayTimeframe;
+        const p = period || intradayPeriod;
+        const res = await fetch(
+          `/api/pnl/intraday?timeframe=${tf}&period=${p}`
+        );
+        if (!res.ok) {
+          setIntradayCurve([]);
+          return;
+        }
+        const data = await res.json();
+        if (data?.buckets) {
+          const curve = data.buckets.map((b) => ({
+            timestamp: b.timestamp * 1000,
+            date: b.date,
+            equity: b.equity,
+            pnl: b.pnl,
+            pnlPc: b.pnl_pct,
+          }));
+          setIntradayCurve(curve);
+        } else {
+          setIntradayCurve([]);
+        }
+      } catch {
+        setIntradayCurve([]);
+      } finally {
+        setIntradayLoading(false);
+      }
+    },
+    [hasKeys, intradayTimeframe, intradayPeriod]
+  );
+
+  // ── Phase 5: Risk metrics fetch ──────────────────────────────
+  const refreshRiskMetrics = useCallback(
+    async (period) => {
+      if (!hasKeys) return;
+      setRiskMetricsLoading(true);
+      try {
+        const p = period || riskMetricsPeriod;
+        const res = await fetch(`/api/risk/dashboard?period=${p}`);
+        if (!res.ok) {
+          setRiskMetrics(null);
+          return;
+        }
+        const data = await res.json();
+        setRiskMetrics(data);
+      } catch {
+        setRiskMetrics(null);
+      } finally {
+        setRiskMetricsLoading(false);
+      }
+    },
+    [hasKeys, riskMetricsPeriod]
+  );
+
+  // ── Phase 5: Alert thresholds fetch ──────────────────────────
+  const refreshAlertThresholds = useCallback(async () => {
+    if (!hasKeys) return;
+    try {
+      const res = await fetch("/api/pnl/alerts");
+      if (!res.ok) return;
+      const data = await res.json();
+      setAlertThresholds(Array.isArray(data) ? data : []);
+    } catch {
+      // Silently fail
+    }
+  }, [hasKeys]);
+
+  // ── Phase 5: Create alert threshold ──────────────────────────
+  const createAlertThreshold = useCallback(
+    async ({ metric, operator, value, severity = "warning", enabled = true, cooldown_minutes = 15 }) => {
+      if (!hasKeys) return null;
+      try {
+        const res = await fetch("/api/pnl/alerts", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ metric, operator, value, severity, enabled, cooldown_minutes }),
+        });
+        if (!res.ok) return null;
+        const data = await res.json();
+        await refreshAlertThresholds();
+        return data;
+      } catch {
+        return null;
+      }
+    },
+    [hasKeys, refreshAlertThresholds]
+  );
+
+  // ── Phase 5: Delete alert threshold ──────────────────────────
+  const deleteAlertThreshold = useCallback(
+    async (thresholdId) => {
+      if (!hasKeys) return false;
+      try {
+        const res = await fetch(`/api/pnl/alerts?id=${thresholdId}`, {
+          method: "DELETE",
+        });
+        if (res.ok) {
+          await refreshAlertThresholds();
+          return true;
+        }
+        return false;
+      } catch {
+        return false;
+      }
+    },
+    [hasKeys, refreshAlertThresholds]
+  );
+
+  // ── Phase 5: CSV export ──────────────────────────────────────
+  const exportPnlCsv = useCallback(
+    async (period = "1M", sections = "all") => {
+      if (!hasKeys) return;
+      try {
+        const res = await fetch(`/api/pnl/export?period=${period}&sections=${sections}`);
+        if (!res.ok) return;
+        const blob = await res.blob();
+        const url = window.URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.href = url;
+        a.download = `pnl_export_${period}.csv`;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        window.URL.revokeObjectURL(url);
+      } catch {
+        // Silently fail
+      }
+    },
+    [hasKeys]
+  );
+
   // Re-fetch equity curve when period changes
   useEffect(() => {
     if (hasKeys) {
       refreshEquityCurve(equityCurvePeriod);
     }
   }, [equityCurvePeriod, hasKeys, refreshEquityCurve]);
+
+  // Re-fetch intraday when timeframe or period changes
+  useEffect(() => {
+    if (hasKeys) {
+      refreshIntraday(intradayTimeframe, intradayPeriod);
+    }
+  }, [intradayTimeframe, intradayPeriod, hasKeys, refreshIntraday]);
+
+  // Fetch risk metrics on key resolution + period change
+  useEffect(() => {
+    if (hasKeys) {
+      refreshRiskMetrics(riskMetricsPeriod);
+    }
+  }, [riskMetricsPeriod, hasKeys, refreshRiskMetrics]);
+
+  // Fetch alert thresholds on key resolution
+  useEffect(() => {
+    if (hasKeys) {
+      refreshAlertThresholds();
+    }
+  }, [hasKeys, refreshAlertThresholds]);
 
   // ── Initial fetch + polling ────────────────────────────────
   // When SSE is active, polling throttles to 30s (safety net).
@@ -296,6 +442,34 @@ export function PortfolioProvider({ children }) {
               }));
               setLastUpdated(new Date());
               setIsStale(false);
+              break;
+            }
+
+            case "pnl_alert": {
+              // Phase 5: P&L threshold breach alert from SSE
+              console.warn(
+                `[PortfolioProvider] P&L Alert: ${data.message} (${data.severity})`
+              );
+              setActiveAlerts((prev) => {
+                // Add to front, keep max 20
+                const updated = [data, ...prev].slice(0, 20);
+                return updated;
+              });
+              break;
+            }
+
+            case "credentials_error": {
+              // Alpaca credentials failed (expired, revoked, or invalid)
+              console.error(
+                `[PortfolioProvider] Credentials error: ${data.reason} (stream: ${data.stream_type})`
+              );
+              setSseConnected(false);
+              // Close SSE — no point reconnecting with bad credentials
+              if (sseRef.current) {
+                sseRef.current.close();
+                sseRef.current = null;
+              }
+              setError("Alpaca credentials are invalid or expired. Please re-authenticate in Admin settings.");
               break;
             }
 
@@ -431,6 +605,11 @@ export function PortfolioProvider({ children }) {
     return { realizedPnl: total, realizedPnlBySymbol: bySymbol };
   }, [recentTrades]);
 
+  // ── Dismiss alert from active alerts ────────────────────────
+  const dismissAlert = useCallback((alertId) => {
+    setActiveAlerts((prev) => prev.filter((a) => a.alert_id !== alertId));
+  }, []);
+
   // ── Context value ──────────────────────────────────────────
   const value = useMemo(
     () => ({
@@ -458,6 +637,28 @@ export function PortfolioProvider({ children }) {
       hasKeys,
       refresh,
       refreshTrades,
+      // Phase 5: Intraday
+      intradayCurve,
+      intradayLoading,
+      intradayTimeframe,
+      setIntradayTimeframe,
+      intradayPeriod,
+      setIntradayPeriod,
+      refreshIntraday,
+      // Phase 5: Risk metrics
+      riskMetrics,
+      riskMetricsLoading,
+      riskMetricsPeriod,
+      setRiskMetricsPeriod,
+      refreshRiskMetrics,
+      // Phase 5: Alerts
+      alertThresholds,
+      activeAlerts,
+      createAlertThreshold,
+      deleteAlertThreshold,
+      dismissAlert,
+      // Phase 5: CSV Export
+      exportPnlCsv,
     }),
     [
       account,
@@ -483,6 +684,22 @@ export function PortfolioProvider({ children }) {
       hasKeys,
       refresh,
       refreshTrades,
+      // Phase 5
+      intradayCurve,
+      intradayLoading,
+      intradayTimeframe,
+      intradayPeriod,
+      refreshIntraday,
+      riskMetrics,
+      riskMetricsLoading,
+      riskMetricsPeriod,
+      refreshRiskMetrics,
+      alertThresholds,
+      activeAlerts,
+      createAlertThreshold,
+      deleteAlertThreshold,
+      dismissAlert,
+      exportPnlCsv,
     ]
   );
 

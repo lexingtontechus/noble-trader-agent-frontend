@@ -1,7 +1,7 @@
 # Real-Time P&L Dashboard — Architecture Design
 
-> **Status**: Phase 4 Complete (Realized P&L + Trade History)
-> **Last Updated**: 2025-05-21
+> **Status**: Phase 5 Complete (Risk Metrics + Intraday + CSV Export + Alerts)
+> **Last Updated**: 2026-05-21
 > **Decision**: Option C — Alpaca Streaming → FastAPI Backend → SSE → Frontend
 
 ---
@@ -326,11 +326,17 @@ The `AlpacaStreamManager` opens streaming connections per-user after resolving c
 - Add "Realized P&L by Symbol" breakdown (top 10 symbols sorted by realized P&L)
 - Trade history fetched on first key resolution (not on every poll)
 
-### Phase 5: Risk Metrics + Intraday + Export
-- Sharpe ratio, max drawdown from equity curve
-- Intraday timeframe selector (1min/5min/15min/1D)
-- CSV/PDF P&L export
-- P&L threshold alerts (notify on >X% position move)
+### Phase 5: Risk Metrics + Intraday + Export + Alerts ✅ Complete
+- **Risk Dashboard**: `GET /risk/dashboard` → Sharpe, Sortino, Calmar, VaR, CVaR, Max DD, win rate, profit factor (30s cache, Pydantic `RiskDashboardResponse` model)
+- **Intraday P&L**: `GET /pnl/intraday` → time-bucketed series (5Min/15Min/1Hour/1Day) with period selectors
+- **Historical P&L**: `GET /pnl/history` → daily equity curve with drawdown derivation
+- **CSV Export**: `GET /pnl/export` → multi-section CSV (positions, trades, equity_curve, risk_metrics)
+- **Alert Thresholds**: Full CRUD (`GET/POST/DELETE /pnl/alerts`) + manual check (`POST /pnl/alerts/check`)
+- **Alert Persistence**: Supabase `pnl_alert_thresholds` table with in-memory cache for fast SSE evaluation
+- **Real-time Alert SSE**: `PnlAlertEvent` in 5s snapshot loop → `evaluate_and_broadcast()` → SSE + Discord push
+- **Discord Integration**: Triggered P&L alerts push to `#system-status` channel via `DiscordNotifier`
+- **Frontend**: Risk metrics panel (12 cards), intraday chart toggle, alert thresholds panel, CSV export button, active alerts bar
+- **Supabase Migration**: `00000000000015_pnl_alert_thresholds.sql`
 
 ---
 

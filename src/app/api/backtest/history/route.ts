@@ -4,8 +4,7 @@
  * BFF proxy: fetches paginated backtest history from FastAPI backend.
  */
 import { getFastAPIAuthHeaders } from "@/lib/fastapi-auth";
-
-const FASTAPI_URL = process.env.NEXT_PUBLIC_FASTAPI_URL || "http://localhost:8000";
+import { FASTAPI_BASE } from "@/lib/config";
 
 export async function GET(request: Request) {
   try {
@@ -16,7 +15,7 @@ export async function GET(request: Request) {
     const authHeaders = await getFastAPIAuthHeaders();
 
     const resp = await fetch(
-      `${FASTAPI_URL}/backtest/history?offset=${offset}&limit=${limit}`,
+      `${FASTAPI_BASE}/backtest/history?offset=${offset}&limit=${limit}`,
       {
         headers: {
           "Content-Type": "application/json",

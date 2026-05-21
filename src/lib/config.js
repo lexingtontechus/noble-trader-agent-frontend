@@ -7,7 +7,7 @@ export const FASTAPI_BASE =
   process.env.NEXT_PUBLIC_FASTAPI_BASE_URL ||
   "https://noble-trader-fastapi-backend.onrender.com";
 
-export const APP_VERSION = "v3.1";
+export const APP_VERSION = "v6.0.0";
 
 /** Cache TTLs (milliseconds) */
 export const CACHE_TTL = {

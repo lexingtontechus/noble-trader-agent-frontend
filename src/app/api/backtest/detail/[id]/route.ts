@@ -4,8 +4,7 @@
  * BFF proxy: fetches a single backtest result by ID from FastAPI backend.
  */
 import { getFastAPIAuthHeaders } from "@/lib/fastapi-auth";
-
-const FASTAPI_URL = process.env.NEXT_PUBLIC_FASTAPI_URL || "http://localhost:8000";
+import { FASTAPI_BASE } from "@/lib/config";
 
 export async function GET(
   request: Request,
@@ -15,7 +14,7 @@ export async function GET(
     const { id } = await params;
     const authHeaders = await getFastAPIAuthHeaders();
 
-    const resp = await fetch(`${FASTAPI_URL}/backtest/${id}`, {
+    const resp = await fetch(`${FASTAPI_BASE}/backtest/${id}`, {
       headers: {
         "Content-Type": "application/json",
         ...authHeaders,
@@ -54,7 +53,7 @@ export async function DELETE(
     const { id } = await params;
     const authHeaders = await getFastAPIAuthHeaders();
 
-    const resp = await fetch(`${FASTAPI_URL}/backtest/${id}`, {
+    const resp = await fetch(`${FASTAPI_BASE}/backtest/${id}`, {
       method: "DELETE",
       headers: {
         "Content-Type": "application/json",

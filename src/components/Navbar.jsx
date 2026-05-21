@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback } from "react";
 import dynamic from "next/dynamic";
-import { UserButton } from "@clerk/nextjs";
+import { UserButton, OrganizationSwitcher } from "@clerk/nextjs";
 import { useRole } from "@/hooks/useRole";
 import ThemeSwitcher from "@/components/shared/ThemeSwitcher";
 import TradingModeToggle from "@/components/shared/TradingModeToggle";
@@ -195,6 +195,20 @@ export default function Navbar({ activeView, setActiveView }) {
             >
               {backendHealthy === null ? "●" : backendHealthy ? "●" : "●"}
             </span>
+          </div>
+
+          {/* Clerk Organization Switcher — org-scoped multi-tenancy */}
+          <div className="hidden sm:flex items-center">
+            <OrganizationSwitcher
+              afterCreateOrganizationUrl="/"
+              afterSelectOrganizationUrl="/"
+              appearance={{
+                elements: {
+                  rootBox: "w-auto",
+                  organizationSwitcherTrigger: "btn btn-ghost btn-xs gap-1 text-xs",
+                },
+              }}
+            />
           </div>
 
           {/* Clerk UserButton with Settings + Admin custom menu items */}

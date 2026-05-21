@@ -5,8 +5,7 @@
  * Accepts a param_grid and runs backtests across all combinations.
  */
 import { getFastAPIAuthHeaders } from "@/lib/fastapi-auth";
-
-const FASTAPI_URL = process.env.NEXT_PUBLIC_FASTAPI_URL || "http://localhost:8000";
+import { FASTAPI_BASE } from "@/lib/config";
 
 export async function POST(request: Request) {
   try {
@@ -60,7 +59,7 @@ export async function POST(request: Request) {
 
     const authHeaders = await getFastAPIAuthHeaders();
 
-    const resp = await fetch(`${FASTAPI_URL}/backtest/optimize`, {
+    const resp = await fetch(`${FASTAPI_BASE}/backtest/optimize`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
