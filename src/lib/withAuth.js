@@ -59,7 +59,7 @@ function getViolationClient() {
  * Log a rate limit violation to Supabase (fire-and-forget).
  * Never blocks or crashes the request.
  */
-function logViolation({ identifier, identifierType, tier, pathname, limitMax, windowMs, currentCount, userAgent, ipAddress, plan, role }) {
+function logViolation({ identifier, identifierType, tier, pathname, limitMax, windowMs, currentCount, userAgent, ipAddress, plan, role, orgId }) {
   const client = getViolationClient();
   if (!client) return;
 
@@ -76,6 +76,7 @@ function logViolation({ identifier, identifierType, tier, pathname, limitMax, wi
     ip_address: ipAddress,
     plan,
     role,
+    org_id: orgId || null,
   }).then(() => {}).catch(() => {});
 }
 
@@ -303,6 +304,7 @@ export function withAuth(handler, options = {}) {
           ipAddress: request.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ? hashPII(request.headers.get("x-forwarded-for").split(",")[0].trim()) : null,
           plan,
           role,
+          orgId,
         });
 
         return rateLimitedResponse(rateCheck.resetAt, rateCheck.limit, effectiveLimit.tier);
