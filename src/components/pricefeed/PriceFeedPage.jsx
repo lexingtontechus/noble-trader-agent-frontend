@@ -5,6 +5,7 @@ import { PriceFeedProvider, usePriceFeed } from "@/context/PriceFeedContext";
 import TickerTape from "./TickerTape";
 import WatchlistPanel from "./WatchlistPanel";
 import LiveCandlestickChart from "./LiveCandlestickChart";
+import TradingViewAdvancedChart from "./TradingViewAdvancedChart";
 import PriceAlertPanel from "./PriceAlertPanel";
 
 /**
@@ -14,30 +15,24 @@ import PriceAlertPanel from "./PriceAlertPanel";
  *   ┌─────────────────────────────────────────────┐
  *   │              TickerTape (scrolling)          │
  *   ├──────────┬──────────────────────────────────┤
- *   │          │                                    │
- *   │Watchlist │     LiveCandlestickChart           │
- *   │  Panel   │     (TradingView Lightweight)      │
+ *   │          │  [Live] [Advanced] ← Chart Mode   │
+ *   │Watchlist │                                    │
+ *   │  Panel   │  LiveCandlestickChart              │
+ *   │          │  OR                                 │
+ *   │          │  TradingViewAdvancedChart           │
  *   │          │                                    │
  *   │  250px   │           flex-1                   │
  *   │          │                                    │
  *   └──────────┴──────────────────────────────────┘
- *
- * Mobile:
- *   ┌─────────────────────────────────────────────┐
- *   │              TickerTape                      │
- *   ├─────────────────────────────────────────────┤
- *   │                                              │
- *   │     LiveCandlestickChart (full width)         │
- *   │                                              │
- *   ├─────────────────────────────────────────────┤
- *   │  Status bar                                  │
+ *   │              StatusBar                       │
  *   └─────────────────────────────────────────────┘
- *   + Mobile watchlist as overlay bottom sheet
  *
  * Features:
+ *   - Dual chart modes: Live (WebSocket) + Advanced (TradingView)
  *   - TickerTape: scrolling real-time prices for all watchlist symbols
  *   - WatchlistPanel: add/remove symbols, see prices & change %
- *   - LiveCandlestickChart: professional OHLC chart with live updates
+ *   - LiveCandlestickChart: professional OHLC chart with live WS updates
+ *   - TradingViewAdvancedChart: 100+ indicators, drawing tools, pro features
  *   - Responsive: watchlist becomes toggleable bottom sheet on mobile
  *   - Enhanced status bar with tick counter, connection stats, market status
  *   - Toast notifications for connection events
@@ -62,17 +57,20 @@ function PriceFeedContent() {
     connectedSince,
     reconnectAttempt,
     marketStatus,
+    chartMode,
+    setChartMode,
+    setSelectedSymbol,
+    prices,
   } = usePriceFeed();
   const [showMobileWatchlist, setShowMobileWatchlist] = useState(false);
   const [showMobileAlerts, setShowMobileAlerts] = useState(false);
-  const { setSelectedSymbol, prices } = usePriceFeed();
 
   return (
     <div className="flex flex-col h-[calc(100dvh-4rem)]">
       {/* Ticker Tape — full width */}
       <TickerTape />
 
-      {/* Main content area: Watchlist + Chart */}
+      {/* Main content area: Watchlist + Chart + Alerts */}
       <div className="flex flex-1 overflow-hidden relative">
         {/* Watchlist — sidebar, hidden on mobile */}
         <div className="hidden md:flex w-64 shrink-0 border-r border-base-300 bg-base-100 overflow-hidden">
@@ -81,7 +79,15 @@ function PriceFeedContent() {
 
         {/* Chart area */}
         <div className="flex-1 flex flex-col overflow-hidden bg-base-100 relative">
-          <LiveCandlestickChart />
+          {/* Chart mode toggle */}
+          <div className="px-3 sm:px-4 py-1.5 border-b border-base-300 flex items-center justify-between bg-base-200/30">
+            <ChartModeToggle chartMode={chartMode} setChartMode={setChartMode} connected={connected} />
+          </div>
+
+          {/* Chart content — conditional rendering */}
+          <div className="flex-1 min-h-0 overflow-hidden">
+            {chartMode === "live" ? <LiveCandlestickChart /> : <TradingViewAdvancedChart />}
+          </div>
 
           {/* Mobile: Watchlist toggle button */}
           <button
@@ -203,6 +209,7 @@ function PriceFeedContent() {
         connectedSince={connectedSince}
         reconnectAttempt={reconnectAttempt}
         marketStatus={marketStatus}
+        chartMode={chartMode}
       />
 
       {/* Connection toast notifications */}
@@ -268,6 +275,52 @@ function PriceFeedContent() {
   );
 }
 
+// ── Chart Mode Toggle ────────────────────────────────────────────────────
+
+function ChartModeToggle({ chartMode, setChartMode, connected }) {
+  return (
+    <div className="flex items-center gap-1">
+      <div className="join">
+        <button
+          className={`btn join-item btn-xs sm:btn-xs min-h-[36px] sm:min-h-0 ${
+            chartMode === "live" ? "btn-primary" : "btn-ghost"
+          }`}
+          onClick={() => setChartMode("live")}
+        >
+          {/* Live icon */}
+          <span className="flex items-center gap-1.5">
+            {connected && chartMode === "live" && (
+              <span className="w-1.5 h-1.5 rounded-full bg-success animate-pulse" />
+            )}
+            <svg xmlns="http://www.w3.org/2000/svg" className="h-3.5 w-3.5 hidden sm:inline" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
+            </svg>
+            <span>Live</span>
+          </span>
+        </button>
+        <button
+          className={`btn join-item btn-xs sm:btn-xs min-h-[36px] sm:min-h-0 ${
+            chartMode === "advanced" ? "btn-secondary" : "btn-ghost"
+          }`}
+          onClick={() => setChartMode("advanced")}
+        >
+          <span className="flex items-center gap-1.5">
+            <svg xmlns="http://www.w3.org/2000/svg" className="h-3.5 w-3.5 hidden sm:inline" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
+            </svg>
+            <span>Advanced</span>
+          </span>
+        </button>
+      </div>
+
+      {/* Mode description */}
+      <span className="hidden lg:inline text-[10px] text-base-content/30 ml-2">
+        {chartMode === "live" ? "WebSocket feed" : "TradingView Pro"}
+      </span>
+    </div>
+  );
+}
+
 // ── Enhanced Status Bar ───────────────────────────────────────────────────
 
 function StatusBar({
@@ -280,6 +333,7 @@ function StatusBar({
   connectedSince,
   reconnectAttempt,
   marketStatus,
+  chartMode,
 }) {
   // Format uptime
   const [uptime, setUptime] = useState("");
@@ -320,6 +374,21 @@ function StatusBar({
     <div className="px-4 py-1.5 bg-base-200/30 border-t border-base-300 flex items-center justify-between text-[10px] text-base-content/40">
       <div className="flex items-center gap-3">
         <span>{symbolCount} symbols</span>
+
+        {/* Chart mode indicator */}
+        <span className="flex items-center gap-1">
+          {chartMode === "live" ? (
+            <>
+              <span className={`w-1.5 h-1.5 rounded-full ${connected ? "bg-success" : "bg-base-content/20"}`} />
+              Live Chart
+            </>
+          ) : (
+            <>
+              <span className="w-1.5 h-1.5 rounded-full bg-secondary" />
+              TradingView
+            </>
+          )}
+        </span>
 
         {/* Connection mode */}
         <span className="flex items-center gap-1">

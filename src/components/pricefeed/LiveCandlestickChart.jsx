@@ -645,6 +645,7 @@ export default function LiveCandlestickChart() {
                 Live
               </span>
             )}
+            <span className="badge badge-xs badge-primary gap-1">WS Feed</span>
           </div>
 
           {/* Indicator menu — always visible */}

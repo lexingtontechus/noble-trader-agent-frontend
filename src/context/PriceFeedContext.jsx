@@ -28,6 +28,7 @@ const DEFAULT_WATCHLIST = [
 ];
 
 const STORAGE_KEY = "noble-trader-watchlist";
+const CHART_MODE_KEY = "noble-trader-chart-mode";
 
 function loadWatchlist() {
   if (typeof window === "undefined") return DEFAULT_WATCHLIST;
@@ -112,6 +113,21 @@ export function PriceFeedProvider({ children }) {
 
   // ── Chart State ───────────────────────────────────────────────────────────
   const [chartPeriod, setChartPeriod] = useState("6mo");
+  const [chartMode, setChartMode] = useState("advanced"); // "live" | "advanced"
+
+  // Load chart mode from localStorage on mount
+  useEffect(() => {
+    try {
+      const saved = localStorage.getItem(CHART_MODE_KEY);
+      if (saved === "live" || saved === "advanced") setChartMode(saved);
+    } catch { /* ignore */ }
+  }, []);
+
+  // Save chart mode to localStorage when it changes
+  const changeChartMode = useCallback((mode) => {
+    setChartMode(mode);
+    try { localStorage.setItem(CHART_MODE_KEY, mode); } catch { /* ignore */ }
+  }, []);
 
   // ── Market Status ─────────────────────────────────────────────────────────
   const [marketStatus, setMarketStatus] = useState("closed");
@@ -175,6 +191,8 @@ export function PriceFeedProvider({ children }) {
       // Chart config
       chartPeriod,
       setChartPeriod,
+      chartMode,
+      setChartMode: changeChartMode,
 
       // Sorted lists
       gainers,
@@ -203,6 +221,7 @@ export function PriceFeedProvider({ children }) {
       subscribe,
       unsubscribe,
       chartPeriod,
+      chartMode,
       gainers,
       losers,
       tickCount,
