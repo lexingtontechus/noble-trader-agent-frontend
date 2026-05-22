@@ -19,6 +19,8 @@ import { yahooToFinnhubSymbol, getAssetClass } from "@/lib/symbol-utils";
  *   - Polling fallback when no API key or WS fails
  *   - Visibility API: pause when tab is hidden
  *   - Configurable throttle (default 1 tick/sec per symbol)
+ *   - Price history per symbol (last 50 ticks for sparklines)
+ *   - Tick counter and connection stats (messages/sec, uptime)
  *
  * @param {string[]} symbols - Array of ticker symbols in Yahoo Finance format
  * @param {object} options
@@ -26,13 +28,19 @@ import { yahooToFinnhubSymbol, getAssetClass } from "@/lib/symbol-utils";
  * @param {number} [options.throttleMs=1000] - Min ms between ticks per symbol
  * @param {function} [options.onPriceUpdate] - Callback({ symbol, price, timestamp, volume })
  * @param {function} [options.onError] - Callback on error
+ * @param {number} [options.maxHistory=50] - Max price history points per symbol
  * @returns {{
  *   connected: boolean,
  *   prices: Record<string, { price: number, timestamp: Date, volume: number, change: number }>,
+ *   priceHistory: Record<string, Array<{ price: number, timestamp: Date }>>,
  *   connectionMode: "websocket" | "polling" | "disconnected",
  *   subscribe: (symbol: string) => void,
  *   unsubscribe: (symbol: string) => void,
  *   lastUpdate: Date | null,
+ *   tickCount: number,
+ *   ticksPerSecond: number,
+ *   connectedSince: Date | null,
+ *   reconnectAttempt: number,
  * }}
  */
 export default function useFinnhubPrice(symbols = [], options = {}) {
@@ -41,13 +49,19 @@ export default function useFinnhubPrice(symbols = [], options = {}) {
     throttleMs = 1000,
     onPriceUpdate,
     onError,
+    maxHistory = 50,
   } = options;
 
   // ── State ─────────────────────────────────────────────────────────────────
   const [connected, setConnected] = useState(false);
   const [connectionMode, setConnectionMode] = useState("disconnected"); // "websocket" | "polling" | "disconnected"
   const [prices, setPrices] = useState({}); // { [symbol]: { price, timestamp, volume, change } }
+  const [priceHistory, setPriceHistory] = useState({}); // { [symbol]: [{ price, timestamp }] }
   const [lastUpdate, setLastUpdate] = useState(null);
+  const [tickCount, setTickCount] = useState(0);
+  const [ticksPerSecond, setTicksPerSecond] = useState(0);
+  const [connectedSince, setConnectedSince] = useState(null);
+  const [reconnectAttempt, setReconnectAttempt] = useState(0);
 
   // ── Refs ──────────────────────────────────────────────────────────────────
   const wsRef = useRef(null);
@@ -59,16 +73,17 @@ export default function useFinnhubPrice(symbols = [], options = {}) {
   const enabledRef = useRef(enabled);
   const pollIntervalRef = useRef(null);
   const previousPricesRef = useRef({}); // For computing change %
+  const tickCountRef = useRef(0);
+  const tickTimestampsRef = useRef([]); // For computing ticks/sec
+  const ticksPerSecondTimerRef = useRef(null);
 
   // Reverse map: Finnhub symbol → Yahoo symbol
-  // Used to map WS trade messages back to the Yahoo format our app uses
   const finnhubToYahooRef = useRef(new Map());
 
   // Keep refs in sync
   useEffect(() => {
     symbolsRef.current = new Set(symbols);
 
-    // Rebuild the finnhub→yahoo reverse map whenever symbols change
     const reverseMap = new Map();
     for (const yahooSym of symbols) {
       const finnhubSym = yahooToFinnhubSymbol(yahooSym);
@@ -81,6 +96,27 @@ export default function useFinnhubPrice(symbols = [], options = {}) {
   useEffect(() => {
     enabledRef.current = enabled;
   }, [enabled]);
+
+  // ── Ticks per second calculator ───────────────────────────────────────────
+  useEffect(() => {
+    ticksPerSecondTimerRef.current = setInterval(() => {
+      if (!mountedRef.current) return;
+      const now = Date.now();
+      // Keep only timestamps from the last 5 seconds
+      tickTimestampsRef.current = tickTimestampsRef.current.filter(
+        (ts) => now - ts < 5000
+      );
+      // Average over 5 seconds for smoother display
+      const tps = tickTimestampsRef.current.length / 5;
+      setTicksPerSecond(Math.round(tps * 10) / 10);
+    }, 1000);
+
+    return () => {
+      if (ticksPerSecondTimerRef.current) {
+        clearInterval(ticksPerSecondTimerRef.current);
+      }
+    };
+  }, []);
 
   // ── Market Hours Check ────────────────────────────────────────────────────
   const isMarketOpen = useCallback(() => {
@@ -107,6 +143,38 @@ export default function useFinnhubPrice(symbols = [], options = {}) {
     }
   }, []);
 
+  /**
+   * Get market status label for the current time.
+   * Returns: "pre-market" | "open" | "after-hours" | "closed"
+   */
+  const getMarketStatus = useCallback(() => {
+    try {
+      const now = new Date();
+      const etString = now.toLocaleString("en-US", {
+        timeZone: "America/New_York",
+        weekday: "short",
+        hour: "numeric",
+        minute: "numeric",
+        hour12: false,
+      });
+      const parts = etString.replace(",", "").split(/\s+/);
+      const day = parts[0];
+      const timeParts = parts[1].split(":");
+      const hour = parseInt(timeParts[0], 10);
+      const minute = parseInt(timeParts[1], 10);
+      const totalMinutes = hour * 60 + minute;
+      const isWeekday = !["Sat", "Sun"].includes(day);
+
+      if (!isWeekday) return "closed";
+      if (totalMinutes >= 570 && totalMinutes <= 960) return "open"; // 9:30–16:00
+      if (totalMinutes >= 240 && totalMinutes < 570) return "pre-market"; // 4:00–9:30
+      if (totalMinutes > 960 && totalMinutes <= 1200) return "after-hours"; // 16:00–20:00
+      return "closed";
+    } catch {
+      return "open"; // Fallback
+    }
+  }, []);
+
   // ── Process incoming trade ────────────────────────────────────────────────
   const processTrade = useCallback((symbol, price, timestamp, volume = 0) => {
     const now = Date.now();
@@ -116,8 +184,9 @@ export default function useFinnhubPrice(symbols = [], options = {}) {
 
     const prev = previousPricesRef.current[symbol];
     const change = prev ? ((price - prev.price) / prev.price) * 100 : 0;
+    const direction = prev ? (price > prev.price ? "up" : price < prev.price ? "down" : "neutral") : "neutral";
 
-    const tickData = { price, timestamp: new Date(timestamp), volume, change };
+    const tickData = { price, timestamp: new Date(timestamp), volume, change, direction };
     previousPricesRef.current[symbol] = tickData;
 
     if (mountedRef.current) {
@@ -125,19 +194,33 @@ export default function useFinnhubPrice(symbols = [], options = {}) {
         ...prev,
         [symbol]: tickData,
       }));
+
+      // Update price history (for sparklines)
+      setPriceHistory((prev) => {
+        const history = prev[symbol] || [];
+        const newEntry = { price, timestamp: new Date(timestamp) };
+        const updated = [...history, newEntry].slice(-maxHistory);
+        return { ...prev, [symbol]: updated };
+      });
+
       setLastUpdate(new Date());
+
+      // Track tick count and timestamps for ticks/sec
+      tickCountRef.current += 1;
+      setTickCount(tickCountRef.current);
+      tickTimestampsRef.current.push(now);
     }
 
     if (onPriceUpdate) {
       onPriceUpdate({ symbol, ...tickData });
     }
-  }, [throttleMs, onPriceUpdate]);
+  }, [throttleMs, onPriceUpdate, maxHistory]);
 
   // ── WebSocket connection ─────────────────────────────────────────────────
   const connectWebSocket = useCallback(() => {
     if (!mountedRef.current) return;
-    if (wsRef.current?.readyState === WebSocket.OPEN) return; // Already connected
-    if (wsRef.current?.readyState === WebSocket.CONNECTING) return; // Connecting
+    if (wsRef.current?.readyState === WebSocket.OPEN) return;
+    if (wsRef.current?.readyState === WebSocket.CONNECTING) return;
 
     const apiKey = process.env.NEXT_PUBLIC_FINNHUB_API_KEY;
     if (!apiKey) {
@@ -160,7 +243,9 @@ export default function useFinnhubPrice(symbols = [], options = {}) {
         console.log("[useFinnhubPrice] WebSocket connected");
         setConnected(true);
         setConnectionMode("websocket");
+        setConnectedSince(new Date());
         reconnectAttemptsRef.current = 0;
+        setReconnectAttempt(0);
 
         // Subscribe to all current symbols (converted to Finnhub format)
         for (const yahooSym of symbolsRef.current) {
@@ -168,7 +253,6 @@ export default function useFinnhubPrice(symbols = [], options = {}) {
           if (finnhubSym) {
             ws.send(JSON.stringify({ type: "subscribe", symbol: finnhubSym }));
           }
-          // Unsupported symbols (futures, indices) skip WS — they get polling fallback
         }
       };
 
@@ -181,13 +265,8 @@ export default function useFinnhubPrice(symbols = [], options = {}) {
           if (msg.type === "trade" && Array.isArray(msg.data)) {
             for (const trade of msg.data) {
               const finnhubSym = trade.s;
-
-              // Reverse-map Finnhub symbol back to Yahoo format
               const yahooSym = finnhubToYahooRef.current.get(finnhubSym) || finnhubSym;
-
-              // Only process if it's in our symbols set (Yahoo format)
               if (!symbolsRef.current.has(yahooSym)) continue;
-
               processTrade(yahooSym, trade.p, trade.t * 1000, trade.v);
             }
           }
@@ -198,12 +277,14 @@ export default function useFinnhubPrice(symbols = [], options = {}) {
 
       ws.onerror = () => {
         console.error("[useFinnhubPrice] WebSocket error");
+        if (onError) onError(new Error("WebSocket error"));
       };
 
       ws.onclose = (event) => {
         if (!mountedRef.current) return;
         console.log("[useFinnhubPrice] WebSocket closed:", event.code);
         setConnected(false);
+        setConnectedSince(null);
         wsRef.current = null;
 
         if (enabledRef.current && event.code !== 1000) {
@@ -216,15 +297,17 @@ export default function useFinnhubPrice(symbols = [], options = {}) {
       console.error("[useFinnhubPrice] WebSocket creation failed:", err);
       if (mountedRef.current) {
         setConnected(false);
+        if (onError) onError(err);
         startPolling();
       }
     }
-  }, [processTrade]);
+  }, [processTrade, onError]);
 
   // ── Polling fallback ─────────────────────────────────────────────────────
   const startPolling = useCallback(() => {
     if (pollIntervalRef.current) return;
     setConnectionMode("polling");
+    setConnectedSince(new Date());
 
     const poll = async () => {
       if (!mountedRef.current || !enabledRef.current) return;
@@ -275,10 +358,13 @@ export default function useFinnhubPrice(symbols = [], options = {}) {
     const attempts = reconnectAttemptsRef.current;
     const delay = Math.min(1000 * Math.pow(2, attempts), 30000);
 
+    setReconnectAttempt(attempts + 1);
+
     reconnectTimerRef.current = setTimeout(() => {
       reconnectTimerRef.current = null;
       if (enabledRef.current && mountedRef.current) {
         reconnectAttemptsRef.current += 1;
+        setReconnectAttempt(reconnectAttemptsRef.current);
         connectWebSocket();
       }
     }, delay);
@@ -290,19 +376,18 @@ export default function useFinnhubPrice(symbols = [], options = {}) {
       reconnectTimerRef.current = null;
     }
     reconnectAttemptsRef.current = 0;
+    setReconnectAttempt(0);
   }, []);
 
   // ── Subscribe / Unsubscribe (dynamic) ────────────────────────────────────
   const subscribe = useCallback((yahooSym) => {
     symbolsRef.current.add(yahooSym);
 
-    // Also update reverse map
     const finnhubSym = yahooToFinnhubSymbol(yahooSym);
     if (finnhubSym) {
       finnhubToYahooRef.current.set(finnhubSym, yahooSym);
     }
 
-    // If WS is connected, send subscribe message in Finnhub format
     if (wsRef.current?.readyState === WebSocket.OPEN) {
       if (finnhubSym) {
         try {
@@ -315,7 +400,6 @@ export default function useFinnhubPrice(symbols = [], options = {}) {
   const unsubscribe = useCallback((yahooSym) => {
     symbolsRef.current.delete(yahooSym);
 
-    // Clean up reverse map
     const finnhubSym = yahooToFinnhubSymbol(yahooSym);
     if (finnhubSym) {
       finnhubToYahooRef.current.delete(finnhubSym);
@@ -329,9 +413,13 @@ export default function useFinnhubPrice(symbols = [], options = {}) {
       }
     }
 
-    // Clear price data for unsubscribed symbol
     if (mountedRef.current) {
       setPrices((prev) => {
+        const next = { ...prev };
+        delete next[yahooSym];
+        return next;
+      });
+      setPriceHistory((prev) => {
         const next = { ...prev };
         delete next[yahooSym];
         return next;
@@ -353,7 +441,6 @@ export default function useFinnhubPrice(symbols = [], options = {}) {
 
     return () => {
       mountedRef.current = false;
-      // Cleanup: unsubscribe all and close
       if (wsRef.current) {
         try {
           if (wsRef.current.readyState === WebSocket.OPEN) {
@@ -381,7 +468,6 @@ export default function useFinnhubPrice(symbols = [], options = {}) {
     const ws = wsRef.current;
     if (!ws || ws.readyState !== WebSocket.OPEN) return;
 
-    // Subscribe to any new symbols (in Finnhub format)
     for (const yahooSym of symbols) {
       const finnhubSym = yahooToFinnhubSymbol(yahooSym);
       if (finnhubSym) {
@@ -420,9 +506,15 @@ export default function useFinnhubPrice(symbols = [], options = {}) {
   return {
     connected,
     prices,
+    priceHistory,
     connectionMode,
     subscribe,
     unsubscribe,
     lastUpdate,
+    tickCount,
+    ticksPerSecond,
+    connectedSince,
+    reconnectAttempt,
+    getMarketStatus,
   };
 }

@@ -1,11 +1,20 @@
 "use client";
 
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef, useEffect, useMemo } from "react";
 import { usePriceFeed } from "@/context/PriceFeedContext";
 
 /**
  * WatchlistPanel — Searchable symbol watchlist with add/remove,
- * real-time prices, change %, and sparkline indicators.
+ * real-time prices, change %, flash animations, direction arrows,
+ * and mini sparkline charts.
+ *
+ * Features:
+ *   - Price flash animation (green/red) on each tick
+ *   - Direction arrow (▲▼) with animation
+ *   - Mini SVG sparkline per symbol (last 50 prices)
+ *   - Debounced Yahoo Finance autocomplete search
+ *   - Gainers/losers count badges
+ *   - Mobile-optimized touch targets
  */
 export default function WatchlistPanel() {
   const {
@@ -36,7 +45,6 @@ export default function WatchlistPanel() {
     searchTimeoutRef.current = setTimeout(async () => {
       setSearchLoading(true);
       try {
-        // Use BFF proxy to avoid CORS issues with Yahoo Finance
         const res = await fetch(
           `/api/prices/search?q=${encodeURIComponent(searchQuery)}`
         );
@@ -111,7 +119,7 @@ export default function WatchlistPanel() {
               {searchResults.map((result) => (
                 <button
                   key={result.symbol}
-                  className="w-full text-left px-2 py-1.5 rounded hover:bg-base-200 flex items-center justify-between text-xs"
+                  className="w-full text-left px-2 py-1.5 rounded hover:bg-base-200 flex items-center justify-between text-xs min-h-[44px] sm:min-h-0"
                   onClick={() => handleAddSymbol(result.symbol, result.name)}
                   disabled={isAlreadyAdded(result.symbol)}
                 >
@@ -134,62 +142,13 @@ export default function WatchlistPanel() {
       {/* Symbol list */}
       <div className="flex-1 overflow-y-auto">
         {watchlist.map((item) => (
-          <div
+          <WatchlistItem
             key={item.symbol}
-            className={`px-3 py-2 cursor-pointer border-b border-base-200 hover:bg-base-200/50 transition-colors ${
-              selectedSymbol === item.symbol ? "bg-primary/10 border-l-2 border-l-primary" : ""
-            }`}
-            onClick={() => setSelectedSymbol(item.symbol)}
-          >
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2 min-w-0">
-                <span className="font-bold text-sm truncate">{item.symbol}</span>
-                {item.name && (
-                  <span className="text-xs text-base-content/40 truncate hidden sm:inline">
-                    {item.name}
-                  </span>
-                )}
-              </div>
-              <div className="flex items-center gap-2 shrink-0">
-                {item.price != null ? (
-                  <>
-                    <span className="font-mono text-sm">
-                      ${formatPrice(item.price, item.symbol)}
-                    </span>
-                    <span
-                      className={`badge badge-xs font-mono ${
-                        item.change > 0
-                          ? "badge-success"
-                          : item.change < 0
-                            ? "badge-error"
-                            : "badge-ghost"
-                      }`}
-                    >
-                      {item.change > 0 ? "+" : ""}
-                      {item.change.toFixed(2)}%
-                    </span>
-                  </>
-                ) : (
-                  <span className="text-xs text-base-content/30">Loading...</span>
-                )}
-              </div>
-            </div>
-            {/* Mini sparkline: just a colored bar showing direction */}
-            {item.price != null && (
-              <div className="mt-1 h-0.5 bg-base-200 rounded-full overflow-hidden">
-                <div
-                  className={`h-full rounded-full transition-all duration-300 ${
-                    item.change > 0 ? "bg-success" : item.change < 0 ? "bg-error" : "bg-base-content/20"
-                  }`}
-                  style={{
-                    width: `${Math.min(Math.abs(item.change) * 10, 100)}%`,
-                    marginLeft: item.change < 0 ? "auto" : 0,
-                    marginRight: item.change > 0 ? "auto" : 0,
-                  }}
-                />
-              </div>
-            )}
-          </div>
+            item={item}
+            isSelected={selectedSymbol === item.symbol}
+            onSelect={() => setSelectedSymbol(item.symbol)}
+            onRemove={() => removeFromWatchlist(item.symbol)}
+          />
         ))}
       </div>
 
@@ -205,6 +164,161 @@ export default function WatchlistPanel() {
         </div>
       )}
     </div>
+  );
+}
+
+// ── Individual Watchlist Item with flash + sparkline ──────────────────────
+
+function WatchlistItem({ item, isSelected, onSelect, onRemove }) {
+  const [flashDirection, setFlashDirection] = useState(null); // "up" | "down" | null
+  const prevPriceRef = useRef(null);
+
+  // Detect price direction changes for flash animation
+  useEffect(() => {
+    if (item.price == null) return;
+    if (prevPriceRef.current != null && item.price !== prevPriceRef.current) {
+      const dir = item.price > prevPriceRef.current ? "up" : "down";
+      setFlashDirection(dir);
+      const timer = setTimeout(() => setFlashDirection(null), 600);
+      return () => clearTimeout(timer);
+    }
+    prevPriceRef.current = item.price;
+  }, [item.price]);
+
+  // Mini sparkline from price history
+  const sparkline = useMemo(() => {
+    const history = item.history;
+    if (!history || history.length < 2) return null;
+    return <MiniSparkline data={history.map((h) => h.price)} positive={item.change >= 0} />;
+  }, [item.history, item.change]);
+
+  return (
+    <div
+      className={`px-3 py-2 cursor-pointer border-b border-base-200 hover:bg-base-200/50 transition-colors ${
+        isSelected ? "bg-primary/10 border-l-2 border-l-primary" : ""
+      } ${flashDirection === "up" ? "flash-green" : flashDirection === "down" ? "flash-red" : ""}`}
+      onClick={onSelect}
+    >
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-2 min-w-0">
+          <span className="font-bold text-sm truncate">{item.symbol}</span>
+          {item.name && (
+            <span className="text-xs text-base-content/40 truncate hidden sm:inline">
+              {item.name}
+            </span>
+          )}
+        </div>
+        <div className="flex items-center gap-2 shrink-0">
+          {item.price != null ? (
+            <>
+              {/* Direction arrow with animation */}
+              <span
+                className={`text-xs font-bold transition-all duration-200 ${
+                  item.direction === "up"
+                    ? "text-success arrow-up"
+                    : item.direction === "down"
+                      ? "text-error arrow-down"
+                      : "text-base-content/20"
+                }`}
+              >
+                {item.direction === "up" ? "▲" : item.direction === "down" ? "▼" : "•"}
+              </span>
+              <span className="font-mono text-sm price-value">
+                ${formatPrice(item.price, item.symbol)}
+              </span>
+              <span
+                className={`badge badge-xs font-mono ${
+                  item.change > 0
+                    ? "badge-success"
+                    : item.change < 0
+                      ? "badge-error"
+                      : "badge-ghost"
+                }`}
+              >
+                {item.change > 0 ? "+" : ""}
+                {item.change.toFixed(2)}%
+              </span>
+            </>
+          ) : (
+            <span className="text-xs text-base-content/30">Loading...</span>
+          )}
+        </div>
+      </div>
+
+      {/* Sparkline + change bar */}
+      {item.price != null && (
+        <div className="mt-1 flex items-center gap-2">
+          {/* Mini sparkline */}
+          <div className="flex-1 h-4">
+            {sparkline}
+          </div>
+          {/* Change direction bar (legacy, mini version) */}
+          <div className="w-12 h-0.5 bg-base-200 rounded-full overflow-hidden">
+            <div
+              className={`h-full rounded-full transition-all duration-300 ${
+                item.change > 0 ? "bg-success" : item.change < 0 ? "bg-error" : "bg-base-content/20"
+              }`}
+              style={{
+                width: `${Math.min(Math.abs(item.change) * 10, 100)}%`,
+                marginLeft: item.change < 0 ? "auto" : 0,
+                marginRight: item.change > 0 ? "auto" : 0,
+              }}
+            />
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ── Mini SVG Sparkline ────────────────────────────────────────────────────
+
+function MiniSparkline({ data, positive = true }) {
+  if (!data || data.length < 2) return null;
+
+  const width = 80;
+  const height = 16;
+  const padding = 1;
+
+  const min = Math.min(...data);
+  const max = Math.max(...data);
+  const range = max - min || 1;
+
+  const points = data.map((val, i) => {
+    const x = padding + (i / (data.length - 1)) * (width - padding * 2);
+    const y = padding + (1 - (val - min) / range) * (height - padding * 2);
+    return `${x},${y}`;
+  });
+
+  const pathD = `M${points.join(" L")}`;
+
+  // Gradient fill area
+  const fillD = `${pathD} L${padding + (width - padding * 2)},${height - padding} L${padding},${height - padding} Z`;
+
+  const color = positive ? "#22c55e" : "#ef4444";
+  const fillColor = positive ? "rgba(34, 197, 94, 0.1)" : "rgba(239, 68, 68, 0.1)";
+
+  return (
+    <svg
+      width={width}
+      height={height}
+      viewBox={`0 0 ${width} ${height}`}
+      className="w-full h-4"
+      preserveAspectRatio="none"
+    >
+      <path d={fillD} fill={fillColor} />
+      <path d={pathD} fill="none" stroke={color} strokeWidth="1" strokeLinejoin="round" />
+      {/* Current price dot */}
+      {data.length > 0 && (
+        <circle
+          cx={padding + ((data.length - 1) / (data.length - 1)) * (width - padding * 2)}
+          cy={padding + (1 - (data[data.length - 1] - min) / range) * (height - padding * 2)}
+          r="1.5"
+          fill={color}
+          className="animate-pulse"
+        />
+      )}
+    </svg>
   );
 }
 

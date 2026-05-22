@@ -71,7 +71,7 @@ export function PriceFeedProvider({ children }) {
 
   const addToWatchlist = useCallback((symbol, name = "") => {
     setWatchlist((prev) => {
-      if (prev.some((w) => w.symbol === symbol)) return prev; // Already exists
+      if (prev.some((w) => w.symbol === symbol)) return prev;
       return [...prev, { symbol, name: name || symbol }];
     });
   }, []);
@@ -95,11 +95,33 @@ export function PriceFeedProvider({ children }) {
     [watchlist],
   );
 
-  const { connected, prices, connectionMode, subscribe, unsubscribe, lastUpdate } =
-    useFinnhubPrice(watchlistSymbols, { enabled: true, throttleMs: 500 });
+  const {
+    connected,
+    prices,
+    priceHistory,
+    connectionMode,
+    subscribe,
+    unsubscribe,
+    lastUpdate,
+    tickCount,
+    ticksPerSecond,
+    connectedSince,
+    reconnectAttempt,
+    getMarketStatus,
+  } = useFinnhubPrice(watchlistSymbols, { enabled: true, throttleMs: 500 });
 
   // ── Chart State ───────────────────────────────────────────────────────────
   const [chartPeriod, setChartPeriod] = useState("6mo");
+
+  // ── Market Status ─────────────────────────────────────────────────────────
+  const [marketStatus, setMarketStatus] = useState("closed");
+
+  useEffect(() => {
+    const update = () => setMarketStatus(getMarketStatus());
+    update();
+    const timer = setInterval(update, 30000); // Update every 30s
+    return () => clearInterval(timer);
+  }, [getMarketStatus]);
 
   // ── Computed Values ───────────────────────────────────────────────────────
   const watchlistWithPrices = useMemo(
@@ -108,8 +130,9 @@ export function PriceFeedProvider({ children }) {
         ...w,
         ...prices[w.symbol],
         connected: !!prices[w.symbol],
+        history: priceHistory[w.symbol] || [],
       })),
-    [watchlist, prices],
+    [watchlist, prices, priceHistory],
   );
 
   const gainers = useMemo(
@@ -140,6 +163,7 @@ export function PriceFeedProvider({ children }) {
 
       // Real-time prices
       prices,
+      priceHistory,
       connected,
       connectionMode,
       lastUpdate,
@@ -155,6 +179,15 @@ export function PriceFeedProvider({ children }) {
       // Sorted lists
       gainers,
       losers,
+
+      // Connection stats
+      tickCount,
+      ticksPerSecond,
+      connectedSince,
+      reconnectAttempt,
+
+      // Market status
+      marketStatus,
     }),
     [
       watchlistWithPrices,
@@ -163,6 +196,7 @@ export function PriceFeedProvider({ children }) {
       removeFromWatchlist,
       reorderWatchlist,
       prices,
+      priceHistory,
       connected,
       connectionMode,
       lastUpdate,
@@ -171,6 +205,11 @@ export function PriceFeedProvider({ children }) {
       chartPeriod,
       gainers,
       losers,
+      tickCount,
+      ticksPerSecond,
+      connectedSince,
+      reconnectAttempt,
+      marketStatus,
     ],
   );
 
