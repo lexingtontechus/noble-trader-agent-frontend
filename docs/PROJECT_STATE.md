@@ -2,6 +2,7 @@
 
 **Last Updated:** 2026-05-22
 **Version:** v7.0.0 (Production-Grade Institutional Trading Platform)
+**Current Phase:** P5 — MCP Integration + API Key System
 
 ---
 
@@ -20,6 +21,8 @@
 | **Live Prices** | Finnhub WebSocket | Finnhub |
 | **Historical Prices** | Yahoo Finance (`yahoo-finance2`) | Yahoo |
 | **Encryption** | AES-256-GCM + PBKDF2 (100k iterations) + key versioning | App-layer |
+| **MCP Server** | fastapi-mcp at `/mcp` (HTTP+SSE transport, 40-45 tools, 19 excluded) | Render |
+| **API Keys** | SaaS API key system (`nt_live_...`) with SHA-256+pepper hash, plan-gated | Supabase |
 
 ### URLs
 - **Frontend:** `https://noble-trader-agent-frontend.vercel.app`
@@ -28,7 +31,7 @@
 - **GitHub (Backend):** `https://github.com/lexingtontechus/noble-trader-fastapi-backend`
 
 ### Stats
-- **34 lib modules** (11,973 lines) | **84 UI components** across 18 dirs | **93+ BFF API routes** | **26 DB migrations** | **7 pg_cron jobs** | **~70+ tables**
+- **34 lib modules** (11,973 lines) | **85 UI components** across 18 dirs | **96+ BFF API routes** | **29 DB migrations** | **9 pg_cron jobs** | **~70+ tables**
 
 ---
 
@@ -328,6 +331,19 @@ Redis L1 (fastest, 4h TTL) → Supabase L2 (persistent, 4h TTL) → Yahoo Financ
 | `/api/auth/jwt-test` | GET | JWT test endpoint |
 | `/api/auth/role` | GET/POST | Role management |
 
+### MCP Routes
+| Route | Methods | Description |
+|-------|---------|-------------|
+| `/api/mcp` | GET/POST/DELETE | Root MCP proxy (SSE + JSON-RPC) |
+| `/api/mcp/[...path]` | GET/POST/DELETE | Catch-all MCP proxy with Clerk JWT injection |
+| `/api/mcp/tools` | GET | Tool discovery + plan-filtered list + connection config |
+
+### API Key Routes
+| Route | Methods | Description |
+|-------|---------|-------------|
+| `/api/api-keys` | GET/POST | List/create API keys |
+| `/api/api-keys` | DELETE | Revoke API key |
+
 ### Other Routes
 | Route | Methods | Description |
 |-------|---------|-------------|
@@ -429,6 +445,69 @@ PORT=8000
 
 ---
 
+## MCP Integration (P5)
+
+### Backend MCP Server
+
+- **Transport:** HTTP+SSE via `fastapi-mcp` mounted at `/mcp`
+- **Auth:** `Depends(get_authed_user)` — unified chain: Clerk JWT → local JWT → X-API-Key
+- **Tool exposure:** 40-45 tools auto-exposed from FastAPI routes
+- **Excluded operations:** 19 dangerous ops (auth endpoints, feed control, renko writes, backtest delete, etc.)
+- **Config:** `MCP_AUTH_ENABLED=true` (default), `MCP_ISSUER` optional
+- **Header forwarding:** `Authorization` + `X-API-Key` passed through to underlying REST endpoints
+
+### Frontend MCP BFF Proxy
+
+| Route | Purpose |
+|-------|--------|
+| `/api/mcp` | Root MCP proxy — handles SSE streams + JSON-RPC |
+| `/api/mcp/[...path]` | Catch-all proxy — injects Clerk JWT, forwards X-API-Key, 30s timeout |
+| `/api/mcp/tools` | Tool discovery — calls `tools/list`, filters by plan, returns connection config |
+
+**Auth patterns:**
+- **Browser clients:** Clerk JWT injected via `auth().getToken({ template: "fastapi" })`
+- **External clients:** `X-API-Key: nt_live_...` header passthrough
+- **SSE streaming:** Content-type detection, proper SSE headers forwarded
+- **Error handling:** JSON-RPC `-32603` errors on upstream failure
+
+### Plan-Gated Tool Access
+
+| Plan | Tool Access |
+|------|-------------|
+| **Free** | Read-only: regime, sizing, risk, portfolio, backtest history, renko state, operational status |
+| **Premium** | + Write tools: strategy signals, backtest runs/compare/optimize/export, correlation, TDA features |
+| **Institutional** | + Full access: optimization, GPU benchmarks, reconciliation, executor status |
+
+### MCP Settings UI
+
+- **Tab:** Settings → MCP (🤖 icon)
+- **Features:** Connection URLs, API key display, tool list with expand/collapse, filter (all/available/locked), test connection button, Claude Desktop + Cursor config snippets, plan upgrade prompt
+- **Component:** `McpIntegrationPanel.jsx`
+
+## API Key System (P5)
+
+### SaaS API Key Architecture
+
+- **Format:** `nt_live_` prefix + 32-char base62 random token
+- **Storage:** SHA-256 + pepper hash in Supabase `api_keys` table (plaintext never stored)
+- **Lookup:** `get_authed_user` dependency checks `X-API-Key` header → hash → Supabase query → 60s cache
+- **Key inheritance:** API keys inherit the creator's role and plan
+- **Limits:** Free=2 keys, Premium=5 keys, Institutional=unlimited
+- **Expiry:** Keys can optionally expire; `expire_stale_api_keys()` cron runs daily at 3 AM UTC
+- **Revocation:** DELETE `/api/api-keys` endpoint with audit logging
+- **Security:** Rate-limited, 429 on violation, key ID logged (not key value)
+
+### pg_cron Jobs (9 total)
+
+| Job | Schedule | Purpose |
+|-----|----------|--------|
+| Health check + portfolio snapshot | Every 5 min | `00000000000028_pg_cron_health_check.sql` |
+| Expire stale API keys | Daily 3 AM UTC | `00000000000029_api_keys_cron.sql` |
+| Data retention + archival | Daily 3 AM UTC | `00000000000025_retention.sql` |
+| + 6 additional scheduled jobs | Various | Health checks, cleanup, notifications |
+
+---
+
 ## Phase Completion History
 
 | Phase | Description | Status | Key Deliverables |
@@ -438,3 +517,4 @@ PORT=8000
 | **P2** | Feature Delivery | ✅ Complete | Compliance, Broker Abstraction, Equity Curve, Notifications |
 | **P3** | Institutional Hardening | ✅ Complete | Circuit Breakers, Audit Trail, Reconciliation, System Health, Smoke Test |
 | **P4** | Production Readiness | ✅ Complete | Rate Limiting, Encryption, Retention, Multi-Tenant, Deployment Runbook |
+| **P5** | MCP Integration + API Keys | ✅ Complete | MCP BFF proxy, tool discovery, McpIntegrationPanel, API key system, auto-expire cron, pg_cron migration |
