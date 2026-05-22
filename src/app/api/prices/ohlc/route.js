@@ -50,7 +50,14 @@ export const GET = withAuth(async (request, context, authContext) => {
 
   try {
     const { period1, period2 } = getPeriodDates(period);
-    const result = await yahooFinance.chart(symbol, { period1, period2, interval });
+
+    // Race yahooFinance.chart() against a 9s timeout for Vercel hobby safety
+    const result = await Promise.race([
+      yahooFinance.chart(symbol, { period1, period2, interval }),
+      new Promise((_, reject) =>
+        setTimeout(() => reject(new Error("Yahoo Finance chart request timed out")), 9000)
+      ),
+    ]);
 
     const quotes = (result.quotes || []).filter(
       (q) => q.open != null && q.high != null && q.low != null && q.close != null,

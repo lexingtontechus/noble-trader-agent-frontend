@@ -292,6 +292,56 @@ export function getAssetClass(symbol) {
 }
 
 /**
+ * Convert a Yahoo Finance symbol to a Finnhub-compatible symbol for WebSocket.
+ * Returns null if the asset is not supported on Finnhub free tier.
+ *
+ * Mapping rules:
+ * ┌─────────────────────┬──────────────────────┬────────────┐
+ * │ Yahoo Finance       │ Finnhub              │ Type       │
+ * ├─────────────────────┼──────────────────────┼────────────┤
+ * │ AAPL, SPY           │ AAPL, SPY            │ Stock/ETF  │
+ * │ BTC-USD             │ BINANCE:BTCUSDT      │ Crypto     │
+ * │ ETH-USD             │ BINANCE:ETHUSDT      │ Crypto     │
+ * │ XXX-USD             │ BINANCE:XXXUSDT      │ Crypto     │
+ * │ EURUSD=X            │ OANDA:EUR_USD        │ Forex      │
+ * │ GC=F                │ null                 │ Future     │
+ * │ ^GSPC               │ null                 │ Index      │
+ * └─────────────────────┴──────────────────────┴────────────┘
+ *
+ * @param {string} yahooSymbol - Symbol in Yahoo Finance format
+ * @returns {string|null} Finnhub-compatible symbol, or null if unsupported
+ */
+export function yahooToFinnhubSymbol(yahooSymbol) {
+  if (!yahooSymbol || typeof yahooSymbol !== 'string') return null;
+
+  const sym = yahooSymbol.trim().toUpperCase();
+
+  // Futures: not supported on free tier
+  if (sym.includes('=F')) return null;
+
+  // Indices: not supported on free tier
+  if (sym.startsWith('^')) return null;
+
+  // Crypto: "BTC-USD" → "BINANCE:BTCUSDT"
+  const cryptoMatch = sym.match(/^([A-Z]{2,5})-([A-Z]{3})$/);
+  if (cryptoMatch) {
+    return `BINANCE:${cryptoMatch[1]}${cryptoMatch[2]}`;
+  }
+
+  // Forex: "EURUSD=X" → "OANDA:EUR_USD"
+  if (sym.endsWith('=X')) {
+    const pair = sym.replace(/=X$/, '');
+    if (pair.length === 6) {
+      return `OANDA:${pair.slice(0, 3)}_${pair.slice(3, 6)}`;
+    }
+    return null;
+  }
+
+  // Stocks / ETFs: pass through unchanged
+  return sym;
+}
+
+/**
  * Reverse conversion: Alpaca symbol → Yahoo Finance symbol.
  * Useful when we need to fetch Yahoo Finance data for an Alpaca position.
  *

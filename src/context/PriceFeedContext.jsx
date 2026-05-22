@@ -9,6 +9,7 @@ import {
   useEffect,
 } from "react";
 import useFinnhubPrice from "@/hooks/useFinnhubPrice";
+import { yahooToFinnhubSymbol } from "@/lib/symbol-utils";
 
 const PriceFeedContext = createContext(null);
 
@@ -99,7 +100,6 @@ export function PriceFeedProvider({ children }) {
 
   // ── Chart State ───────────────────────────────────────────────────────────
   const [chartPeriod, setChartPeriod] = useState("6mo");
-  const [chartInterval, setChartInterval] = useState("1d");
 
   // ── Computed Values ───────────────────────────────────────────────────────
   const watchlistWithPrices = useMemo(
@@ -150,9 +150,7 @@ export function PriceFeedProvider({ children }) {
 
       // Chart config
       chartPeriod,
-      chartInterval,
       setChartPeriod,
-      setChartInterval,
 
       // Sorted lists
       gainers,
@@ -171,7 +169,6 @@ export function PriceFeedProvider({ children }) {
       subscribe,
       unsubscribe,
       chartPeriod,
-      chartInterval,
       gainers,
       losers,
     ],

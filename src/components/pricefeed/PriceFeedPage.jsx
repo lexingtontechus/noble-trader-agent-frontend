@@ -1,5 +1,6 @@
 "use client";
 
+import { useState } from "react";
 import { PriceFeedProvider, usePriceFeed } from "@/context/PriceFeedContext";
 import TickerTape from "./TickerTape";
 import WatchlistPanel from "./WatchlistPanel";
@@ -20,11 +21,23 @@ import LiveCandlestickChart from "./LiveCandlestickChart";
  *   │          │                                    │
  *   └──────────┴──────────────────────────────────┘
  *
+ * Mobile:
+ *   ┌─────────────────────────────────────────────┐
+ *   │              TickerTape                      │
+ *   ├─────────────────────────────────────────────┤
+ *   │                                              │
+ *   │     LiveCandlestickChart (full width)         │
+ *   │                                              │
+ *   ├─────────────────────────────────────────────┤
+ *   │  Status bar                                  │
+ *   └─────────────────────────────────────────────┘
+ *   + Mobile watchlist as overlay bottom sheet
+ *
  * Features:
  *   - TickerTape: scrolling real-time prices for all watchlist symbols
  *   - WatchlistPanel: add/remove symbols, see prices & change %
  *   - LiveCandlestickChart: professional OHLC chart with live updates
- *   - Responsive: watchlist collapses on mobile
+ *   - Responsive: watchlist becomes toggleable bottom sheet on mobile
  */
 export default function PriceFeedPage() {
   return (
@@ -36,28 +49,70 @@ export default function PriceFeedPage() {
 
 function PriceFeedContent() {
   const { connected, connectionMode, lastUpdate, watchlist } = usePriceFeed();
+  const [showMobileWatchlist, setShowMobileWatchlist] = useState(false);
 
   return (
-    <div className="flex flex-col h-[calc(100vh-8rem)]">
+    <div className="flex flex-col h-[calc(100dvh-4rem)]">
       {/* Ticker Tape — full width */}
       <TickerTape />
 
       {/* Main content area: Watchlist + Chart */}
-      <div className="flex flex-1 overflow-hidden">
+      <div className="flex flex-1 overflow-hidden relative">
         {/* Watchlist — sidebar, hidden on mobile */}
         <div className="hidden md:flex w-64 shrink-0 border-r border-base-300 bg-base-100 overflow-hidden">
           <WatchlistPanel />
         </div>
 
         {/* Chart area */}
-        <div className="flex-1 flex flex-col overflow-hidden bg-base-100">
+        <div className="flex-1 flex flex-col overflow-hidden bg-base-100 relative">
           <LiveCandlestickChart />
-        </div>
-      </div>
 
-      {/* Mobile: Watchlist as bottom sheet / collapsible */}
-      <div className="md:hidden border-t border-base-300 max-h-[40vh] overflow-y-auto bg-base-100">
-        <MobileWatchlist />
+          {/* Mobile: Watchlist toggle button */}
+          <button
+            className="md:hidden btn btn-sm btn-circle btn-ghost absolute bottom-2 left-2 z-20 bg-base-100/80 border border-base-300 min-w-[44px] min-h-[44px] sm:min-w-0 sm:min-h-0"
+            onClick={() => setShowMobileWatchlist(!showMobileWatchlist)}
+            aria-label={showMobileWatchlist ? "Hide watchlist" : "Show watchlist"}
+          >
+            <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
+            </svg>
+          </button>
+        </div>
+
+        {/* Mobile: Watchlist as fixed bottom sheet overlay */}
+        {showMobileWatchlist && (
+          <div className="md:hidden fixed inset-0 z-30">
+            {/* Backdrop */}
+            <div
+              className="absolute inset-0 bg-black/40"
+              onClick={() => setShowMobileWatchlist(false)}
+            />
+
+            {/* Bottom sheet */}
+            <div className="absolute bottom-0 left-0 right-0 bg-base-100 border-t border-base-300 rounded-t-xl max-h-[50dvh] overflow-hidden flex flex-col shadow-2xl">
+              {/* Drag handle */}
+              <div className="flex justify-center pt-2 pb-1">
+                <div className="w-10 h-1 rounded-full bg-base-300" />
+              </div>
+
+              {/* Header */}
+              <div className="flex items-center justify-between px-4 pb-2">
+                <span className="text-sm font-bold">Watchlist</span>
+                <button
+                  className="btn btn-ghost btn-sm min-h-[44px] sm:min-h-0"
+                  onClick={() => setShowMobileWatchlist(false)}
+                >
+                  ✕
+                </button>
+              </div>
+
+              {/* Watchlist content */}
+              <div className="flex-1 overflow-y-auto">
+                <WatchlistPanel />
+              </div>
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Status bar */}
@@ -81,56 +136,4 @@ function PriceFeedContent() {
       </div>
     </div>
   );
-}
-
-/**
- * MobileWatchlist — Simplified watchlist for mobile screens.
- * Shows symbols in a horizontal scrollable row with price + change.
- */
-function MobileWatchlist() {
-  const { watchlist, selectedSymbol, setSelectedSymbol } = usePriceFeed();
-
-  return (
-    <div className="p-2">
-      <div className="flex items-center justify-between mb-2">
-        <span className="text-xs font-bold">Watchlist</span>
-        <span className="text-[10px] text-base-content/40">Tap to select</span>
-      </div>
-      <div className="flex gap-2 overflow-x-auto pb-2">
-        {watchlist.map((item) => (
-          <button
-            key={item.symbol}
-            className={`shrink-0 px-3 py-2 rounded-lg border transition-colors ${
-              selectedSymbol === item.symbol
-                ? "border-primary bg-primary/10"
-                : "border-base-300 bg-base-200"
-            }`}
-            onClick={() => setSelectedSymbol(item.symbol)}
-          >
-            <div className="text-xs font-bold">{item.symbol}</div>
-            {item.price != null ? (
-              <div className="flex items-center gap-1 mt-0.5">
-                <span className="text-[10px] font-mono">${formatPrice(item.price, item.symbol)}</span>
-                <span
-                  className={`text-[9px] font-mono ${
-                    item.change > 0 ? "text-success" : item.change < 0 ? "text-error" : "text-base-content/30"
-                  }`}
-                >
-                  {item.change > 0 ? "+" : ""}{item.change.toFixed(1)}%
-                </span>
-              </div>
-            ) : (
-              <div className="text-[10px] text-base-content/30 mt-0.5">—</div>
-            )}
-          </button>
-        ))}
-      </div>
-    </div>
-  );
-}
-
-function formatPrice(price, symbol) {
-  if (symbol?.includes("BTC") || price > 10000) return price.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-  if (price < 1) return price.toFixed(4);
-  return price.toFixed(2);
 }

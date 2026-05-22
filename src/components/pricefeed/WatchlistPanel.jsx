@@ -36,20 +36,13 @@ export default function WatchlistPanel() {
     searchTimeoutRef.current = setTimeout(async () => {
       setSearchLoading(true);
       try {
-        // Use Yahoo Finance autocomplete endpoint
+        // Use BFF proxy to avoid CORS issues with Yahoo Finance
         const res = await fetch(
-          `https://query1.finance.yahoo.com/v1/finance/search?q=${encodeURIComponent(searchQuery)}&quotesCount=8&newsCount=0`
+          `/api/prices/search?q=${encodeURIComponent(searchQuery)}`
         );
         if (res.ok) {
           const data = await res.json();
-          const results = (data.quotes || [])
-            .filter((q) => q.quoteType === "EQUITY" || q.quoteType === "CRYPTO" || q.quoteType === "ETF" || q.quoteType === "FUTURE")
-            .map((q) => ({
-              symbol: q.symbol,
-              name: q.shortname || q.longname || q.symbol,
-              type: q.quoteType,
-            }));
-          setSearchResults(results);
+          setSearchResults(data.quotes || []);
         }
       } catch {
         setSearchResults([]);

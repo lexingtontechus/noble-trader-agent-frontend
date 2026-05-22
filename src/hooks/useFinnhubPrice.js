@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useRef, useCallback } from "react";
+import { yahooToFinnhubSymbol, getAssetClass } from "@/lib/symbol-utils";
 
 /**
  * useFinnhubPrice — Generic real-time price hook using Finnhub WebSocket.
@@ -11,13 +12,15 @@ import { useState, useEffect, useRef, useCallback } from "react";
  * Features:
  *   - Finnhub WebSocket for sub-second price updates
  *   - Multi-symbol subscriptions on a single shared connection
+ *   - Symbol format conversion: Yahoo → Finnhub for WS, reverse-map on trade
+ *   - Unsupported symbols (futures, indices) skip WS, use polling fallback
  *   - Automatic reconnection with exponential backoff
  *   - Market hours awareness (auto-pause outside 9:30-16:00 ET)
  *   - Polling fallback when no API key or WS fails
  *   - Visibility API: pause when tab is hidden
  *   - Configurable throttle (default 1 tick/sec per symbol)
  *
- * @param {string[]} symbols - Array of ticker symbols to subscribe to
+ * @param {string[]} symbols - Array of ticker symbols in Yahoo Finance format
  * @param {object} options
  * @param {boolean} [options.enabled=true] - Whether the feed is active
  * @param {number} [options.throttleMs=1000] - Min ms between ticks per symbol
@@ -57,9 +60,23 @@ export default function useFinnhubPrice(symbols = [], options = {}) {
   const pollIntervalRef = useRef(null);
   const previousPricesRef = useRef({}); // For computing change %
 
+  // Reverse map: Finnhub symbol → Yahoo symbol
+  // Used to map WS trade messages back to the Yahoo format our app uses
+  const finnhubToYahooRef = useRef(new Map());
+
   // Keep refs in sync
   useEffect(() => {
     symbolsRef.current = new Set(symbols);
+
+    // Rebuild the finnhub→yahoo reverse map whenever symbols change
+    const reverseMap = new Map();
+    for (const yahooSym of symbols) {
+      const finnhubSym = yahooToFinnhubSymbol(yahooSym);
+      if (finnhubSym) {
+        reverseMap.set(finnhubSym, yahooSym);
+      }
+    }
+    finnhubToYahooRef.current = reverseMap;
   }, [symbols]);
   useEffect(() => {
     enabledRef.current = enabled;
@@ -145,9 +162,13 @@ export default function useFinnhubPrice(symbols = [], options = {}) {
         setConnectionMode("websocket");
         reconnectAttemptsRef.current = 0;
 
-        // Subscribe to all current symbols
-        for (const sym of symbolsRef.current) {
-          ws.send(JSON.stringify({ type: "subscribe", symbol: sym }));
+        // Subscribe to all current symbols (converted to Finnhub format)
+        for (const yahooSym of symbolsRef.current) {
+          const finnhubSym = yahooToFinnhubSymbol(yahooSym);
+          if (finnhubSym) {
+            ws.send(JSON.stringify({ type: "subscribe", symbol: finnhubSym }));
+          }
+          // Unsupported symbols (futures, indices) skip WS — they get polling fallback
         }
       };
 
@@ -159,9 +180,15 @@ export default function useFinnhubPrice(symbols = [], options = {}) {
 
           if (msg.type === "trade" && Array.isArray(msg.data)) {
             for (const trade of msg.data) {
-              const sym = trade.s;
-              if (!symbolsRef.current.has(sym)) continue;
-              processTrade(sym, trade.p, trade.t * 1000, trade.v);
+              const finnhubSym = trade.s;
+
+              // Reverse-map Finnhub symbol back to Yahoo format
+              const yahooSym = finnhubToYahooRef.current.get(finnhubSym) || finnhubSym;
+
+              // Only process if it's in our symbols set (Yahoo format)
+              if (!symbolsRef.current.has(yahooSym)) continue;
+
+              processTrade(yahooSym, trade.p, trade.t * 1000, trade.v);
             }
           }
         } catch {
@@ -266,28 +293,47 @@ export default function useFinnhubPrice(symbols = [], options = {}) {
   }, []);
 
   // ── Subscribe / Unsubscribe (dynamic) ────────────────────────────────────
-  const subscribe = useCallback((symbol) => {
-    symbolsRef.current.add(symbol);
-    // If WS is connected, send subscribe message
+  const subscribe = useCallback((yahooSym) => {
+    symbolsRef.current.add(yahooSym);
+
+    // Also update reverse map
+    const finnhubSym = yahooToFinnhubSymbol(yahooSym);
+    if (finnhubSym) {
+      finnhubToYahooRef.current.set(finnhubSym, yahooSym);
+    }
+
+    // If WS is connected, send subscribe message in Finnhub format
     if (wsRef.current?.readyState === WebSocket.OPEN) {
-      try {
-        wsRef.current.send(JSON.stringify({ type: "subscribe", symbol }));
-      } catch { /* ignore */ }
+      if (finnhubSym) {
+        try {
+          wsRef.current.send(JSON.stringify({ type: "subscribe", symbol: finnhubSym }));
+        } catch { /* ignore */ }
+      }
     }
   }, []);
 
-  const unsubscribe = useCallback((symbol) => {
-    symbolsRef.current.delete(symbol);
-    if (wsRef.current?.readyState === WebSocket.OPEN) {
-      try {
-        wsRef.current.send(JSON.stringify({ type: "unsubscribe", symbol }));
-      } catch { /* ignore */ }
+  const unsubscribe = useCallback((yahooSym) => {
+    symbolsRef.current.delete(yahooSym);
+
+    // Clean up reverse map
+    const finnhubSym = yahooToFinnhubSymbol(yahooSym);
+    if (finnhubSym) {
+      finnhubToYahooRef.current.delete(finnhubSym);
     }
+
+    if (wsRef.current?.readyState === WebSocket.OPEN) {
+      if (finnhubSym) {
+        try {
+          wsRef.current.send(JSON.stringify({ type: "unsubscribe", symbol: finnhubSym }));
+        } catch { /* ignore */ }
+      }
+    }
+
     // Clear price data for unsubscribed symbol
     if (mountedRef.current) {
       setPrices((prev) => {
         const next = { ...prev };
-        delete next[symbol];
+        delete next[yahooSym];
         return next;
       });
     }
@@ -311,8 +357,11 @@ export default function useFinnhubPrice(symbols = [], options = {}) {
       if (wsRef.current) {
         try {
           if (wsRef.current.readyState === WebSocket.OPEN) {
-            for (const sym of symbolsRef.current) {
-              wsRef.current.send(JSON.stringify({ type: "unsubscribe", symbol: sym }));
+            for (const yahooSym of symbolsRef.current) {
+              const finnhubSym = yahooToFinnhubSymbol(yahooSym);
+              if (finnhubSym) {
+                wsRef.current.send(JSON.stringify({ type: "unsubscribe", symbol: finnhubSym }));
+              }
             }
           }
         } catch { /* ignore */ }
@@ -332,11 +381,14 @@ export default function useFinnhubPrice(symbols = [], options = {}) {
     const ws = wsRef.current;
     if (!ws || ws.readyState !== WebSocket.OPEN) return;
 
-    // Subscribe to any new symbols
-    for (const sym of symbols) {
-      try {
-        ws.send(JSON.stringify({ type: "subscribe", symbol: sym }));
-      } catch { /* ignore */ }
+    // Subscribe to any new symbols (in Finnhub format)
+    for (const yahooSym of symbols) {
+      const finnhubSym = yahooToFinnhubSymbol(yahooSym);
+      if (finnhubSym) {
+        try {
+          ws.send(JSON.stringify({ type: "subscribe", symbol: finnhubSym }));
+        } catch { /* ignore */ }
+      }
     }
   }, [symbols]);
 

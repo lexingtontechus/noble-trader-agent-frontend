@@ -9,6 +9,7 @@
 import { NextResponse } from "next/server";
 import { getCached, setCache } from "@/lib/cache";
 import { CACHE_TTL } from "@/lib/config";
+import { normalizeToYahooSymbol } from "@/lib/symbol-utils";
 import { withAuth } from "@/lib/withAuth";
 
 export const GET = withAuth(async (request, context, authContext) => {
@@ -23,11 +24,12 @@ export const GET = withAuth(async (request, context, authContext) => {
     const cached = getCached(cacheKey);
     if (cached) return NextResponse.json(cached);
 
+    const yahooSymbol = normalizeToYahooSymbol(symbol);
     const res = await fetch(
-      `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(symbol)}?range=1d&interval=1m`,
+      `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(yahooSymbol)}?range=1d&interval=1m`,
       {
         headers: { "User-Agent": "Mozilla/5.0" },
-        signal: AbortSignal.timeout(15000),
+        signal: AbortSignal.timeout(8000),
       },
     );
 

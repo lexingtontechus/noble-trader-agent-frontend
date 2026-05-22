@@ -16,6 +16,17 @@ import { usePriceFeed } from "@/context/PriceFeedContext";
  *   - Multi-pane: RSI and MACD in sub-panels
  *   - Crosshair with OHLCV tooltip
  *   - Responsive + dark/light theme support
+ *
+ * IMPORTANT: Indicators are managed imperatively (add/remove series
+ * without destroying the chart) so toggling indicators preserves
+ * user zoom/scroll position.
+ *
+ * Architecture:
+ *   - Effect 1: Create chart (depends on chartType, chartPeriod, selectedSymbol)
+ *   - Effect 2: Manage overlay indicators (SMA, EMA, BB) — add/remove series
+ *   - Effect 3: Manage RSI sub-chart — create/destroy separately
+ *   - Effect 4: Manage MACD sub-chart — create/destroy separately
+ *   - Effect 5: Resize main chart when sub-charts change
  */
 
 const PERIOD_OPTIONS = [
@@ -135,7 +146,6 @@ export default function LiveCandlestickChart() {
     connected,
     chartPeriod,
     setChartPeriod,
-    setChartInterval,
   } = usePriceFeed();
 
   // ── State ─────────────────────────────────────────────────────────────────
@@ -148,14 +158,23 @@ export default function LiveCandlestickChart() {
 
   // ── Refs ──────────────────────────────────────────────────────────────────
   const chartContainerRef = useRef(null);
+  const rsiContainerRef = useRef(null);
+  const macdContainerRef = useRef(null);
+
   const chartRef = useRef(null);
-  const mainSeriesRef = useRef(null); // candle, line, or area series
+  const mainSeriesRef = useRef(null);
   const volumeSeriesRef = useRef(null);
   const priceLineRef = useRef(null);
-  const indicatorSeriesRef = useRef({}); // { sma: series, ema: series, ... }
+
+  // Overlay indicator series refs (SMA, EMA, Bollinger)
+  const indicatorSeriesRef = useRef({}); // { sma: series, ema: series, bb_upper: series, bb_lower: series }
+
+  // RSI sub-chart refs
   const rsiChartRef = useRef(null);
-  const macdChartRef = useRef(null);
   const rsiSeriesRef = useRef(null);
+
+  // MACD sub-chart refs
+  const macdChartRef = useRef(null);
   const macdSeriesRef = useRef({ macd: null, signal: null, histogram: null });
 
   const currentPeriodConfig = PERIOD_OPTIONS.find((p) => p.key === chartPeriod) || PERIOD_OPTIONS[4];
@@ -189,27 +208,26 @@ export default function LiveCandlestickChart() {
     const closes = chartData.map((c) => c.close);
     const result = {};
 
-    if (activeIndicators.includes("sma")) {
+    // Always compute all indicators so they're available immediately on toggle
+    {
       const raw = calcSMA(closes, 20);
       result.sma = assignTimes(raw, chartData, 19);
     }
-    if (activeIndicators.includes("ema")) {
+    {
       const raw = calcEMA(closes, 20);
       result.ema = assignTimes(raw, chartData, 19);
     }
-    if (activeIndicators.includes("bb")) {
-      const { upper, lower, mid } = calcBollinger(closes, 20, 2);
+    {
+      const { upper, lower } = calcBollinger(closes, 20, 2);
       result.bb_upper = assignTimes(upper, chartData, 19);
       result.bb_lower = assignTimes(lower, chartData, 19);
-      result.bb_mid = assignTimes(mid, chartData, 19);
     }
-    if (activeIndicators.includes("rsi")) {
+    {
       const raw = calcRSI(closes, 14);
       result.rsi = assignTimes(raw, chartData, 14);
     }
-    if (activeIndicators.includes("macd")) {
+    {
       const { macdLine, signalLine, histogram } = calcMACD(closes, 12, 26, 9);
-      // MACD starts after 26 candles, signal starts after 26+9-1=34 candles
       const macdStart = 25;
       const signalStart = 33;
       result.macd_line = macdLine.map((v, i) => ({
@@ -227,22 +245,15 @@ export default function LiveCandlestickChart() {
       })).filter((d) => d.time);
     }
     return result;
-  }, [chartData, activeIndicators]);
+  }, [chartData]);
 
-  // ── Create main chart ─────────────────────────────────────────────────────
+  // ── Effect 1: Create main chart (depends on chartType, chartPeriod, selectedSymbol only) ──
   useEffect(() => {
     if (!chartContainerRef.current) return;
     const colors = getThemeColors();
     const container = chartContainerRef.current;
 
-    // Calculate height splits: main chart, RSI pane, MACD pane
-    const hasRSI = activeIndicators.includes("rsi");
-    const hasMACD = activeIndicators.includes("macd");
-    const totalPanes = 1 + (hasRSI ? 1 : 0) + (hasMACD ? 1 : 0);
-    const mainHeight = Math.floor(container.clientHeight * (hasRSI || hasMACD ? 0.6 : 1));
-    const subPaneHeight = hasRSI || hasMACD ? Math.floor(container.clientHeight * 0.2) : 0;
-
-    // Main chart
+    // Main chart takes full container height; sub-charts are in separate containers
     const chart = createChart(container, {
       layout: { background: { type: ColorType.Solid, color: colors.background }, textColor: colors.text, fontSize: 12 },
       grid: { vertLines: { color: colors.grid }, horzLines: { color: colors.grid } },
@@ -250,7 +261,7 @@ export default function LiveCandlestickChart() {
       rightPriceScale: { borderColor: colors.grid },
       timeScale: { borderColor: colors.grid, timeVisible: true, secondsVisible: false },
       width: container.clientWidth,
-      height: mainHeight,
+      height: container.clientHeight,
     });
 
     const mainSeries = createMainSeries(chart, chartType, colors);
@@ -263,77 +274,140 @@ export default function LiveCandlestickChart() {
     chartRef.current = chart;
     mainSeriesRef.current = mainSeries;
     volumeSeriesRef.current = volumeSeries;
+    indicatorSeriesRef.current = {};
+    priceLineRef.current = null;
 
-    // RSI sub-chart
-    if (hasRSI) {
-      const rsiChart = createChart(container, {
-        layout: { background: { type: ColorType.Solid, color: colors.background }, textColor: colors.text, fontSize: 10 },
-        grid: { vertLines: { color: colors.grid }, horzLines: { color: colors.grid } },
-        rightPriceScale: { borderColor: colors.grid, scaleMargins: { top: 0.1, bottom: 0.1 } },
-        timeScale: { visible: false },
-        width: container.clientWidth,
-        height: subPaneHeight,
-      });
-      const rsiSeries = rsiChart.addLineSeries({ color: INDICATORS.rsi.color, lineWidth: 1, priceFormat: { type: "price", precision: 1, minMove: 0.1 } });
-      // Add RSI reference lines at 30 and 70
-      rsiSeries.createPriceLine({ price: 70, color: "rgba(239, 68, 68, 0.3)", lineWidth: 1, lineStyle: 2, axisLabelVisible: false });
-      rsiSeries.createPriceLine({ price: 30, color: "rgba(34, 197, 94, 0.3)", lineWidth: 1, lineStyle: 2, axisLabelVisible: false });
-      rsiChartRef.current = rsiChart;
-      rsiSeriesRef.current = rsiSeries;
-    }
-
-    // MACD sub-chart
-    if (hasMACD) {
-      const macdChart = createChart(container, {
-        layout: { background: { type: ColorType.Solid, color: colors.background }, textColor: colors.text, fontSize: 10 },
-        grid: { vertLines: { color: colors.grid }, horzLines: { color: colors.grid } },
-        rightPriceScale: { borderColor: colors.grid, scaleMargins: { top: 0.1, bottom: 0.1 } },
-        timeScale: { visible: false },
-        width: container.clientWidth,
-        height: subPaneHeight,
-      });
-      const macdLineSeries = macdChart.addLineSeries({ color: "#3b82f6", lineWidth: 1, priceFormat: { type: "price", precision: 2 } });
-      const signalSeries = macdChart.addLineSeries({ color: "#f97316", lineWidth: 1, priceFormat: { type: "price", precision: 2 } });
-      const histSeries = macdChart.addHistogramSeries({ priceFormat: { type: "price", precision: 2 } });
-      macdChartRef.current = macdChart;
-      macdSeriesRef.current = { macd: macdLineSeries, signal: signalSeries, histogram: histSeries };
-    }
-
-    // Sync time scales across all charts
-    if (hasRSI || hasMACD) {
-      chart.timeScale().subscribeVisibleLogicalRangeChange((range) => {
-        if (range) {
-          if (rsiChartRef.current) rsiChartRef.current.timeScale().setVisibleLogicalRange(range);
-          if (macdChartRef.current) macdChartRef.current.timeScale().setVisibleLogicalRange(range);
-        }
-      });
-    }
-
-    // Resize observer
+    // Resize observer for main chart
     const resizeObserver = new ResizeObserver(() => {
       const w = container.clientWidth;
-      chart.applyOptions({ width: w });
-      if (rsiChartRef.current) rsiChartRef.current.applyOptions({ width: w });
-      if (macdChartRef.current) macdChartRef.current.applyOptions({ width: w });
+      const h = container.clientHeight;
+      chart.applyOptions({ width: w, height: h });
     });
     resizeObserver.observe(container);
 
     return () => {
       resizeObserver.disconnect();
       chart.remove();
-      rsiChartRef.current?.remove();
-      macdChartRef.current?.remove();
       chartRef.current = null;
       mainSeriesRef.current = null;
       volumeSeriesRef.current = null;
-      rsiChartRef.current = null;
-      macdChartRef.current = null;
-      rsiSeriesRef.current = null;
-      macdSeriesRef.current = { macd: null, signal: null, histogram: null };
       indicatorSeriesRef.current = {};
       priceLineRef.current = null;
     };
-  }, [chartType, activeIndicators, getThemeColors]);
+  }, [chartType, chartPeriod, selectedSymbol, getThemeColors]);
+
+  // ── Effect 2: Manage RSI sub-chart ────────────────────────────────────────
+  const showRSI = activeIndicators.includes("rsi");
+
+  useEffect(() => {
+    if (!showRSI || !rsiContainerRef.current) {
+      // Clean up RSI chart if it exists
+      if (rsiChartRef.current) {
+        rsiChartRef.current.remove();
+        rsiChartRef.current = null;
+        rsiSeriesRef.current = null;
+      }
+      return;
+    }
+
+    const colors = getThemeColors();
+    const container = rsiContainerRef.current;
+
+    const rsiChart = createChart(container, {
+      layout: { background: { type: ColorType.Solid, color: colors.background }, textColor: colors.text, fontSize: 10 },
+      grid: { vertLines: { color: colors.grid }, horzLines: { color: colors.grid } },
+      rightPriceScale: { borderColor: colors.grid, scaleMargins: { top: 0.1, bottom: 0.1 } },
+      timeScale: { visible: false },
+      width: container.clientWidth,
+      height: container.clientHeight,
+    });
+    const rsiSeries = rsiChart.addLineSeries({
+      color: INDICATORS.rsi.color, lineWidth: 1,
+      priceFormat: { type: "price", precision: 1, minMove: 0.1 },
+    });
+    rsiSeries.createPriceLine({ price: 70, color: "rgba(239, 68, 68, 0.3)", lineWidth: 1, lineStyle: 2, axisLabelVisible: false });
+    rsiSeries.createPriceLine({ price: 30, color: "rgba(34, 197, 94, 0.3)", lineWidth: 1, lineStyle: 2, axisLabelVisible: false });
+
+    rsiChartRef.current = rsiChart;
+    rsiSeriesRef.current = rsiSeries;
+
+    // Sync time scale with main chart
+    if (chartRef.current) {
+      chartRef.current.timeScale().subscribeVisibleLogicalRangeChange((range) => {
+        if (range && rsiChartRef.current) {
+          rsiChartRef.current.timeScale().setVisibleLogicalRange(range);
+        }
+      });
+    }
+
+    // Resize observer
+    const resizeObserver = new ResizeObserver(() => {
+      rsiChart.applyOptions({ width: container.clientWidth, height: container.clientHeight });
+    });
+    resizeObserver.observe(container);
+
+    return () => {
+      resizeObserver.disconnect();
+      rsiChart.remove();
+      rsiChartRef.current = null;
+      rsiSeriesRef.current = null;
+    };
+  }, [showRSI, getThemeColors]);
+
+  // ── Effect 3: Manage MACD sub-chart ───────────────────────────────────────
+  const showMACD = activeIndicators.includes("macd");
+
+  useEffect(() => {
+    if (!showMACD || !macdContainerRef.current) {
+      // Clean up MACD chart if it exists
+      if (macdChartRef.current) {
+        macdChartRef.current.remove();
+        macdChartRef.current = null;
+        macdSeriesRef.current = { macd: null, signal: null, histogram: null };
+      }
+      return;
+    }
+
+    const colors = getThemeColors();
+    const container = macdContainerRef.current;
+
+    const macdChart = createChart(container, {
+      layout: { background: { type: ColorType.Solid, color: colors.background }, textColor: colors.text, fontSize: 10 },
+      grid: { vertLines: { color: colors.grid }, horzLines: { color: colors.grid } },
+      rightPriceScale: { borderColor: colors.grid, scaleMargins: { top: 0.1, bottom: 0.1 } },
+      timeScale: { visible: false },
+      width: container.clientWidth,
+      height: container.clientHeight,
+    });
+    const macdLineSeries = macdChart.addLineSeries({ color: "#3b82f6", lineWidth: 1, priceFormat: { type: "price", precision: 2 } });
+    const signalSeries = macdChart.addLineSeries({ color: "#f97316", lineWidth: 1, priceFormat: { type: "price", precision: 2 } });
+    const histSeries = macdChart.addHistogramSeries({ priceFormat: { type: "price", precision: 2 } });
+
+    macdChartRef.current = macdChart;
+    macdSeriesRef.current = { macd: macdLineSeries, signal: signalSeries, histogram: histSeries };
+
+    // Sync time scale with main chart
+    if (chartRef.current) {
+      chartRef.current.timeScale().subscribeVisibleLogicalRangeChange((range) => {
+        if (range && macdChartRef.current) {
+          macdChartRef.current.timeScale().setVisibleLogicalRange(range);
+        }
+      });
+    }
+
+    // Resize observer
+    const resizeObserver = new ResizeObserver(() => {
+      macdChart.applyOptions({ width: container.clientWidth, height: container.clientHeight });
+    });
+    resizeObserver.observe(container);
+
+    return () => {
+      resizeObserver.disconnect();
+      macdChart.remove();
+      macdChartRef.current = null;
+      macdSeriesRef.current = { macd: null, signal: null, histogram: null };
+    };
+  }, [showMACD, getThemeColors]);
 
   // ── Fetch historical OHLCV data ──────────────────────────────────────────
   const fetchChartData = useCallback(async () => {
@@ -360,6 +434,11 @@ export default function LiveCandlestickChart() {
     }
   }, [selectedSymbol, chartPeriod, currentPeriodConfig.interval]);
 
+  // Fetch on symbol or period change
+  useEffect(() => {
+    fetchChartData();
+  }, [fetchChartData]);
+
   // ── Apply data to chart when chartData changes ───────────────────────────
   useEffect(() => {
     if (!mainSeriesRef.current || chartData.length === 0) return;
@@ -384,38 +463,19 @@ export default function LiveCandlestickChart() {
       }))
     );
 
-    // Apply overlay indicators (SMA, EMA, Bollinger)
-    applyOverlayIndicators();
-
-    // Apply RSI
-    if (rsiSeriesRef.current && indicatorData.rsi) {
-      rsiSeriesRef.current.setData(indicatorData.rsi);
-    }
-
-    // Apply MACD
-    if (macdSeriesRef.current.macd && indicatorData.macd_line) {
-      macdSeriesRef.current.macd.setData(indicatorData.macd_line);
-      macdSeriesRef.current.signal.setData(indicatorData.macd_signal);
-      macdSeriesRef.current.histogram.setData(indicatorData.macd_histogram);
-    }
-
-    // Fit content
+    // Fit content on initial data load
     chartRef.current?.timeScale().fitContent();
-    rsiChartRef.current?.timeScale().fitContent();
-    macdChartRef.current?.timeScale().fitContent();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [chartData, chartType, indicatorData]);
+  }, [chartData, chartType]);
 
-  // Fetch on symbol or period change
+  // ── Effect 4: Manage overlay indicators (SMA, EMA, BB) imperatively ──────
+  // This effect adds/removes indicator series when activeIndicators changes,
+  // without recreating the entire chart. This preserves zoom/scroll position.
+
   useEffect(() => {
-    fetchChartData();
-  }, [fetchChartData]);
+    if (!chartRef.current || chartData.length === 0) return;
 
-  // ── Apply overlay indicators (SMA, EMA, Bollinger Bands) ─────────────────
-  const applyOverlayIndicators = useCallback(() => {
-    if (!chartRef.current) return;
-
-    // Remove old indicator series
+    // Remove all existing overlay indicator series
     for (const [key, series] of Object.entries(indicatorSeriesRef.current)) {
       try { chartRef.current.removeSeries(series); } catch { /* ignore */ }
     }
@@ -453,14 +513,25 @@ export default function LiveCandlestickChart() {
       const lowerSeries = chartRef.current.addLineSeries({
         color: INDICATORS.bb.color, lineWidth: 1, lineStyle: 2,
         priceLineVisible: false, lastValueVisible: false, crosshairMarkerVisible: false,
-        autoscaleInfoProvider: () => ({
-          priceRange: { minValue: Math.min(...indicatorData.bb_lower.map((d) => d.value)), maxValue: Math.max(...indicatorData.bb_upper.map((d) => d.value)) },
-        }),
       });
       lowerSeries.setData(indicatorData.bb_lower);
       indicatorSeriesRef.current.bb_lower = lowerSeries;
     }
-  }, [activeIndicators, indicatorData]);
+
+    // Apply RSI data if RSI sub-chart exists
+    if (activeIndicators.includes("rsi") && rsiSeriesRef.current && indicatorData.rsi) {
+      rsiSeriesRef.current.setData(indicatorData.rsi);
+      rsiChartRef.current?.timeScale().fitContent();
+    }
+
+    // Apply MACD data if MACD sub-chart exists
+    if (activeIndicators.includes("macd") && macdSeriesRef.current.macd && indicatorData.macd_line) {
+      macdSeriesRef.current.macd.setData(indicatorData.macd_line);
+      macdSeriesRef.current.signal.setData(indicatorData.macd_signal);
+      macdSeriesRef.current.histogram.setData(indicatorData.macd_histogram);
+      macdChartRef.current?.timeScale().fitContent();
+    }
+  }, [activeIndicators, indicatorData, chartData]);
 
   // ── Real-time price updates ───────────────────────────────────────────────
   useEffect(() => {
@@ -539,10 +610,16 @@ export default function LiveCandlestickChart() {
   // ── Period selector ──────────────────────────────────────────────────────
   const handlePeriodChange = (periodKey) => {
     const config = PERIOD_OPTIONS.find((p) => p.key === periodKey);
-    if (config) { setChartPeriod(periodKey); setChartInterval(config.interval); }
+    if (config) { setChartPeriod(periodKey); }
   };
 
   const currentPrice = prices[selectedSymbol];
+
+  // Determine layout: how much space for sub-charts
+  const hasSubChart = showRSI || showMACD;
+  const subChartCount = (showRSI ? 1 : 0) + (showMACD ? 1 : 0);
+  const mainChartFlex = hasSubChart ? "flex-[3]" : "flex-1";
+  const subChartFlex = subChartCount === 2 ? "flex-[1]" : "flex-[1.5]";
 
   return (
     <div className="flex flex-col h-full">
@@ -633,8 +710,8 @@ export default function LiveCandlestickChart() {
         </div>
       </div>
 
-      {/* Chart area */}
-      <div className="flex-1 relative min-h-[300px]">
+      {/* Chart area — flex column with main chart and optional sub-charts */}
+      <div className="flex-1 flex flex-col overflow-hidden min-h-[300px]">
         {loading && (
           <div className="absolute inset-0 flex items-center justify-center bg-base-200/50 z-10">
             <span className="loading loading-spinner loading-lg text-primary"></span>
@@ -648,7 +725,19 @@ export default function LiveCandlestickChart() {
             </div>
           </div>
         )}
-        <div ref={chartContainerRef} className="w-full h-full" />
+
+        {/* Main chart container */}
+        <div ref={chartContainerRef} className={`${mainChartFlex} min-h-0`} />
+
+        {/* RSI sub-chart container */}
+        {showRSI && (
+          <div ref={rsiContainerRef} className={`${subChartFlex} min-h-0 border-t border-base-300`} />
+        )}
+
+        {/* MACD sub-chart container */}
+        {showMACD && (
+          <div ref={macdContainerRef} className={`${subChartFlex} min-h-0 border-t border-base-300`} />
+        )}
       </div>
     </div>
   );
