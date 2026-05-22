@@ -273,6 +273,9 @@ export const POST = withAuth(async (request, context, authContext) => {
       let tdaResult;
       let source = "fastapi";
       try {
+        // 8s timeout — Vercel hobby plan has 10s function limit,
+        // so FastAPI call must return well within that window.
+        // Local fallback handles it when FastAPI is unavailable or slow.
         tdaResult = await Promise.race([
           extractTDAFeatures(prices, sym, {
             embedding_dim: 3,
@@ -281,7 +284,7 @@ export const POST = withAuth(async (request, context, authContext) => {
             n_filtration_steps: 20,
             anomaly_threshold: ANOMALY_THRESHOLD,
           }),
-          new Promise((_, rej) => setTimeout(() => rej(new Error("TDA timeout")), 60000)),
+          new Promise((_, rej) => setTimeout(() => rej(new Error("TDA timeout")), 8000)),
         ]);
       } catch {
         // Local fallback

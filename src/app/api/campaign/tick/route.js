@@ -21,13 +21,21 @@ const CRON_SECRET = process.env.CRON_SECRET;
 
 export const POST = withAuth(async (request, context, authContext) => {
   try {
-    // Verify cron auth (optional for manual testing, required for cron)
+    // Verify cron auth — supports both Bearer token and x-cron-secret header
     const authHeader = request.headers.get("Authorization");
-    const isCron = authHeader && CRON_SECRET && authHeader === `Bearer ${CRON_SECRET}`;
+    const cronHeader = request.headers.get("x-cron-secret");
+    const { searchParams } = new URL(request.url);
+    const querySecret = searchParams.get("secret");
 
-    // Allow unauthenticated access during development
-    if (!isCron && process.env.NODE_ENV === "production" && CRON_SECRET) {
-      return Response.json({ error: "Unauthorized" }, { status: 401 });
+    const isCron = CRON_SECRET && (
+      (authHeader && authHeader === `Bearer ${CRON_SECRET}`) ||
+      cronHeader === CRON_SECRET ||
+      querySecret === CRON_SECRET
+    );
+
+    // In production with CRON_SECRET set, require authentication
+    if (CRON_SECRET && process.env.NODE_ENV === "production" && !isCron) {
+      return Response.json({ error: "Unauthorized — invalid or missing cron secret", code: "UNAUTHORIZED" }, { status: 401 });
     }
 
     const result = await tickCampaigns(isCron ? CRON_SECRET : null);

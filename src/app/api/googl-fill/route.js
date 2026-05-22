@@ -1,6 +1,9 @@
 // GOOGL Fill Job - Scheduled order placement for remaining 52 GOOGL shares
 // GET: Check status and place order if conditions are met
 // POST: Force trigger regardless of timing
+//
+// ⚠️ ONE-TIME JOB — Should be removed after target is met.
+// Auth: Clerk admin (withAuth) OR CRON_SECRET via x-cron-secret header / ?secret= query param.
 
 import { withAuth } from "@/lib/withAuth";
 
@@ -9,8 +12,22 @@ const ALPACA_SECRET = process.env.ALPACA_API_SECRET || process.env.alpacaSecretK
 const ALPACA_BASE = "https://paper-api.alpaca.markets/v2";
 const GOOGL_LIMIT = 398;
 const TARGET_QTY = 96;
+const CRON_SECRET = process.env.CRON_SECRET;
 
-export const GET = withAuth(async (request, context, authContext) => {
+/**
+ * Verify cron secret from header or query param.
+ * Returns true if authenticated (or in development without CRON_SECRET).
+ */
+function verifyCronSecret(request) {
+  if (!CRON_SECRET && process.env.NODE_ENV !== "production") return true;
+  if (!CRON_SECRET) return false;
+  const headerSecret = request.headers.get("x-cron-secret");
+  const { searchParams } = new URL(request.url);
+  const querySecret = searchParams.get("secret");
+  return headerSecret === CRON_SECRET || querySecret === CRON_SECRET;
+}
+
+async function handleGet(request) {
   const now = new Date();
   const logs = [];
 
@@ -162,10 +179,9 @@ export const GET = withAuth(async (request, context, authContext) => {
       logs,
     }, { status: 500 });
   }
-}, { minRole: "admin" });
+}
 
-// POST = force trigger
-export const POST = withAuth(async (request, context, authContext) => {
+async function handlePost(request) {
   try {
     const clockResp = await fetch(`${ALPACA_BASE}/clock`, {
       headers: { "APCA-API-KEY-ID": ALPACA_KEY, "APCA-API-SECRET-KEY": ALPACA_SECRET },
@@ -243,4 +259,26 @@ export const POST = withAuth(async (request, context, authContext) => {
   } catch (error) {
     return Response.json({ status: "error", message: error.message }, { status: 500 });
   }
-}, { minRole: "admin" });
+}
+
+// GET: Check status and place order if conditions are met
+export async function GET(request) {
+  // Cron-triggered request (no Clerk session) — verify CRON_SECRET
+  if (verifyCronSecret(request)) {
+    return handleGet(request);
+  }
+
+  // User-facing request — require Clerk admin auth
+  return withAuth(handleGet, { minRole: "admin" })(request, {});
+}
+
+// POST: Force trigger regardless of timing
+export async function POST(request) {
+  // Cron-triggered request (no Clerk session) — verify CRON_SECRET
+  if (verifyCronSecret(request)) {
+    return handlePost(request);
+  }
+
+  // User-facing request — require Clerk admin auth
+  return withAuth(handlePost, { minRole: "admin" })(request, {});
+}
