@@ -115,7 +115,7 @@ export default function OptimizerCard() {
             )}
           </h3>
           <button
-            className={`btn btn-sm btn-secondary ${loading ? "loading" : ""}`}
+            className={`btn btn-secondary min-h-[44px] sm:min-h-0 sm:btn-sm ${loading ? "loading" : ""}`}
             onClick={optimize}
             disabled={loading}
           >
@@ -221,8 +221,8 @@ export default function OptimizerCard() {
               </div>
             )}
 
-            {/* Detailed Weights Table */}
-            <div className="overflow-x-auto">
+            {/* Detailed Weights Table — Desktop */}
+            <div className="hidden sm:block overflow-x-auto">
               <table className="table table-xs">
                 <thead>
                   <tr>
@@ -257,6 +257,32 @@ export default function OptimizerCard() {
                   })}
                 </tbody>
               </table>
+            </div>
+
+            {/* Weights Cards — Mobile */}
+            <div className="sm:hidden space-y-2">
+              {symbols.map((sym) => {
+                const current = (result.current_weights?.[sym] || 0) * 100;
+                const optimal = (result.optimal_weights?.[sym] || 0) * 100;
+                const adjusted = (result.regime_adjusted_weights?.[sym] || 0) * 100;
+                const delta = optimal - current;
+                return (
+                  <div key={sym} className="card bg-base-200 p-3">
+                    <div className="flex justify-between items-start mb-2">
+                      <span className="font-bold font-mono">{sym}</span>
+                      <span className={`badge badge-sm ${delta > 0 ? "badge-success" : delta < 0 ? "badge-error" : "badge-ghost"}`}>
+                        {delta > 0 ? "+" : ""}{delta.toFixed(1)}%
+                      </span>
+                    </div>
+                    <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-sm">
+                      <div><span className="text-base-content/50">Current:</span> <span className="font-mono">{current.toFixed(1)}%</span></div>
+                      <div><span className="text-base-content/50">Optimal:</span> <span className="font-mono">{optimal.toFixed(1)}%</span></div>
+                      <div><span className="text-base-content/50">Adjusted:</span> <span className="font-mono">{adjusted.toFixed(1)}%</span></div>
+                      <div><span className="text-base-content/50">Delta:</span> <span className={`font-mono ${delta > 0 ? "text-success" : delta < 0 ? "text-error" : ""}`}>{delta > 0 ? "+" : ""}{delta.toFixed(1)}%</span></div>
+                    </div>
+                  </div>
+                );
+              })}
             </div>
           </>
         )}

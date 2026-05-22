@@ -296,29 +296,58 @@ export default function SignalsPanel({ signals = [], stats = {}, state = {} }) {
                 </span>
               </div>
             ) : (
-              <div className="overflow-x-auto max-h-80 overflow-y-auto" style={{ scrollbarWidth: "thin" }}>
-                <table className="table table-sm">
-                  <thead>
-                    <tr>
-                      <th className="text-xs">Dir</th>
-                      <th className="text-xs">Pattern</th>
-                      <th className="text-xs">Price</th>
-                      <th className="text-xs">Conf</th>
-                      <th className="text-xs">Vel</th>
-                      <th className="text-xs">Bricks</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {signals.map((signal, i) => (
-                      <SignalRow
-                        key={signal.timestamp || i}
-                        signal={signal}
-                        index={i}
-                      />
-                    ))}
-                  </tbody>
-                </table>
-              </div>
+              <>
+                {/* Desktop table */}
+                <div className="hidden sm:block overflow-x-auto max-h-80 overflow-y-auto" style={{ scrollbarWidth: "thin" }}>
+                  <table className="table table-sm">
+                    <thead>
+                      <tr>
+                        <th className="text-xs">Dir</th>
+                        <th className="text-xs">Pattern</th>
+                        <th className="text-xs">Price</th>
+                        <th className="text-xs">Conf</th>
+                        <th className="text-xs">Vel</th>
+                        <th className="text-xs">Bricks</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {signals.map((signal, i) => (
+                        <SignalRow
+                          key={signal.timestamp || i}
+                          signal={signal}
+                          index={i}
+                        />
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+                {/* Mobile card list */}
+                <div className="sm:hidden space-y-2 max-h-80 overflow-y-auto">
+                  {signals.map((signal, i) => {
+                    const isLong = signal.direction === "LONG" || signal.direction === "BUY";
+                    const isShort = signal.direction === "SHORT" || signal.direction === "SELL";
+                    const dirBadge = isLong ? "badge-success" : isShort ? "badge-error" : "badge-ghost";
+                    const confValue = typeof signal.confidence === "number" ? signal.confidence : 0;
+                    const confPct = (confValue * 100).toFixed(1);
+                    return (
+                      <div key={signal.timestamp || i} className="card bg-base-300/50 p-3">
+                        <div className="flex justify-between items-start mb-2">
+                          <div className="flex items-center gap-2">
+                            <span className={`badge badge-sm ${dirBadge}`}>{signal.direction || "—"}</span>
+                            <span className="text-sm font-semibold">{signal.pattern || "—"}</span>
+                          </div>
+                          <span className="font-mono text-xs">{typeof signal.price === "number" ? `$${signal.price.toFixed(2)}` : "—"}</span>
+                        </div>
+                        <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-sm">
+                          <div><span className="text-base-content/50">Conf:</span> <span className="font-mono">{confPct}%</span></div>
+                          <div><span className="text-base-content/50">Vel:</span> <span className="font-mono">{signal.velocity != null ? signal.velocity.toFixed(1) : "—"}</span></div>
+                          <div><span className="text-base-content/50">Bricks:</span> <span className="font-mono">{signal.brick_count != null ? signal.brick_count : "—"}</span></div>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </>
             )}
           </div>
         </div>

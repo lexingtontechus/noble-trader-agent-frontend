@@ -233,6 +233,25 @@ export default function ReconciliationPanel({ bffFetch }) {
   // Compute summary from lastResult
   const summary = lastResult?.summary || null;
 
+  // Reusable mobile card component for reconciliation items
+  const ReconMobileCard = ({ item, fields }) => (
+    <div className="card bg-base-300 p-3">
+      <div className="flex justify-between items-start mb-2">
+        <span className="font-mono font-bold">{item.symbol}</span>
+        {item.direction && (
+          <span className={`badge badge-xs ${item.direction === "buy" ? "badge-success" : "badge-error"}`}>
+            {item.direction}
+          </span>
+        )}
+      </div>
+      <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-sm">
+        {fields.map(([label, value]) => (
+          <div key={label}><span className="text-base-content/50">{label}:</span> {value}</div>
+        ))}
+      </div>
+    </div>
+  );
+
   return (
     <div className="card bg-base-100 shadow-xl border border-base-300">
       <div className="card-body">
@@ -245,11 +264,11 @@ export default function ReconciliationPanel({ bffFetch }) {
             )}
           </h2>
           <div className="flex gap-2 flex-wrap">
-            <button className="btn btn-primary btn-sm" onClick={handleRunReconciliation} disabled={loading}>
+            <button className="btn btn-primary btn-sm min-h-[44px] sm:min-h-0" onClick={handleRunReconciliation} disabled={loading}>
               {loading ? <span className="loading loading-spinner loading-xs"></span> : "Run Now"}
             </button>
             {lastResult && (
-              <button className="btn btn-ghost btn-sm" onClick={handleExportCSV} title="Export CSV">
+              <button className="btn btn-ghost btn-sm min-h-[44px] sm:min-h-0" onClick={handleExportCSV} title="Export CSV">
                 <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
                 Export
               </button>
@@ -282,7 +301,7 @@ export default function ReconciliationPanel({ bffFetch }) {
               <span className="text-xs opacity-70">Auto-recon</span>
               <input
                 type="checkbox"
-                className="toggle toggle-sm toggle-success"
+                className="toggle toggle-sm sm:toggle-sm toggle-success min-w-[44px]"
                 checked={autoRecon.enabled}
                 onChange={handleToggleAutoRecon}
               />
@@ -350,8 +369,8 @@ export default function ReconciliationPanel({ bffFetch }) {
                   </div>
                 </div>
 
-                {/* Summary Cards */}
-                <div className="grid grid-cols-3 sm:grid-cols-6 gap-2">
+                {/* Summary Cards — FIXED: responsive grid */}
+                <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2">
                   <div className="stat bg-base-200 rounded-lg p-2">
                     <div className="stat-title text-xs">Expected</div>
                     <div className="stat-value text-lg">{summary.totalExpected}</div>
@@ -420,22 +439,36 @@ export default function ReconciliationPanel({ bffFetch }) {
                       Price Discrepancies
                     </div>
                     <div className="collapse-content">
-                      <table className="table table-xs">
-                        <thead>
-                          <tr><th>Symbol</th><th>Expected</th><th>Fill</th><th>Diff %</th><th>Order ID</th></tr>
-                        </thead>
-                        <tbody>
-                          {(lastResult.priceDiscrepancy || []).map((r, i) => (
-                            <tr key={i}>
-                              <td className="font-mono font-bold">{r.symbol}</td>
-                              <td>${r.expectedPrice?.toFixed(2)}</td>
-                              <td>${r.fillPrice?.toFixed(2)}</td>
-                              <td className="text-warning">{r.priceDiffPct}%</td>
-                              <td className="font-mono text-xs opacity-50" title={r.orderId}>{r.orderId?.slice(0, 10)}...</td>
-                            </tr>
-                          ))}
-                        </tbody>
-                      </table>
+                      {/* Desktop Table */}
+                      <div className="hidden sm:block overflow-x-auto">
+                        <table className="table table-xs">
+                          <thead>
+                            <tr><th>Symbol</th><th>Expected</th><th>Fill</th><th>Diff %</th><th>Order ID</th></tr>
+                          </thead>
+                          <tbody>
+                            {(lastResult.priceDiscrepancy || []).map((r, i) => (
+                              <tr key={i}>
+                                <td className="font-mono font-bold">{r.symbol}</td>
+                                <td>${r.expectedPrice?.toFixed(2)}</td>
+                                <td>${r.fillPrice?.toFixed(2)}</td>
+                                <td className="text-warning">{r.priceDiffPct}%</td>
+                                <td className="font-mono text-xs opacity-50" title={r.orderId}>{r.orderId?.slice(0, 10)}...</td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                      {/* Mobile Cards */}
+                      <div className="sm:hidden space-y-2">
+                        {(lastResult.priceDiscrepancy || []).map((r, i) => (
+                          <ReconMobileCard key={i} item={r} fields={[
+                            ["Expected", `$${r.expectedPrice?.toFixed(2)}`],
+                            ["Fill", `$${r.fillPrice?.toFixed(2)}`],
+                            ["Diff %", <span className="text-warning">{r.priceDiffPct}%</span>],
+                            ["Order", <span className="font-mono text-xs opacity-50" title={r.orderId}>{r.orderId?.slice(0, 10)}...</span>],
+                          ]} />
+                        ))}
+                      </div>
                     </div>
                   </div>
                 )}
@@ -453,22 +486,36 @@ export default function ReconciliationPanel({ bffFetch }) {
                       Quantity Mismatches
                     </div>
                     <div className="collapse-content">
-                      <table className="table table-xs">
-                        <thead>
-                          <tr><th>Symbol</th><th>Expected Qty</th><th>Fill Qty</th><th>Diff</th><th>Order ID</th></tr>
-                        </thead>
-                        <tbody>
-                          {(lastResult.quantityMismatch || []).map((r, i) => (
-                            <tr key={i}>
-                              <td className="font-mono font-bold">{r.symbol}</td>
-                              <td>{r.expectedQty}</td>
-                              <td>{r.fillQty}</td>
-                              <td className={r.diff > 0 ? "text-success" : "text-error"}>{r.diff > 0 ? "+" : ""}{r.diff}</td>
-                              <td className="font-mono text-xs opacity-50" title={r.orderId}>{r.orderId?.slice(0, 10)}...</td>
-                            </tr>
-                          ))}
-                        </tbody>
-                      </table>
+                      {/* Desktop Table */}
+                      <div className="hidden sm:block overflow-x-auto">
+                        <table className="table table-xs">
+                          <thead>
+                            <tr><th>Symbol</th><th>Expected Qty</th><th>Fill Qty</th><th>Diff</th><th>Order ID</th></tr>
+                          </thead>
+                          <tbody>
+                            {(lastResult.quantityMismatch || []).map((r, i) => (
+                              <tr key={i}>
+                                <td className="font-mono font-bold">{r.symbol}</td>
+                                <td>{r.expectedQty}</td>
+                                <td>{r.fillQty}</td>
+                                <td className={r.diff > 0 ? "text-success" : "text-error"}>{r.diff > 0 ? "+" : ""}{r.diff}</td>
+                                <td className="font-mono text-xs opacity-50" title={r.orderId}>{r.orderId?.slice(0, 10)}...</td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                      {/* Mobile Cards */}
+                      <div className="sm:hidden space-y-2">
+                        {(lastResult.quantityMismatch || []).map((r, i) => (
+                          <ReconMobileCard key={i} item={r} fields={[
+                            ["Expected Qty", r.expectedQty],
+                            ["Fill Qty", r.fillQty],
+                            ["Diff", <span className={r.diff > 0 ? "text-success" : "text-error"}>{r.diff > 0 ? "+" : ""}{r.diff}</span>],
+                            ["Order", <span className="font-mono text-xs opacity-50" title={r.orderId}>{r.orderId?.slice(0, 10)}...</span>],
+                          ]} />
+                        ))}
+                      </div>
                     </div>
                   </div>
                 )}
@@ -486,23 +533,37 @@ export default function ReconciliationPanel({ bffFetch }) {
                       Missing Fills
                     </div>
                     <div className="collapse-content">
-                      <table className="table table-xs">
-                        <thead>
-                          <tr><th>Symbol</th><th>Dir</th><th>Price</th><th>Qty</th><th>Min Ago</th><th>Order ID</th></tr>
-                        </thead>
-                        <tbody>
-                          {(lastResult.missingFills || []).map((r, i) => (
-                            <tr key={i}>
-                              <td className="font-mono font-bold">{r.symbol}</td>
-                              <td>{r.direction}</td>
-                              <td>${r.expectedPrice?.toFixed(2)}</td>
-                              <td>{r.expectedQty}</td>
-                              <td>{r.minutesSinceSubmit}m</td>
-                              <td className="font-mono text-xs opacity-50" title={r.orderId}>{r.orderId?.slice(0, 10)}...</td>
-                            </tr>
-                          ))}
-                        </tbody>
-                      </table>
+                      {/* Desktop Table */}
+                      <div className="hidden sm:block overflow-x-auto">
+                        <table className="table table-xs">
+                          <thead>
+                            <tr><th>Symbol</th><th>Dir</th><th>Price</th><th>Qty</th><th>Min Ago</th><th>Order ID</th></tr>
+                          </thead>
+                          <tbody>
+                            {(lastResult.missingFills || []).map((r, i) => (
+                              <tr key={i}>
+                                <td className="font-mono font-bold">{r.symbol}</td>
+                                <td>{r.direction}</td>
+                                <td>${r.expectedPrice?.toFixed(2)}</td>
+                                <td>{r.expectedQty}</td>
+                                <td>{r.minutesSinceSubmit}m</td>
+                                <td className="font-mono text-xs opacity-50" title={r.orderId}>{r.orderId?.slice(0, 10)}...</td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                      {/* Mobile Cards */}
+                      <div className="sm:hidden space-y-2">
+                        {(lastResult.missingFills || []).map((r, i) => (
+                          <ReconMobileCard key={i} item={r} fields={[
+                            ["Price", `$${r.expectedPrice?.toFixed(2)}`],
+                            ["Qty", r.expectedQty],
+                            ["Min Ago", `${r.minutesSinceSubmit}m`],
+                            ["Order", <span className="font-mono text-xs opacity-50" title={r.orderId}>{r.orderId?.slice(0, 10)}...</span>],
+                          ]} />
+                        ))}
+                      </div>
                     </div>
                   </div>
                 )}
@@ -521,23 +582,37 @@ export default function ReconciliationPanel({ bffFetch }) {
                       <span className="text-xs opacity-60 ml-1">⚠ No matching order submitted</span>
                     </div>
                     <div className="collapse-content">
-                      <table className="table table-xs">
-                        <thead>
-                          <tr><th>Symbol</th><th>Dir</th><th>Fill Price</th><th>Fill Qty</th><th>Source</th><th>Order ID</th></tr>
-                        </thead>
-                        <tbody>
-                          {(lastResult.phantomFills || []).map((r, i) => (
-                            <tr key={i}>
-                              <td className="font-mono font-bold">{r.symbol}</td>
-                              <td>{r.direction}</td>
-                              <td>${r.fillPrice?.toFixed(2)}</td>
-                              <td>{r.fillQty}</td>
-                              <td><span className="badge badge-ghost badge-sm">{r.fillSource}</span></td>
-                              <td className="font-mono text-xs opacity-50" title={r.orderId}>{r.orderId?.slice(0, 10)}...</td>
-                            </tr>
-                          ))}
-                        </tbody>
-                      </table>
+                      {/* Desktop Table */}
+                      <div className="hidden sm:block overflow-x-auto">
+                        <table className="table table-xs">
+                          <thead>
+                            <tr><th>Symbol</th><th>Dir</th><th>Fill Price</th><th>Fill Qty</th><th>Source</th><th>Order ID</th></tr>
+                          </thead>
+                          <tbody>
+                            {(lastResult.phantomFills || []).map((r, i) => (
+                              <tr key={i}>
+                                <td className="font-mono font-bold">{r.symbol}</td>
+                                <td>{r.direction}</td>
+                                <td>${r.fillPrice?.toFixed(2)}</td>
+                                <td>{r.fillQty}</td>
+                                <td><span className="badge badge-ghost badge-sm">{r.fillSource}</span></td>
+                                <td className="font-mono text-xs opacity-50" title={r.orderId}>{r.orderId?.slice(0, 10)}...</td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                      {/* Mobile Cards */}
+                      <div className="sm:hidden space-y-2">
+                        {(lastResult.phantomFills || []).map((r, i) => (
+                          <ReconMobileCard key={i} item={r} fields={[
+                            ["Fill Price", `$${r.fillPrice?.toFixed(2)}`],
+                            ["Fill Qty", r.fillQty],
+                            ["Source", <span className="badge badge-ghost badge-xs">{r.fillSource}</span>],
+                            ["Order", <span className="font-mono text-xs opacity-50" title={r.orderId}>{r.orderId?.slice(0, 10)}...</span>],
+                          ]} />
+                        ))}
+                      </div>
                     </div>
                   </div>
                 )}
@@ -556,23 +631,37 @@ export default function ReconciliationPanel({ bffFetch }) {
                       <span className="text-xs opacity-60 ml-1">No fill after 30+ min</span>
                     </div>
                     <div className="collapse-content">
-                      <table className="table table-xs">
-                        <thead>
-                          <tr><th>Symbol</th><th>Dir</th><th>Price</th><th>Qty</th><th>Stale (min)</th><th>Order ID</th></tr>
-                        </thead>
-                        <tbody>
-                          {(lastResult.staleOrders || []).map((r, i) => (
-                            <tr key={i}>
-                              <td className="font-mono font-bold">{r.symbol}</td>
-                              <td>{r.direction}</td>
-                              <td>${r.expectedPrice?.toFixed(2)}</td>
-                              <td>{r.expectedQty}</td>
-                              <td className="text-warning">{r.staleMinutes}m</td>
-                              <td className="font-mono text-xs opacity-50" title={r.orderId}>{r.orderId?.slice(0, 10)}...</td>
-                            </tr>
-                          ))}
-                        </tbody>
-                      </table>
+                      {/* Desktop Table */}
+                      <div className="hidden sm:block overflow-x-auto">
+                        <table className="table table-xs">
+                          <thead>
+                            <tr><th>Symbol</th><th>Dir</th><th>Price</th><th>Qty</th><th>Stale (min)</th><th>Order ID</th></tr>
+                          </thead>
+                          <tbody>
+                            {(lastResult.staleOrders || []).map((r, i) => (
+                              <tr key={i}>
+                                <td className="font-mono font-bold">{r.symbol}</td>
+                                <td>{r.direction}</td>
+                                <td>${r.expectedPrice?.toFixed(2)}</td>
+                                <td>{r.expectedQty}</td>
+                                <td className="text-warning">{r.staleMinutes}m</td>
+                                <td className="font-mono text-xs opacity-50" title={r.orderId}>{r.orderId?.slice(0, 10)}...</td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                      {/* Mobile Cards */}
+                      <div className="sm:hidden space-y-2">
+                        {(lastResult.staleOrders || []).map((r, i) => (
+                          <ReconMobileCard key={i} item={r} fields={[
+                            ["Price", `$${r.expectedPrice?.toFixed(2)}`],
+                            ["Qty", r.expectedQty],
+                            ["Stale", <span className="text-warning">{r.staleMinutes}m</span>],
+                            ["Order", <span className="font-mono text-xs opacity-50" title={r.orderId}>{r.orderId?.slice(0, 10)}...</span>],
+                          ]} />
+                        ))}
+                      </div>
                     </div>
                   </div>
                 )}
@@ -590,23 +679,37 @@ export default function ReconciliationPanel({ bffFetch }) {
                       Matched
                     </div>
                     <div className="collapse-content">
-                      <table className="table table-xs">
-                        <thead>
-                          <tr><th>Symbol</th><th>Dir</th><th>Expected</th><th>Fill</th><th>Slippage</th><th>Source</th></tr>
-                        </thead>
-                        <tbody>
-                          {(lastResult.matched || []).slice(0, 30).map((r, i) => (
-                            <tr key={i}>
-                              <td className="font-mono font-bold">{r.symbol}</td>
-                              <td>{r.direction}</td>
-                              <td>${r.expectedPrice?.toFixed(2)}</td>
-                              <td>${r.fillPrice?.toFixed(2)}</td>
-                              <td className={slippageColor(parseFloat(r.priceDiffPct) * 100)}>{r.priceDiffPct}%</td>
-                              <td><span className="badge badge-ghost badge-xs">{r.fillSource}</span></td>
-                            </tr>
-                          ))}
-                        </tbody>
-                      </table>
+                      {/* Desktop Table */}
+                      <div className="hidden sm:block overflow-x-auto">
+                        <table className="table table-xs">
+                          <thead>
+                            <tr><th>Symbol</th><th>Dir</th><th>Expected</th><th>Fill</th><th>Slippage</th><th>Source</th></tr>
+                          </thead>
+                          <tbody>
+                            {(lastResult.matched || []).slice(0, 30).map((r, i) => (
+                              <tr key={i}>
+                                <td className="font-mono font-bold">{r.symbol}</td>
+                                <td>{r.direction}</td>
+                                <td>${r.expectedPrice?.toFixed(2)}</td>
+                                <td>${r.fillPrice?.toFixed(2)}</td>
+                                <td className={slippageColor(parseFloat(r.priceDiffPct) * 100)}>{r.priceDiffPct}%</td>
+                                <td><span className="badge badge-ghost badge-xs">{r.fillSource}</span></td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                      {/* Mobile Cards */}
+                      <div className="sm:hidden space-y-2">
+                        {(lastResult.matched || []).slice(0, 30).map((r, i) => (
+                          <ReconMobileCard key={i} item={r} fields={[
+                            ["Expected", `$${r.expectedPrice?.toFixed(2)}`],
+                            ["Fill", `$${r.fillPrice?.toFixed(2)}`],
+                            ["Slippage", <span className={slippageColor(parseFloat(r.priceDiffPct) * 100)}>{r.priceDiffPct}%</span>],
+                            ["Source", <span className="badge badge-ghost badge-xs">{r.fillSource}</span>],
+                          ]} />
+                        ))}
+                      </div>
                     </div>
                   </div>
                 )}
@@ -644,7 +747,7 @@ export default function ReconciliationPanel({ bffFetch }) {
                     onKeyDown={(e) => e.key === "Enter" && handleOrderReconciliation()}
                   />
                   <button
-                    className="btn btn-sm btn-outline"
+                    className="btn btn-sm btn-outline min-h-[44px] sm:min-h-0"
                     onClick={handleOrderReconciliation}
                     disabled={loading || !orderId.trim()}
                   >

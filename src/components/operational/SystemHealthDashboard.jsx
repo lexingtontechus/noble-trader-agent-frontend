@@ -184,7 +184,8 @@ function CronJobsTable({ jobs }) {
         <h3 className="font-semibold text-sm flex items-center gap-2 mb-3">
           <span className="text-xl">⏰</span> Cron Jobs ({jobs.length})
         </h3>
-        <div className="overflow-x-auto">
+        {/* Desktop Table */}
+        <div className="hidden sm:block overflow-x-auto">
           <table className="table table-xs">
             <thead>
               <tr>
@@ -233,6 +234,36 @@ function CronJobsTable({ jobs }) {
               })}
             </tbody>
           </table>
+        </div>
+        {/* Mobile Cards */}
+        <div className="sm:hidden space-y-2">
+          {jobs.map((job) => (
+            <div key={job.name} className={`card bg-base-200 p-3 ${!job.lastRun ? "opacity-50" : job.lastStatus === "succeeded" ? "border border-success/20" : job.lastStatus === "failed" ? "border border-error/20" : ""}`}>
+              <div className="flex justify-between items-start mb-2">
+                <span className="font-mono font-bold text-xs">{job.name}</span>
+                <div className="flex items-center gap-2">
+                  {!job.lastRun ? (
+                    <span className="badge badge-ghost badge-xs">never</span>
+                  ) : job.lastStatus === "succeeded" ? (
+                    <span className="badge badge-success badge-xs">OK</span>
+                  ) : job.lastStatus === "failed" ? (
+                    <span className="badge badge-error badge-xs">FAIL</span>
+                  ) : (
+                    <span className="badge badge-ghost badge-xs">{job.lastStatus}</span>
+                  )}
+                  {job.active ? (
+                    <span className="text-success text-xs">✓</span>
+                  ) : (
+                    <span className="text-error text-xs">✗</span>
+                  )}
+                </div>
+              </div>
+              <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-sm">
+                <div><span className="text-base-content/50">Schedule:</span> <span className="font-mono text-xs">{job.schedule}</span></div>
+                <div><span className="text-base-content/50">Last Run:</span> <span className="text-xs">{job.lastRun ? timeAgo(job.lastRun) : "Never"}</span></div>
+              </div>
+            </div>
+          ))}
         </div>
       </div>
     </div>
@@ -390,7 +421,7 @@ function FillPollerCard({ data }) {
           <span className="text-xl">📡</span> Fill Poller
           <StatusDot status={data.isRunning ? "healthy" : data.status === "idle" ? "idle" : data.status} />
         </h3>
-        <div className="grid grid-cols-3 gap-3 mt-2">
+        <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 mt-2">
           <div>
             <div className={`text-lg font-bold ${data.isRunning ? "text-success" : "text-base-content/40"}`}>
               {data.isRunning ? "Running" : "Idle"}
@@ -401,7 +432,7 @@ function FillPollerCard({ data }) {
             <div className="text-lg font-bold">{data.activePollers ?? 0}</div>
             <div className="text-xs text-base-content/50">Active Pollers</div>
           </div>
-          <div>
+          <div className="col-span-2 sm:col-span-1">
             <div className="text-sm font-semibold">
               {data.lastPollAt ? timeAgo(data.lastPollAt) : "N/A"}
             </div>

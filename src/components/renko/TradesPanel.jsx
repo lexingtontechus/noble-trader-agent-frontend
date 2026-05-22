@@ -352,30 +352,63 @@ export default function TradesPanel({ trades = [], state = {}, stats = {} }) {
               </span>
             </div>
           ) : (
-            <div className="overflow-x-auto max-h-96 overflow-y-auto" style={{ scrollbarWidth: "thin" }}>
-              <table className="table table-sm">
-                <thead>
-                  <tr>
-                    <th className="text-xs">Symbol</th>
-                    <th className="text-xs">Dir</th>
-                    <th className="text-xs">Entry</th>
-                    <th className="text-xs">Exit</th>
-                    <th className="text-xs">P&L (br)</th>
-                    <th className="text-xs">P&L ($)</th>
-                    <th className="text-xs">Status</th>
-                    <th className="text-xs">Reason</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {trades.map((trade, i) => (
-                    <TradeRow
-                      key={trade.id || trade.timestamp || i}
-                      trade={trade}
-                    />
-                  ))}
-                </tbody>
-              </table>
-            </div>
+            <>
+              {/* Desktop table */}
+              <div className="hidden sm:block overflow-x-auto max-h-96 overflow-y-auto" style={{ scrollbarWidth: "thin" }}>
+                <table className="table table-sm">
+                  <thead>
+                    <tr>
+                      <th className="text-xs">Symbol</th>
+                      <th className="text-xs">Dir</th>
+                      <th className="text-xs">Entry</th>
+                      <th className="text-xs">Exit</th>
+                      <th className="text-xs">P&L (br)</th>
+                      <th className="text-xs">P&L ($)</th>
+                      <th className="text-xs">Status</th>
+                      <th className="text-xs">Reason</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {trades.map((trade, i) => (
+                      <TradeRow
+                        key={trade.id || trade.timestamp || i}
+                        trade={trade}
+                      />
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+              {/* Mobile card list */}
+              <div className="sm:hidden space-y-2 max-h-96 overflow-y-auto">
+                {trades.map((trade, i) => {
+                  const isLong = trade.direction === "LONG" || trade.direction === "BUY";
+                  const pnlBricks = trade.pnl_bricks ?? 0;
+                  const pnlDollars = trade.pnl_dollars ?? 0;
+                  return (
+                    <div key={trade.id || trade.timestamp || i} className="card bg-base-300/50 p-3">
+                      <div className="flex justify-between items-start mb-2">
+                        <div className="flex items-center gap-2">
+                          <span className="font-mono font-bold text-sm">{trade.symbol || "—"}</span>
+                          <span className={`badge badge-xs ${isLong ? "badge-success" : "badge-error"}`}>
+                            {trade.direction || "—"}
+                          </span>
+                        </div>
+                        <span className={`font-mono text-sm font-bold ${pnlBricks >= 0 ? "text-success" : "text-error"}`}>
+                          {pnlBricks >= 0 ? "+" : ""}{pnlBricks} br
+                        </span>
+                      </div>
+                      <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-sm">
+                        <div><span className="text-base-content/50">Entry:</span> <span className="font-mono">{typeof trade.entry_price === "number" ? `$${trade.entry_price.toFixed(2)}` : "—"}</span></div>
+                        <div><span className="text-base-content/50">Exit:</span> <span className="font-mono">{typeof trade.exit_price === "number" ? `$${trade.exit_price.toFixed(2)}` : "—"}</span></div>
+                        <div><span className="text-base-content/50">P&L ($):</span> <span className={`font-mono ${pnlDollars >= 0 ? "text-success" : "text-error"}`}>{pnlDollars >= 0 ? "+" : ""}${Math.abs(pnlDollars).toFixed(2)}</span></div>
+                        <div><span className="text-base-content/50">Status:</span> <span className={`badge badge-xs ${trade.status === "closed" ? "badge-ghost" : trade.status === "open" ? "badge-info" : "badge-warning"}`}>{trade.status || "—"}</span></div>
+                        <div className="col-span-2"><span className="text-base-content/50">Reason:</span> <span className="text-base-content/50">{trade.close_reason || "—"}</span></div>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </>
           )}
         </div>
       </div>

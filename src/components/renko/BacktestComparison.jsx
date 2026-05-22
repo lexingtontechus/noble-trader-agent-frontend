@@ -234,7 +234,8 @@ export default function BacktestComparison({ result, symbol = "SPY" }) {
         <div className="card bg-base-200 shadow-lg">
           <div className="card-body p-4">
             <SectionHeader icon="📊" title="Delta: First Config vs Best (by Sharpe)" badge="Comparison" />
-            <div className="overflow-x-auto">
+            {/* Desktop table */}
+            <div className="hidden sm:block overflow-x-auto">
               <table className="table table-sm">
                 <thead>
                   <tr>
@@ -270,6 +271,29 @@ export default function BacktestComparison({ result, symbol = "SPY" }) {
                 </tbody>
               </table>
             </div>
+            {/* Mobile card list */}
+            <div className="sm:hidden space-y-2">
+              {diffKeys.map((key) => {
+                const d = diff[key];
+                const delta = d.delta ?? 0;
+                const isPositive = delta > 0;
+                const isNegative = delta < 0;
+                return (
+                  <div key={key} className="card bg-base-300/50 p-3">
+                    <div className="flex justify-between items-start mb-2">
+                      <span className="font-mono font-bold text-sm">{key}</span>
+                      <span className={`font-mono text-sm font-bold ${isPositive ? "text-success" : isNegative ? "text-error" : ""}`}>
+                        {isPositive ? "+" : ""}{typeof delta === "number" ? formatNum(delta) : String(delta ?? "—")}
+                      </span>
+                    </div>
+                    <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-sm">
+                      <div><span className="text-base-content/50">First:</span> <span className="font-mono">{typeof d.first === "number" ? formatNum(d.first) : String(d.first ?? "—")}</span></div>
+                      <div><span className="text-base-content/50">Best:</span> <span className="font-mono">{typeof d.best === "number" ? formatNum(d.best) : String(d.best ?? "—")}</span></div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
           </div>
         </div>
       )}
@@ -278,7 +302,8 @@ export default function BacktestComparison({ result, symbol = "SPY" }) {
       <div className="card bg-base-200 shadow-sm">
         <div className="card-body p-4">
           <SectionHeader icon="⚙️" title="Config Differences" badge="Side-by-side" />
-          <div className="overflow-x-auto">
+          {/* Desktop table */}
+          <div className="hidden sm:block overflow-x-auto">
             <table className="table table-sm">
               <thead>
                 <tr>
@@ -307,6 +332,33 @@ export default function BacktestComparison({ result, symbol = "SPY" }) {
                 })}
               </tbody>
             </table>
+          </div>
+          {/* Mobile card list */}
+          <div className="sm:hidden space-y-2">
+            {["brick_size", "sl_bricks", "tp_bricks", "trailing_stop", "trail_after_bricks", "trail_distance_bricks", "regime_gate", "max_trades_per_session", "bull_trigger_n", "bear_trigger_n"].map((param) => {
+              const values = comparisons.map((cmp) => cmp.config_used?.[param]);
+              const allSame = values.every((v) => v === values[0]);
+              return (
+                <div key={param} className={`card bg-base-300/50 p-3 ${allSame ? "opacity-40" : ""}`}>
+                  <div className="font-mono font-bold text-sm mb-2">{param}</div>
+                  <div className="space-y-1">
+                    {comparisons.map((cmp, i) => {
+                      const val = cmp.config_used?.[param];
+                      const label = cmp.config_used?.label || `Config ${String.fromCharCode(65 + i)}`;
+                      return (
+                        <div key={i} className="flex justify-between items-center text-sm">
+                          <span className="flex items-center gap-1.5">
+                            <span className="w-2 h-2 rounded-full" style={{ backgroundColor: CONFIG_COLORS[i % CONFIG_COLORS.length] }} />
+                            <span className="text-base-content/50">{label}</span>
+                          </span>
+                          <span className="font-mono">{typeof val === "boolean" ? (val ? "✓" : "✗") : String(val ?? "—")}</span>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              );
+            })}
           </div>
           <div className="text-[10px] text-base-content/30 mt-1">
             Greyed rows = same value across all configs

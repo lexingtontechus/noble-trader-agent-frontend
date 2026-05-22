@@ -423,7 +423,8 @@ export default function ParameterSweep({ result, symbol = "SPY", config = {} }) 
               {sigResults && Object.keys(sigResults).length > 0 && (
                 <div>
                   <div className="text-xs font-semibold text-base-content/70 mb-2">Strategy Significance Tests</div>
-                  <div className="overflow-x-auto">
+                  {/* Desktop table */}
+                  <div className="hidden sm:block overflow-x-auto">
                     <table className="table table-sm">
                       <thead>
                         <tr>
@@ -457,6 +458,26 @@ export default function ParameterSweep({ result, symbol = "SPY", config = {} }) 
                       </tbody>
                     </table>
                   </div>
+                  {/* Mobile card list */}
+                  <div className="sm:hidden space-y-2">
+                    {Object.entries(sigResults).map(([testName, testData]) => (
+                      <div key={testName} className="card bg-base-300/50 p-3">
+                        <div className="flex justify-between items-start mb-2">
+                          <span className="font-mono font-bold text-sm">{testName.replace(/_/g, " ")}</span>
+                          {testData.is_significant ? (
+                            <span className="badge badge-xs badge-success">Yes</span>
+                          ) : (
+                            <span className="badge badge-xs badge-error">No</span>
+                          )}
+                        </div>
+                        <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-sm">
+                          <div><span className="text-base-content/50">Statistic:</span> <span className="font-mono">{formatNum(testData.statistic, 4)}</span></div>
+                          <div><span className="text-base-content/50">P-Value:</span> <span className={`font-mono ${testData.p_value < 0.05 ? "text-success" : "text-error"}`}>{formatNum(testData.p_value, 4)}</span></div>
+                          <div><span className="text-base-content/50">Bootstraps:</span> <span className="font-mono text-base-content/40">{testData.n_bootstrap}</span></div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
                 </div>
               )}
             </div>
@@ -468,7 +489,8 @@ export default function ParameterSweep({ result, symbol = "SPY", config = {} }) 
       <div className="card bg-base-200 shadow-lg">
         <div className="card-body p-4">
           <SectionHeader icon="📋" title="All Combinations" badge={`${results.length} results`} />
-          <div className="overflow-x-auto max-h-96 overflow-y-auto" style={{ scrollbarWidth: "thin" }}>
+          {/* Desktop table */}
+          <div className="hidden sm:block overflow-x-auto max-h-96 overflow-y-auto" style={{ scrollbarWidth: "thin" }}>
             <table className="table table-sm">
               <thead>
                 <tr>
@@ -539,6 +561,46 @@ export default function ParameterSweep({ result, symbol = "SPY", config = {} }) 
                 })}
               </tbody>
             </table>
+          </div>
+          {/* Mobile card list */}
+          <div className="sm:hidden space-y-2 max-h-96 overflow-y-auto">
+            {results.map((r, i) => {
+              const isBestSharpe = best_by_sharpe && Object.entries(best_by_sharpe.params || {}).every(
+                ([k, v]) => r.params?.[k] === v
+              );
+              const isBestReturn = best_by_return && Object.entries(best_by_return.params || {}).every(
+                ([k, v]) => r.params?.[k] === v
+              );
+              return (
+                <div key={i} className={`card bg-base-300/50 p-3 ${isBestSharpe ? "border-l-2 border-primary" : ""} ${isBestReturn ? "border-l-2 border-success" : ""}`}>
+                  <div className="flex justify-between items-start mb-2">
+                    <span className="font-mono font-bold text-sm">
+                      #{i + 1}
+                      {isBestSharpe && <span className="text-primary ml-1">S</span>}
+                      {isBestReturn && <span className="text-success ml-1">R</span>}
+                    </span>
+                    <span className={`font-mono text-sm font-bold ${(r.total_pnl_bricks ?? 0) >= 0 ? "text-success" : "text-error"}`}>
+                      {formatNum(r.total_pnl_bricks ?? 0, 1)} br
+                    </span>
+                  </div>
+                  <div className="flex flex-wrap gap-1 mb-2">
+                    {sweptParams.map((p) => (
+                      <span key={p} className="badge badge-xs badge-outline font-mono">
+                        {p}: {typeof r.params?.[p] === "boolean" ? (r.params[p] ? "✓" : "✗") : String(r.params?.[p] ?? "—")}
+                      </span>
+                    ))}
+                  </div>
+                  <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-sm">
+                    <div><span className="text-base-content/50">Win Rate:</span> <span className={`font-mono ${(r.win_rate ?? 0) >= 0.5 ? "text-success" : "text-error"}`}>{formatNum((r.win_rate ?? 0) * 100, 1)}%</span></div>
+                    <div><span className="text-base-content/50">Sharpe:</span> <span className={`font-mono ${(r.sharpe_estimate ?? 0) >= 1 ? "text-success" : "text-warning"}`}>{formatNum(r.sharpe_estimate ?? 0)}</span></div>
+                    <div><span className="text-base-content/50">PF:</span> <span className={`font-mono ${(r.profit_factor ?? 0) >= 1 ? "text-success" : "text-error"}`}>{formatNum(r.profit_factor ?? 0)}</span></div>
+                    <div><span className="text-base-content/50">Max DD:</span> <span className="font-mono text-error">{formatNum(r.max_drawdown_bricks ?? 0, 1)}</span></div>
+                    <div><span className="text-base-content/50">Trades:</span> <span className="font-mono">{r.total_trades ?? "—"}</span></div>
+                    <div><span className="text-base-content/50">P-Value:</span> <span className={`font-mono ${(r.raw_p_value ?? 1) < 0.05 ? "text-success" : "text-base-content/40"}`}>{formatNum(r.raw_p_value ?? 1, 3)}</span></div>
+                  </div>
+                </div>
+              );
+            })}
           </div>
           <div className="text-[10px] text-base-content/30 mt-1">
             S = Best by Sharpe | R = Best by Return

@@ -394,7 +394,7 @@ export default function AuditLogViewer({ bffFetch }) {
 
         {/* Summary (for backend data source) */}
         {(dataSource === "backend" && summary) && (
-          <div className="grid grid-cols-3 gap-2 mt-2">
+          <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 mt-2">
             {Object.entries(summary).map(([period, counts]) => {
               const totalForPeriod = typeof counts === "object" ? Object.values(counts).reduce((a, b) => a + b, 0) : counts;
               return (

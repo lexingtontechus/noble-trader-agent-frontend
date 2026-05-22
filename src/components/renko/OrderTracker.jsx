@@ -387,21 +387,21 @@ export default function OrderTracker({ symbol }) {
         >
           <button
             role="tab"
-            className={`tab tab-sm ${subTab === "open" ? "tab-active" : ""}`}
+            className={`tab min-h-[36px] sm:tab-sm sm:min-h-0 ${subTab === "open" ? "tab-active" : ""}`}
             onClick={() => setSubTab("open")}
           >
             Open <span className="badge badge-xs ml-1">{openOrders.length}</span>
           </button>
           <button
             role="tab"
-            className={`tab tab-sm ${subTab === "filled" ? "tab-active" : ""}`}
+            className={`tab min-h-[36px] sm:tab-sm sm:min-h-0 ${subTab === "filled" ? "tab-active" : ""}`}
             onClick={() => setSubTab("filled")}
           >
             Fills <span className="badge badge-xs ml-1">{filledOrders.length}</span>
           </button>
           <button
             role="tab"
-            className={`tab tab-sm ${subTab === "rejected" ? "tab-active" : ""}`}
+            className={`tab min-h-[36px] sm:tab-sm sm:min-h-0 ${subTab === "rejected" ? "tab-active" : ""}`}
             onClick={() => setSubTab("rejected")}
           >
             Rejected <span className="badge badge-xs ml-1">{rejectedOrders.length}</span>
@@ -425,7 +425,7 @@ export default function OrderTracker({ symbol }) {
           {/* Cancel all button */}
           {openOrders.length > 0 && (
             <button
-              className={`btn btn-sm btn-error btn-outline ${cancelling ? "btn-disabled" : ""}`}
+              className={`btn min-h-[44px] sm:btn-sm sm:min-h-0 btn-error btn-outline ${cancelling ? "btn-disabled" : ""}`}
               onClick={handleCancelAll}
               disabled={cancelling}
             >
@@ -442,7 +442,7 @@ export default function OrderTracker({ symbol }) {
 
           {/* Manual refresh */}
           <button
-            className="btn btn-sm btn-ghost"
+            className="btn min-h-[44px] sm:btn-sm sm:min-h-0 btn-ghost"
             onClick={() => fetchOrders(true)}
             disabled={loading}
           >
@@ -535,31 +535,71 @@ export default function OrderTracker({ symbol }) {
               </span>
             </div>
           ) : (
-            <div
-              className="overflow-x-auto max-h-96 overflow-y-auto"
-              style={{ scrollbarWidth: "thin" }}
-            >
-              <table className="table table-sm">
-                <thead>
-                  <tr>
-                    <th className="text-xs">Symbol</th>
-                    <th className="text-xs">Side</th>
-                    <th className="text-xs">Type</th>
-                    <th className="text-xs">Qty</th>
-                    <th className="text-xs">Fill</th>
-                    <th className="text-xs">Status</th>
-                    <th className="text-xs">Price</th>
-                    <th className="text-xs">Submitted</th>
-                    <th className="text-xs">Filled</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {displayOrders.map((order) => (
-                    <OrderRow key={order.id || order.client_order_id} order={order} />
-                  ))}
-                </tbody>
-              </table>
-            </div>
+            <>
+              {/* Desktop table */}
+              <div
+                className="hidden sm:block overflow-x-auto max-h-96 overflow-y-auto"
+                style={{ scrollbarWidth: "thin" }}
+              >
+                <table className="table table-sm">
+                  <thead>
+                    <tr>
+                      <th className="text-xs">Symbol</th>
+                      <th className="text-xs">Side</th>
+                      <th className="text-xs">Type</th>
+                      <th className="text-xs">Qty</th>
+                      <th className="text-xs">Fill</th>
+                      <th className="text-xs">Status</th>
+                      <th className="text-xs">Price</th>
+                      <th className="text-xs">Submitted</th>
+                      <th className="text-xs">Filled</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {displayOrders.map((order) => (
+                      <OrderRow key={order.id || order.client_order_id} order={order} />
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+
+              {/* Mobile card list */}
+              <div className="sm:hidden space-y-2 max-h-96 overflow-y-auto">
+                {displayOrders.map((order) => {
+                  const isBuy = (order.side || "").toLowerCase() === "buy";
+                  const sideBadge = isBuy ? "badge-success" : "badge-error";
+                  const statusBadge = STATUS_BADGE_MAP[order.status] || "badge-ghost";
+                  const statusLabel = STATUS_LABEL_MAP[order.status] || order.status;
+                  const filledQty = parseInt(order.filled_qty || "0", 10);
+                  const orderQty = parseInt(order.qty || "0", 10);
+                  const fillPct = orderQty > 0 ? Math.round((filledQty / orderQty) * 100) : 0;
+                  return (
+                    <div key={order.id || order.client_order_id} className="card bg-base-300/50 p-3">
+                      <div className="flex justify-between items-start mb-2">
+                        <span className="font-mono font-bold text-sm">{order.symbol || "—"}</span>
+                        <div className="flex gap-1 items-center">
+                          <span className={`badge badge-xs ${sideBadge}`}>
+                            {(order.side || "—").toUpperCase()}
+                          </span>
+                          <span className={`badge badge-xs ${statusBadge}`}>{statusLabel}</span>
+                          {order._renko?.isRenkoOrder && (
+                            <span className="badge badge-xs badge-outline">Renko</span>
+                          )}
+                        </div>
+                      </div>
+                      <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-sm">
+                        <div><span className="text-base-content/50">Type:</span> <span className="capitalize">{order.type || "—"}</span></div>
+                        <div><span className="text-base-content/50">Qty:</span> <span className="font-mono">{orderQty}{filledQty > 0 && filledQty < orderQty ? <span className="text-base-content/40"> / {filledQty}</span> : ""}</span></div>
+                        <div><span className="text-base-content/50">Fill:</span> <span className="font-mono">{fillPct}%</span></div>
+                        <div><span className="text-base-content/50">Price:</span> <span className="font-mono">{formatPrice(order.limit_price || order.filled_avg_price)}</span></div>
+                        <div><span className="text-base-content/50">Submitted:</span> <span className="text-xs">{formatTime(order.submitted_at)}</span></div>
+                        <div><span className="text-base-content/50">Filled:</span> <span className="text-xs">{order.filled_at ? formatTime(order.filled_at) : "—"}</span></div>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </>
           )}
         </div>
       </div>

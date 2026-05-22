@@ -218,7 +218,7 @@ export default function EvolutionPanel() {
           <h3 className="font-bold">Failed to Load Evolution Data</h3>
           <div className="text-xs mt-1">{error}</div>
         </div>
-        <button className="btn btn-sm btn-ghost" onClick={fetchSummary}>
+        <button className="btn min-h-[44px] sm:min-h-0 sm:btn-sm btn-ghost" onClick={fetchSummary}>
           <IconRefresh size={14} /> Retry
         </button>
       </div>
@@ -233,7 +233,7 @@ export default function EvolutionPanel() {
           <IconDNA size={32} className="text-base-content/30" />
         </div>
         <div className="text-base-content/50 text-sm">No evolution data available</div>
-        <button className="btn btn-sm btn-primary gap-1" onClick={fetchSummary}>
+        <button className="btn min-h-[44px] sm:min-h-0 sm:btn-sm btn-primary gap-1" onClick={fetchSummary}>
           <IconRefresh size={14} /> Refresh
         </button>
       </div>
@@ -289,7 +289,7 @@ export default function EvolutionPanel() {
               </div>
 
               {/* Key Params */}
-              <div className="grid grid-cols-3 gap-3">
+              <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
                 <div className="bg-base-300/30 rounded-lg p-2.5">
                   <div className="text-xs text-base-content/40">Kelly Fraction</div>
                   <div className="font-mono font-bold text-sm">
@@ -370,7 +370,8 @@ export default function EvolutionPanel() {
               <h3 className="font-semibold text-sm">Strategy Variants</h3>
               <span className="badge badge-xs badge-ghost ml-auto">{variants.length} total</span>
             </div>
-            <div className="overflow-x-auto">
+            {/* Variant Table — Desktop */}
+            <div className="hidden sm:block overflow-x-auto">
               <table className="table table-sm">
                 <thead>
                   <tr>
@@ -442,6 +443,51 @@ export default function EvolutionPanel() {
                   })}
                 </tbody>
               </table>
+            </div>
+
+            {/* Variant Cards — Mobile */}
+            <div className="sm:hidden space-y-2 max-h-96 overflow-y-auto">
+              {variants.map((v) => {
+                const score = v.scoreComposite
+                const sharpe = v.scoreSharpe
+                const winRate = v.scoreWinRate
+                const maxDd = v.scoreMaxDd
+                const trades = v.totalTrades || 0
+                return (
+                  <div key={v.id} className={`card p-3 ${v.isActive ? 'bg-primary/10' : 'bg-base-200'}`}>
+                    <div className="flex justify-between items-start mb-2">
+                      <span className="font-bold font-mono">{v.name || '---'}</span>
+                      {v.isActive ? (
+                        <span className="badge badge-xs badge-success gap-1">
+                          <span className="w-1.5 h-1.5 rounded-full bg-success animate-pulse"></span>
+                          Active
+                        </span>
+                      ) : v.isDefault ? (
+                        <span className="badge badge-xs badge-outline">Default</span>
+                      ) : (
+                        <span className="badge badge-xs badge-ghost">Inactive</span>
+                      )}
+                    </div>
+                    <div className="flex items-center gap-2 mb-2">
+                      <progress
+                        className={`progress flex-1 ${scoreProgressClass(score)}`}
+                        value={score ?? 0}
+                        max="1"
+                      />
+                      <span className={`font-mono text-sm font-bold ${scoreColorClass(score)}`}>
+                        {scoreDisplay(score)}
+                      </span>
+                    </div>
+                    <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-sm">
+                      <div><span className="text-base-content/50">Gen:</span> <span className="badge badge-xs badge-ghost">{v.generation || 0}</span></div>
+                      <div><span className="text-base-content/50">Trades:</span> <span className="font-mono">{trades}</span></div>
+                      <div><span className="text-base-content/50">Sharpe:</span> <span className="font-mono">{sharpe != null ? sharpe.toFixed(3) : '---'}</span></div>
+                      <div><span className="text-base-content/50">WR:</span> <span className={`font-mono ${winRate != null ? (winRate > 0.5 ? 'text-success' : winRate > 0.35 ? 'text-warning' : 'text-error') : ''}`}>{winRate != null ? (winRate * 100).toFixed(1) + '%' : '---'}</span></div>
+                      <div><span className="text-base-content/50">Max DD:</span> <span className={`font-mono ${maxDd != null ? (maxDd > 0.35 ? 'text-error' : maxDd > 0.2 ? 'text-warning' : 'text-success') : ''}`}>{maxDd != null ? (maxDd * 100).toFixed(1) + '%' : '---'}</span></div>
+                    </div>
+                  </div>
+                )
+              })}
             </div>
           </div>
         </div>
@@ -610,7 +656,7 @@ export default function EvolutionPanel() {
                 />
               </div>
               <button
-                className="btn btn-primary btn-sm gap-1.5 min-w-[140px]"
+                className="btn btn-primary min-h-[44px] sm:min-h-0 sm:btn-sm gap-1.5 min-w-[140px]"
                 onClick={handleOptimize}
                 disabled={optimizing || !optimizeSymbol.trim()}
               >
@@ -630,7 +676,7 @@ export default function EvolutionPanel() {
 
             {/* Check Rotation */}
             <button
-              className="btn btn-secondary btn-sm gap-1.5"
+              className="btn btn-secondary min-h-[44px] sm:min-h-0 sm:btn-sm gap-1.5"
               onClick={handleRotate}
               disabled={rotating}
             >
@@ -649,7 +695,7 @@ export default function EvolutionPanel() {
 
             {/* Refresh */}
             <button
-              className="btn btn-ghost btn-sm gap-1.5"
+              className="btn btn-ghost min-h-[44px] sm:min-h-0 sm:btn-sm gap-1.5"
               onClick={fetchSummary}
             >
               <IconRefresh size={14} />

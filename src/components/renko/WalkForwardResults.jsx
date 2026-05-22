@@ -201,7 +201,8 @@ export default function WalkForwardResults({ result, symbol = "SPY" }) {
         <div className="card bg-base-200 shadow-lg">
           <div className="card-body p-4">
             <SectionHeader icon="📋" title="Per-Window Results" badge={`${windows.length} windows`} />
-            <div className="overflow-x-auto max-h-96 overflow-y-auto" style={{ scrollbarWidth: "thin" }}>
+            {/* Desktop table */}
+            <div className="hidden sm:block overflow-x-auto max-h-96 overflow-y-auto" style={{ scrollbarWidth: "thin" }}>
               <table className="table table-sm">
                 <thead>
                   <tr>
@@ -252,6 +253,37 @@ export default function WalkForwardResults({ result, symbol = "SPY" }) {
                   })}
                 </tbody>
               </table>
+            </div>
+            {/* Mobile card list */}
+            <div className="sm:hidden space-y-2 max-h-96 overflow-y-auto">
+              {windows.map((w, i) => {
+                const isPnl = w.is_pnl_bricks ?? w.is_stats?.total_pnl_bricks ?? 0;
+                const oosPnl = w.oos_pnl_bricks ?? w.oos_stats?.total_pnl_bricks ?? 0;
+                const isSharpe = w.is_sharpe ?? w.is_stats?.sharpe_estimate ?? 0;
+                const oosSharpe = w.oos_sharpe ?? w.oos_stats?.sharpe_estimate ?? 0;
+                const isTrades = w.is_trades ?? w.is_stats?.total_trades ?? 0;
+                const oosTrades = w.oos_trades ?? w.oos_stats?.total_trades ?? 0;
+                return (
+                  <div key={i} className={`card bg-base-300/50 p-3 ${oosPnl < 0 ? "opacity-70" : ""}`}>
+                    <div className="flex justify-between items-start mb-2">
+                      <span className="font-mono font-bold text-sm">Window {i + 1}</span>
+                      <div className="flex gap-2">
+                        <span className={`font-mono text-xs ${oosPnl >= 0 ? "text-success" : "text-error"}`}>
+                          OOS: {oosPnl >= 0 ? "+" : ""}{formatNum(oosPnl, 2)} br
+                        </span>
+                      </div>
+                    </div>
+                    <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-sm">
+                      <div><span className="text-base-content/50">IS P&L:</span> <span className={`font-mono ${isPnl >= 0 ? "text-success" : "text-error"}`}>{isPnl >= 0 ? "+" : ""}{formatNum(isPnl, 2)}</span></div>
+                      <div><span className="text-base-content/50">OOS P&L:</span> <span className={`font-mono ${oosPnl >= 0 ? "text-success" : "text-error"}`}>{oosPnl >= 0 ? "+" : ""}{formatNum(oosPnl, 2)}</span></div>
+                      <div><span className="text-base-content/50">IS Sharpe:</span> <span className={`font-mono ${isSharpe >= 1 ? "text-success" : isSharpe >= 0 ? "text-warning" : "text-error"}`}>{formatNum(isSharpe)}</span></div>
+                      <div><span className="text-base-content/50">OOS Sharpe:</span> <span className={`font-mono ${oosSharpe >= 1 ? "text-success" : oosSharpe >= 0 ? "text-warning" : "text-error"}`}>{formatNum(oosSharpe)}</span></div>
+                      <div><span className="text-base-content/50">IS Trades:</span> <span className="font-mono">{isTrades}</span></div>
+                      <div><span className="text-base-content/50">OOS Trades:</span> <span className="font-mono">{oosTrades}</span></div>
+                    </div>
+                  </div>
+                );
+              })}
             </div>
           </div>
         </div>

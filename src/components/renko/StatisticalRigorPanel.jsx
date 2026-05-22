@@ -121,7 +121,8 @@ function BootstrapCITable({ bootstrapCI }) {
           <span className="badge badge-xs badge-ghost">Phase 6B</span>
         </div>
 
-        <div className="overflow-x-auto">
+        {/* Desktop table */}
+        <div className="hidden sm:block overflow-x-auto">
           <table className="table table-xs">
             <thead>
               <tr>
@@ -178,6 +179,29 @@ function BootstrapCITable({ bootstrapCI }) {
               })}
             </tbody>
           </table>
+        </div>
+        {/* Mobile card list */}
+        <div className="sm:hidden space-y-2">
+          {metrics.map(([key, ci]) => {
+            const pctCI = ci.percentile_ci || ci.percentile || {};
+            const blockCI = ci.circular_block_ci || ci.circular_block || {};
+            const label = metricLabels[key] || key.replace(/_/g, " ");
+            return (
+              <div key={key} className="card bg-base-300/50 p-3">
+                <div className="flex justify-between items-start mb-2">
+                  <span className="font-bold text-sm">{label}</span>
+                  <span className="badge badge-xs badge-ghost">{fmtPct(ci.confidence_level, 0)}</span>
+                </div>
+                <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-sm">
+                  <div><span className="text-base-content/50">Point Est.:</span> <span className="font-mono">{fmt(ci.point_estimate, 4)}</span></div>
+                  <div><span className="text-base-content/50">Pct CI:</span> <span className="font-mono text-xs">{pctCI.lower != null ? `[${fmt(pctCI.lower, 3)}, ${fmt(pctCI.upper, 3)}]` : "\u2014"}</span></div>
+                  <div><span className="text-base-content/50">Pct SE:</span> <span className="font-mono text-xs">{pctCI.se != null ? fmt(pctCI.se, 4) : "\u2014"}</span></div>
+                  <div><span className="text-base-content/50">Block CI:</span> <span className="font-mono text-xs">{blockCI.lower != null ? `[${fmt(blockCI.lower, 3)}, ${fmt(blockCI.upper, 3)}]` : "\u2014"}</span></div>
+                  <div><span className="text-base-content/50">Block SE:</span> <span className="font-mono text-xs">{blockCI.se != null ? fmt(blockCI.se, 4) : "\u2014"}</span></div>
+                </div>
+              </div>
+            );
+          })}
         </div>
 
         <div className="text-[10px] text-base-content/40 mt-2">
@@ -243,47 +267,81 @@ function MultipleTestingCard({ multipleTesting }) {
 
         {/* Methods table */}
         {methods.length > 0 && (
-          <div className="overflow-x-auto">
-            <table className="table table-xs">
-              <thead>
-                <tr>
-                  <th>Method</th>
-                  <th className="text-right">N Tests</th>
-                  <th className="text-right">Alpha</th>
-                  <th className="text-right">N Significant</th>
-                  <th className="text-right">Adjusted P-Values</th>
-                  {methods.some((m) => m.data.fdr_threshold != null) && (
-                    <th className="text-right">FDR Threshold</th>
-                  )}
-                </tr>
-              </thead>
-              <tbody>
-                {methods.map(({ key, label, data }) => (
-                  <tr key={key}>
-                    <td className="font-medium">{label}</td>
-                    <td className="text-right font-mono">{data.n_tests ?? "\u2014"}</td>
-                    <td className="text-right font-mono">{data.alpha ?? "\u2014"}</td>
-                    <td className="text-right font-mono">
-                      {data.n_significant ?? data.significant_count ?? "\u2014"}
-                    </td>
-                    <td className="text-right font-mono text-xs">
-                      {(data.adjusted_p_values || data.corrected_p_values || [])
-                        .slice(0, 5)
-                        .map((p, i) => fmt(p, 3))
-                        .join(", ")}
-                      {(data.adjusted_p_values || data.corrected_p_values || []).length > 5 &&
-                        ` +${(data.adjusted_p_values || data.corrected_p_values).length - 5} more`}
-                    </td>
+          <>
+            {/* Desktop table */}
+            <div className="hidden sm:block overflow-x-auto">
+              <table className="table table-xs">
+                <thead>
+                  <tr>
+                    <th>Method</th>
+                    <th className="text-right">N Tests</th>
+                    <th className="text-right">Alpha</th>
+                    <th className="text-right">N Significant</th>
+                    <th className="text-right">Adjusted P-Values</th>
                     {methods.some((m) => m.data.fdr_threshold != null) && (
-                      <td className="text-right font-mono text-xs">
-                        {data.fdr_threshold != null ? fmt(data.fdr_threshold, 3) : "\u2014"}
-                      </td>
+                      <th className="text-right">FDR Threshold</th>
                     )}
                   </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+                </thead>
+                <tbody>
+                  {methods.map(({ key, label, data }) => (
+                    <tr key={key}>
+                      <td className="font-medium">{label}</td>
+                      <td className="text-right font-mono">{data.n_tests ?? "\u2014"}</td>
+                      <td className="text-right font-mono">{data.alpha ?? "\u2014"}</td>
+                      <td className="text-right font-mono">
+                        {data.n_significant ?? data.significant_count ?? "\u2014"}
+                      </td>
+                      <td className="text-right font-mono text-xs">
+                        {(data.adjusted_p_values || data.corrected_p_values || [])
+                          .slice(0, 5)
+                          .map((p, i) => fmt(p, 3))
+                          .join(", ")}
+                        {(data.adjusted_p_values || data.corrected_p_values || []).length > 5 &&
+                          ` +${(data.adjusted_p_values || data.corrected_p_values).length - 5} more`}
+                      </td>
+                      {methods.some((m) => m.data.fdr_threshold != null) && (
+                        <td className="text-right font-mono text-xs">
+                          {data.fdr_threshold != null ? fmt(data.fdr_threshold, 3) : "\u2014"}
+                        </td>
+                      )}
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+            {/* Mobile card list */}
+            <div className="sm:hidden space-y-2">
+              {methods.map(({ key, label, data }) => (
+                <div key={key} className="card bg-base-300/50 p-3">
+                  <div className="flex justify-between items-start mb-2">
+                    <span className="font-bold text-sm">{label}</span>
+                    <span className="badge badge-xs badge-ghost">{data.n_tests ?? "\u2014"} tests</span>
+                  </div>
+                  <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-sm">
+                    <div><span className="text-base-content/50">Alpha:</span> <span className="font-mono">{data.alpha ?? "\u2014"}</span></div>
+                    <div><span className="text-base-content/50">Significant:</span> <span className={`font-mono font-bold ${(data.n_significant ?? data.significant_count ?? 0) > 0 ? "text-success" : "text-error"}`}>{data.n_significant ?? data.significant_count ?? "\u2014"}</span></div>
+                    {(data.adjusted_p_values || data.corrected_p_values || []).length > 0 && (
+                      <div className="col-span-2">
+                        <span className="text-base-content/50">Adj. P-Values:</span>{" "}
+                        <span className="font-mono text-xs">
+                          {(data.adjusted_p_values || data.corrected_p_values || [])
+                            .slice(0, 3)
+                            .map((p, i) => fmt(p, 3))
+                            .join(", ")}
+                          {(data.adjusted_p_values || data.corrected_p_values || []).length > 3 &&
+                            ` +${(data.adjusted_p_values || data.corrected_p_values).length - 3} more`}
+                        </span>
+                      </div>
+                    )}
+                    {data.fdr_threshold != null && (
+                      <div><span className="text-base-content/50">FDR Threshold:</span> <span className="font-mono">{fmt(data.fdr_threshold, 3)}</span></div>
+                    )}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </>
         )}
 
         {summary?.interpretation && (

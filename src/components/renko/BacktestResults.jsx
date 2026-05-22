@@ -42,45 +42,77 @@ function CostBreakdown({ costSummary }) {
   if (items.length === 0) return null;
 
   return (
-    <div className="overflow-x-auto">
-      <table className="table table-xs">
-        <thead>
-          <tr>
-            <th>Cost Type</th>
-            <th className="text-right">Amount ($)</th>
-            <th className="text-right">% of Total</th>
-          </tr>
-        </thead>
-        <tbody>
-          {items.map((item) => (
-            <tr key={item.label}>
-              <td className={item.color}>{item.label}</td>
-              <td className="text-right font-mono">${item.value?.toFixed(2)}</td>
-              <td className="text-right font-mono">
-                {costSummary.total_all_costs > 0
-                  ? ((item.value / costSummary.total_all_costs) * 100).toFixed(1)
-                  : 0}%
-              </td>
-            </tr>
-          ))}
-          <tr className="font-bold border-t">
-            <td>Total Costs</td>
-            <td className="text-right font-mono">
-              ${costSummary.total_all_costs?.toFixed(2)}
-            </td>
-            <td className="text-right font-mono">100%</td>
-          </tr>
-          {costSummary.total_cost_pct_of_pnl > 0 && (
+    <>
+      {/* Desktop table */}
+      <div className="hidden sm:block overflow-x-auto">
+        <table className="table table-xs">
+          <thead>
             <tr>
-              <td colSpan={3} className="text-xs text-base-content/60">
-                Costs = {costSummary.total_cost_pct_of_pnl?.toFixed(1)}% of
-                gross P&amp;L
-              </td>
+              <th>Cost Type</th>
+              <th className="text-right">Amount ($)</th>
+              <th className="text-right">% of Total</th>
             </tr>
-          )}
-        </tbody>
-      </table>
-    </div>
+          </thead>
+          <tbody>
+            {items.map((item) => (
+              <tr key={item.label}>
+                <td className={item.color}>{item.label}</td>
+                <td className="text-right font-mono">${item.value?.toFixed(2)}</td>
+                <td className="text-right font-mono">
+                  {costSummary.total_all_costs > 0
+                    ? ((item.value / costSummary.total_all_costs) * 100).toFixed(1)
+                    : 0}%
+                </td>
+              </tr>
+            ))}
+            <tr className="font-bold border-t">
+              <td>Total Costs</td>
+              <td className="text-right font-mono">
+                ${costSummary.total_all_costs?.toFixed(2)}
+              </td>
+              <td className="text-right font-mono">100%</td>
+            </tr>
+            {costSummary.total_cost_pct_of_pnl > 0 && (
+              <tr>
+                <td colSpan={3} className="text-xs text-base-content/60">
+                  Costs = {costSummary.total_cost_pct_of_pnl?.toFixed(1)}% of
+                  gross P&amp;L
+                </td>
+              </tr>
+            )}
+          </tbody>
+        </table>
+      </div>
+      {/* Mobile card list */}
+      <div className="sm:hidden space-y-2">
+        {items.map((item) => (
+          <div key={item.label} className="card bg-base-300/50 p-3">
+            <div className="flex justify-between items-center">
+              <span className={`font-medium text-sm ${item.color}`}>{item.label}</span>
+              <span className="font-mono text-sm">${item.value?.toFixed(2)}</span>
+            </div>
+            <div className="w-full bg-base-300 rounded-full h-2 mt-1.5">
+              <div
+                className="h-2 rounded-full bg-info/70"
+                style={{ width: `${Math.min(costSummary.total_all_costs > 0 ? (item.value / costSummary.total_all_costs) * 100 : 0, 100)}%` }}
+              />
+            </div>
+            <div className="text-[10px] text-base-content/40 text-right">
+              {costSummary.total_all_costs > 0 ? ((item.value / costSummary.total_all_costs) * 100).toFixed(1) : 0}% of total
+            </div>
+          </div>
+        ))}
+        <div className="flex justify-between font-bold text-sm px-1 pt-1 border-t border-base-300">
+          <span>Total Costs</span>
+          <span className="font-mono">${costSummary.total_all_costs?.toFixed(2)}</span>
+        </div>
+        {costSummary.total_cost_pct_of_pnl > 0 && (
+          <div className="text-xs text-base-content/60 px-1">
+            Costs = {costSummary.total_cost_pct_of_pnl?.toFixed(1)}% of gross P&amp;L
+          </div>
+        )}
+      </div>
+    </>
   );
 }
 
@@ -197,7 +229,8 @@ export default function BacktestResults({
             )}
 
             {/* Results table */}
-            <div className="overflow-x-auto">
+            {/* Desktop table */}
+            <div className="hidden sm:block overflow-x-auto">
               <table className="table table-xs">
                 <thead>
                   <tr>
@@ -240,6 +273,29 @@ export default function BacktestResults({
                 </tbody>
               </table>
             </div>
+            {/* Mobile card list */}
+            <div className="sm:hidden space-y-2">
+              {optimizeResult.results?.slice(0, 20).map((r, i) => (
+                <div key={i} className={`card bg-base-300/50 p-3 ${i === 0 ? "border-l-2 border-primary" : ""}`}>
+                  <div className="flex justify-between items-start mb-2">
+                    <span className="font-mono font-bold text-sm">#{i + 1}</span>
+                    <span className={`font-mono text-sm font-bold ${r.total_pnl_bricks >= 0 ? "text-success" : "text-error"}`}>
+                      {r.total_pnl_bricks?.toFixed(2)} br
+                    </span>
+                  </div>
+                  <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-sm">
+                    <div><span className="text-base-content/50">Brick:</span> <span className="font-mono">{r.brick_size}</span></div>
+                    <div><span className="text-base-content/50">SL:</span> <span className="font-mono">{r.sl_bricks}</span></div>
+                    <div><span className="text-base-content/50">TP:</span> <span className="font-mono">{r.tp_bricks}</span></div>
+                    <div><span className="text-base-content/50">Trades:</span> <span className="font-mono">{r.total_trades}</span></div>
+                    <div><span className="text-base-content/50">WR:</span> <span className="font-mono">{(r.win_rate * 100).toFixed(1)}%</span></div>
+                    <div><span className="text-base-content/50">Sharpe:</span> <span className="font-mono">{r.sharpe?.toFixed(2)}</span></div>
+                    <div><span className="text-base-content/50">Bonf p:</span> <span className="font-mono">{r.bonferroni_adjusted_p?.toFixed(3) || "\u2014"}</span></div>
+                    <div><span className="text-base-content/50">BH p:</span> <span className="font-mono">{r.bh_adjusted_p?.toFixed(3) || "\u2014"}</span></div>
+                  </div>
+                </div>
+              ))}
+            </div>
           </div>
         </div>
 
@@ -279,7 +335,7 @@ export default function BacktestResults({
         {RESULT_TABS.map((tab) => (
           <button
             key={tab.key}
-            className={`tab tab-sm ${activeTab === tab.key ? "tab-active" : ""}`}
+            className={`tab min-h-[36px] sm:tab-sm sm:min-h-0 ${activeTab === tab.key ? "tab-active" : ""}`}
             onClick={() => setActiveTab(tab.key)}
           >
             {tab.icon} {tab.label}

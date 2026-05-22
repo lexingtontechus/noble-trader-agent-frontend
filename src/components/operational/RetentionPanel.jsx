@@ -83,7 +83,7 @@ export default function RetentionPanel() {
   return (
     <div className="space-y-6">
       {/* Header */}
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between flex-wrap gap-2">
         <div>
           <h2 className="text-2xl font-bold">Audit Log Archival & Retention</h2>
           <p className="text-sm text-base-content/60">
@@ -92,14 +92,14 @@ export default function RetentionPanel() {
         </div>
         <div className="flex gap-2">
           <button
-            className="btn btn-sm btn-outline"
+            className="btn btn-sm btn-outline min-h-[44px] sm:min-h-0"
             onClick={fetchStatus}
             disabled={loading}
           >
             {loading ? "Loading..." : "Refresh"}
           </button>
           <button
-            className="btn btn-sm btn-primary"
+            className="btn btn-sm btn-primary min-h-[44px] sm:min-h-0"
             onClick={runRetention}
             disabled={running}
           >
@@ -112,7 +112,8 @@ export default function RetentionPanel() {
       <div className="card bg-base-200">
         <div className="card-body">
           <h3 className="card-title text-lg">Retention Policies</h3>
-          <div className="overflow-x-auto">
+          {/* Desktop Table */}
+          <div className="hidden sm:block overflow-x-auto">
             <table className="table table-sm">
               <thead>
                 <tr>
@@ -143,6 +144,27 @@ export default function RetentionPanel() {
                 ))}
               </tbody>
             </table>
+          </div>
+          {/* Mobile Cards */}
+          <div className="sm:hidden space-y-2">
+            {status?.status && Object.entries(status.status).map(([table, info]) => (
+              <div key={table} className="card bg-base-300 p-3">
+                <div className="flex justify-between items-start mb-2">
+                  <span className="font-mono font-bold text-sm">{table}</span>
+                  {info.gdprPurgeSupported ? (
+                    <span className="badge badge-success badge-xs">GDPR</span>
+                  ) : (
+                    <span className="badge badge-ghost badge-xs">No GDPR</span>
+                  )}
+                </div>
+                <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-sm">
+                  <div><span className="text-base-content/50">Hot Records:</span> <span className="font-mono">{info.hotRecords ?? "—"}</span></div>
+                  <div><span className="text-base-content/50">Archive Records:</span> <span className="font-mono">{info.archiveRecords ?? "—"}</span></div>
+                  <div><span className="text-base-content/50">Hot Retention:</span> {info.hotRetentionDays ? `${info.hotRetentionDays}d` : "—"}</div>
+                  <div><span className="text-base-content/50">Archive Retention:</span> {info.archiveRetentionDays ? `${info.archiveRetentionDays}d` : "—"}</div>
+                </div>
+              </div>
+            ))}
           </div>
         </div>
       </div>
@@ -177,7 +199,7 @@ export default function RetentionPanel() {
                 <span className="label-text text-xs">Reason</span>
               </label>
               <select
-                className="select select-sm select-bordered"
+                className="select select-sm select-bordered min-h-[44px] sm:min-h-0"
                 value={gdprReason}
                 onChange={(e) => setGdprReason(e.target.value)}
               >
@@ -188,7 +210,7 @@ export default function RetentionPanel() {
               </select>
             </div>
             <button
-              className="btn btn-sm btn-error"
+              className="btn btn-sm btn-error min-h-[44px] sm:min-h-0"
               onClick={() => setShowGdprConfirm(true)}
               disabled={!gdprUserId.trim() || running}
             >
@@ -273,7 +295,7 @@ export default function RetentionPanel() {
             </p>
             <p>
               <strong>Auto-archival:</strong> A pg_cron job runs daily at 3 AM UTC to move old records from hot to cold
-              and purge expired archives. The "Run Retention Jobs" button triggers this manually.
+              and purge expired archives. The &quot;Run Retention Jobs&quot; button triggers this manually.
             </p>
             <p>
               <strong>GDPR compliance:</strong> All tables with gdprPurge=true support per-user erasure.

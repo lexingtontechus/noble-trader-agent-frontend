@@ -270,7 +270,8 @@ function FinancingCostsCard({ financingCosts }) {
         </div>
 
         {/* Component breakdown table */}
-        <div className="overflow-x-auto">
+        {/* Desktop table */}
+        <div className="hidden sm:block overflow-x-auto">
           <table className="table table-xs">
             <thead>
               <tr>
@@ -345,6 +346,58 @@ function FinancingCostsCard({ financingCosts }) {
             </tbody>
           </table>
         </div>
+        {/* Mobile card list */}
+        <div className="sm:hidden space-y-2">
+          {(borrow.daily_borrow_cost != null || borrow.total_borrow_cost != null) && (
+            <div className="card bg-base-300/50 p-3">
+              <div className="flex justify-between items-center mb-1">
+                <span className="font-medium text-sm text-secondary">
+                  Borrow
+                  {borrow.is_hard_to_borrow && (
+                    <span className="badge badge-xs badge-error ml-1">HTB</span>
+                  )}
+                </span>
+                <span className="font-mono text-sm">{fmtDollars(borrow.total_borrow_cost)}</span>
+              </div>
+              <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-sm">
+                <div><span className="text-base-content/50">Daily:</span> <span className="font-mono">{fmtDollars(borrow.daily_borrow_cost)}</span></div>
+                <div><span className="text-base-content/50">Rate:</span> <span className="font-mono text-xs">{borrow.effective_annual_rate_bps != null ? fmtBps(borrow.effective_annual_rate_bps, 0) + "/yr" : "\u2014"}</span></div>
+              </div>
+            </div>
+          )}
+          {(margin.daily_margin_cost != null || margin.total_margin_cost != null) && (
+            <div className="card bg-base-300/50 p-3">
+              <div className="flex justify-between items-center mb-1">
+                <span className="font-medium text-sm text-secondary">Margin</span>
+                <span className="font-mono text-sm">{fmtDollars(margin.total_margin_cost)}</span>
+              </div>
+              <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-sm">
+                <div><span className="text-base-content/50">Daily:</span> <span className="font-mono">{fmtDollars(margin.daily_margin_cost)}</span></div>
+                <div><span className="text-base-content/50">Rate:</span> <span className="font-mono text-xs">{margin.margin_rate_bps != null ? fmtBps(margin.margin_rate_bps, 0) + "/yr" : "\u2014"}</span></div>
+              </div>
+            </div>
+          )}
+          {(dividend.daily_dividend_cost != null || dividend.total_dividend_cost != null) && (
+            <div className="card bg-base-300/50 p-3">
+              <div className="flex justify-between items-center mb-1">
+                <span className="font-medium text-sm text-secondary">Dividend (Short)</span>
+                <span className="font-mono text-sm">{fmtDollars(dividend.total_dividend_cost)}</span>
+              </div>
+              <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-sm">
+                <div><span className="text-base-content/50">Daily:</span> <span className="font-mono">{fmtDollars(dividend.daily_dividend_cost)}</span></div>
+                <div><span className="text-base-content/50">Rate:</span> <span className="font-mono text-xs">{dividend.dividend_yield_bps != null ? fmtBps(dividend.dividend_yield_bps, 0) + "/yr" : "\u2014"}</span></div>
+              </div>
+            </div>
+          )}
+          <div className="flex justify-between font-bold text-sm px-1 pt-1 border-t border-base-300">
+            <span>Total Financing</span>
+            <span className="font-mono text-error">{fmtDollars(financingCosts.total_financing_cost)}</span>
+          </div>
+          <div className="text-xs text-base-content/60 px-1">
+            Daily: {fmtDollars(financingCosts.daily_financing_cost)}
+            {financingCosts.financing_cost_bps_daily != null ? ` | ${fmtBps(financingCosts.financing_cost_bps_daily)}/day` : ""}
+          </div>
+        </div>
       </div>
     </div>
   );
@@ -381,7 +434,8 @@ function EnhancedCostBreakdown({ costSummary, fillStats }) {
           </span>
         </div>
 
-        <div className="overflow-x-auto">
+        {/* Desktop table */}
+        <div className="hidden sm:block overflow-x-auto">
           <table className="table table-xs">
             <thead>
               <tr>
@@ -439,6 +493,47 @@ function EnhancedCostBreakdown({ costSummary, fillStats }) {
               )}
             </tbody>
           </table>
+        </div>
+        {/* Mobile card list */}
+        <div className="sm:hidden space-y-2">
+          {items.map((item) => {
+            const pct =
+              costSummary.total_all_costs > 0
+                ? (item.value / costSummary.total_all_costs) * 100
+                : 0;
+            return (
+              <div key={item.label} className="card bg-base-300/50 p-3">
+                <div className="flex justify-between items-center">
+                  <span className={`font-medium text-sm ${item.color}`}>{item.label}</span>
+                  <span className="font-mono text-sm">{fmtDollars(item.value)}</span>
+                </div>
+                <div className="w-full bg-base-300 rounded-full h-2 mt-1.5">
+                  <div
+                    className={`h-2 rounded-full ${
+                      item.label === "Market Impact"
+                        ? "bg-error/70"
+                        : item.label === "Slippage" || item.label === "Spread"
+                        ? "bg-warning/70"
+                        : item.label.includes("Financing") || item.label === "Borrow" || item.label === "Margin" || item.label === "Dividend"
+                        ? "bg-secondary/70"
+                        : "bg-info/70"
+                    }`}
+                    style={{ width: `${Math.min(pct, 100)}%` }}
+                  />
+                </div>
+                <div className="text-[10px] text-base-content/40 text-right">{pct.toFixed(1)}% of total</div>
+              </div>
+            );
+          })}
+          <div className="flex justify-between font-bold text-sm px-1 pt-1 border-t border-base-300">
+            <span>Total Costs</span>
+            <span className="font-mono">{fmtDollars(costSummary.total_all_costs)}</span>
+          </div>
+          {costSummary.total_cost_pct_of_pnl > 0 && (
+            <div className="text-xs text-base-content/60 px-1">
+              Costs = {costSummary.total_cost_pct_of_pnl?.toFixed(1)}% of gross P&amp;L | Cost per trade: {fmtDollars(costSummary.cost_per_trade)}
+            </div>
+          )}
         </div>
 
         {/* Fill stats inline */}

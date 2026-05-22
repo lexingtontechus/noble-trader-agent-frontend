@@ -114,7 +114,7 @@ export default function CorrelationCard() {
             )}
           </h3>
           <button
-            className={`btn btn-sm btn-primary ${loading ? "loading" : ""}`}
+            className={`btn btn-primary min-h-[44px] sm:min-h-0 sm:btn-sm ${loading ? "loading" : ""}`}
             onClick={detect}
             disabled={loading}
           >
@@ -157,45 +157,72 @@ export default function CorrelationCard() {
               </div>
             </div>
 
-            {/* Correlation Heatmap */}
+            {/* Correlation Heatmap — Desktop */}
             {result.correlation_matrix && (
-              <div className="overflow-x-auto">
-                <table className="table table-xs">
-                  <thead>
-                    <tr>
-                      <th></th>
-                      {symbols.map((sym) => (
-                        <th key={sym} className="text-center font-mono text-xs">
-                          {sym}
-                        </th>
-                      ))}
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {symbols.map((sym1, i) => (
-                      <tr key={sym1}>
-                        <td className="font-mono text-xs font-semibold">
-                          {sym1}
-                        </td>
-                        {symbols.map((sym2, j) => {
-                          const val = result.correlation_matrix?.[i]?.[j] ?? 0;
-                          return (
-                            <td key={sym2} className="text-center p-1">
-                              <div
-                                className={`${getHeatColor(Math.abs(val))} rounded px-2 py-1`}
-                              >
-                                <span className="font-mono text-xs">
-                                  {val.toFixed(2)}
-                                </span>
-                              </div>
-                            </td>
-                          );
-                        })}
+              <>
+                <div className="hidden sm:block overflow-x-auto">
+                  <table className="table table-xs">
+                    <thead>
+                      <tr>
+                        <th></th>
+                        {symbols.map((sym) => (
+                          <th key={sym} className="text-center font-mono text-xs">
+                            {sym}
+                          </th>
+                        ))}
                       </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
+                    </thead>
+                    <tbody>
+                      {symbols.map((sym1, i) => (
+                        <tr key={sym1}>
+                          <td className="font-mono text-xs font-semibold">
+                            {sym1}
+                          </td>
+                          {symbols.map((sym2, j) => {
+                            const val = result.correlation_matrix?.[i]?.[j] ?? 0;
+                            return (
+                              <td key={sym2} className="text-center p-1">
+                                <div
+                                  className={`${getHeatColor(Math.abs(val))} rounded px-2 py-1`}
+                                >
+                                  <span className="font-mono text-xs">
+                                    {val.toFixed(2)}
+                                  </span>
+                                </div>
+                              </td>
+                            );
+                          })}
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+
+                {/* Correlation Pairs — Mobile */}
+                <div className="sm:hidden space-y-1">
+                  {(() => {
+                    const pairs = [];
+                    for (let i = 0; i < symbols.length; i++) {
+                      for (let j = i + 1; j < symbols.length; j++) {
+                        const val = result.correlation_matrix?.[i]?.[j];
+                        const numVal = typeof val === "number" ? val : parseFloat(val);
+                        if (!isNaN(numVal)) {
+                          pairs.push({ symbol1: symbols[i], symbol2: symbols[j], correlation: numVal });
+                        }
+                      }
+                    }
+                    pairs.sort((a, b) => Math.abs(b.correlation) - Math.abs(a.correlation));
+                    return pairs.map((pair, idx) => (
+                      <div key={idx} className="flex justify-between items-center p-2 bg-base-200 rounded">
+                        <span className="text-sm">{pair.symbol1} ↔ {pair.symbol2}</span>
+                        <span className={`badge badge-sm ${Math.abs(pair.correlation) > 0.7 ? 'badge-error' : Math.abs(pair.correlation) > 0.4 ? 'badge-warning' : 'badge-success'}`}>
+                          {pair.correlation.toFixed(2)}
+                        </span>
+                      </div>
+                    ));
+                  })()}
+                </div>
+              </>
             )}
           </>
         )}

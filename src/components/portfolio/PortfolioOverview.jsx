@@ -318,7 +318,7 @@ function CorrelationDetection({ symbols, positions, onCorrelationData }) {
             </div>
           </div>
           <button
-            className={`btn btn-sm btn-warning gap-1 ${loading ? "btn-disabled" : ""}`}
+            className={`btn btn-warning gap-1 min-h-[44px] sm:min-h-0 sm:btn-sm ${loading ? "btn-disabled" : ""}`}
             onClick={detect}
             disabled={loading || symbols.length < 2}
           >
@@ -436,48 +436,75 @@ function CorrelationDetection({ symbols, positions, onCorrelationData }) {
               </div>
             </div>
 
-            {/* Correlation Heatmap Table */}
+            {/* Correlation Heatmap Table — Desktop */}
             {data.correlation_matrix && (
-              <div className="overflow-x-auto">
-                <table className="table table-sm text-xs">
-                  <thead>
-                    <tr>
-                      <th></th>
-                      {symbols.map((s) => (
-                        <th key={s} className="text-center font-mono">
-                          {s}
-                        </th>
-                      ))}
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {symbols.map((rowSym, i) => (
-                      <tr key={rowSym}>
-                        <td className="font-mono font-medium">{rowSym}</td>
-                        {symbols.map((colSym, j) => {
-                          const val = data.correlation_matrix?.[i]?.[j];
-                          const numVal =
-                            typeof val === "number" ? val : parseFloat(val);
-                          return (
-                            <td
-                              key={colSym}
-                              className="text-center p-1"
-                            >
-                              <div
-                                className={`${isNaN(numVal) ? "" : getHeatColor(numVal)} rounded px-2 py-1`}
-                              >
-                                <span className="font-mono text-xs">
-                                  {isNaN(numVal) ? "—" : numVal.toFixed(2)}
-                                </span>
-                              </div>
-                            </td>
-                          );
-                        })}
+              <>
+                <div className="hidden sm:block overflow-x-auto">
+                  <table className="table table-sm text-xs">
+                    <thead>
+                      <tr>
+                        <th></th>
+                        {symbols.map((s) => (
+                          <th key={s} className="text-center font-mono">
+                            {s}
+                          </th>
+                        ))}
                       </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
+                    </thead>
+                    <tbody>
+                      {symbols.map((rowSym, i) => (
+                        <tr key={rowSym}>
+                          <td className="font-mono font-medium">{rowSym}</td>
+                          {symbols.map((colSym, j) => {
+                            const val = data.correlation_matrix?.[i]?.[j];
+                            const numVal =
+                              typeof val === "number" ? val : parseFloat(val);
+                            return (
+                              <td
+                                key={colSym}
+                                className="text-center p-1"
+                              >
+                                <div
+                                  className={`${isNaN(numVal) ? "" : getHeatColor(numVal)} rounded px-2 py-1`}
+                                >
+                                  <span className="font-mono text-xs">
+                                    {isNaN(numVal) ? "—" : numVal.toFixed(2)}
+                                  </span>
+                                </div>
+                              </td>
+                            );
+                          })}
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+
+                {/* Correlation Pairs — Mobile */}
+                <div className="sm:hidden space-y-1">
+                  {(() => {
+                    const pairs = [];
+                    for (let i = 0; i < symbols.length; i++) {
+                      for (let j = i + 1; j < symbols.length; j++) {
+                        const val = data.correlation_matrix?.[i]?.[j];
+                        const numVal = typeof val === "number" ? val : parseFloat(val);
+                        if (!isNaN(numVal)) {
+                          pairs.push({ symbol1: symbols[i], symbol2: symbols[j], correlation: numVal });
+                        }
+                      }
+                    }
+                    pairs.sort((a, b) => Math.abs(b.correlation) - Math.abs(a.correlation));
+                    return pairs.map((pair, idx) => (
+                      <div key={idx} className="flex justify-between items-center p-2 bg-base-200 rounded">
+                        <span className="text-sm">{pair.symbol1} ↔ {pair.symbol2}</span>
+                        <span className={`badge badge-sm ${Math.abs(pair.correlation) > 0.7 ? 'badge-error' : Math.abs(pair.correlation) > 0.4 ? 'badge-warning' : 'badge-success'}`}>
+                          {pair.correlation.toFixed(2)}
+                        </span>
+                      </div>
+                    ));
+                  })()}
+                </div>
+              </>
             )}
 
             {/* Summary Info */}
@@ -666,7 +693,7 @@ function PortfolioOptimizer({ positions, totalValue }) {
             </div>
           </div>
           <button
-            className={`btn btn-sm btn-warning gap-1 ${loading ? "btn-disabled" : ""}`}
+            className={`btn btn-warning gap-1 min-h-[44px] sm:min-h-0 sm:btn-sm ${loading ? "btn-disabled" : ""}`}
             onClick={optimize}
             disabled={loading || !positions || positions.length === 0}
           >

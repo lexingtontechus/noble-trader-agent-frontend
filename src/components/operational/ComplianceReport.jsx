@@ -67,6 +67,26 @@ function formatTimestamp(ts) {
   }
 }
 
+function formatDetails(evt) {
+  if (evt.order_id) {
+    return <span className="font-mono" title={evt.order_id}>{evt.order_id.slice(0, 8)}…</span>;
+  }
+  if (evt.metadata?.reason) {
+    return String(evt.metadata.reason).slice(0, 30);
+  }
+  if (evt.metadata?.error) {
+    return <span className="text-error">{String(evt.metadata.error).slice(0, 30)}</span>;
+  }
+  if (evt.metadata?.result) {
+    return (
+      <span className={evt.metadata.result === "allowed" ? "text-success" : "text-error"}>
+        {evt.metadata.result}
+      </span>
+    );
+  }
+  return "—";
+}
+
 export default function ComplianceReport() {
   const [report, setReport] = useState(null);
   const [loading, setLoading] = useState(false);
@@ -243,7 +263,7 @@ export default function ComplianceReport() {
                 </span>
               )}
               <button
-                className={`btn btn-sm ${fillPollActive ? "btn-warning" : "btn-outline btn-sm"}`}
+                className={`btn btn-sm min-h-[44px] sm:min-h-0 ${fillPollActive ? "btn-warning" : "btn-outline btn-sm"}`}
                 onClick={toggleFillPolling}
                 disabled={fillPollLoading}
               >
@@ -257,7 +277,7 @@ export default function ComplianceReport() {
               </button>
             </div>
             <button
-              className="btn btn-primary btn-sm"
+              className="btn btn-primary btn-sm min-h-[44px] sm:min-h-0"
               onClick={() => { fetchReport(); fetchAuditEvents(); }}
               disabled={loading}
             >
@@ -266,7 +286,7 @@ export default function ComplianceReport() {
               ) : "Refresh"}
             </button>
             {report && (
-              <button className="btn btn-sm btn-outline" onClick={handleExportCsv}>
+              <button className="btn btn-sm btn-outline min-h-[44px] sm:min-h-0" onClick={handleExportCsv}>
                 <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
                 Export CSV
               </button>
@@ -280,7 +300,7 @@ export default function ComplianceReport() {
             {DATE_PRESETS.map((p) => (
               <button
                 key={p.value}
-                className={`btn btn-xs join-item ${datePreset === p.value ? "btn-active btn-accent" : ""}`}
+                className={`btn btn-xs join-item min-h-[36px] sm:min-h-0 ${datePreset === p.value ? "btn-active btn-accent" : ""}`}
                 onClick={() => setDatePreset(p.value)}
               >
                 {p.label}
@@ -432,7 +452,7 @@ export default function ComplianceReport() {
             )}
           </h3>
           <button
-            className="btn btn-ghost btn-xs"
+            className="btn btn-ghost btn-xs min-h-[36px] sm:min-h-0"
             onClick={fetchAuditEvents}
             disabled={auditLoading}
           >
@@ -461,64 +481,79 @@ export default function ComplianceReport() {
         )}
 
         {auditEvents.length > 0 && (
-          <div className="mt-2 max-h-96 overflow-y-auto rounded-lg border border-base-300" style={{ scrollbarGutter: "stable" }}>
-            <table className="table table-xs w-full">
-              <thead className="sticky top-0 bg-base-200 z-10">
-                <tr>
-                  <th>Time</th>
-                  <th>Event</th>
-                  <th>Symbol</th>
-                  <th>Direction</th>
-                  <th>Qty</th>
-                  <th>Price</th>
-                  <th>Details</th>
-                </tr>
-              </thead>
-              <tbody>
-                {auditEvents.map((evt, i) => (
-                  <tr key={evt.id || i} className="hover">
-                    <td className="whitespace-nowrap text-xs opacity-70">
-                      {formatTimestamp(evt.created_at)}
-                    </td>
-                    <td>
+          <>
+            {/* Desktop Table */}
+            <div className="hidden sm:block mt-2 max-h-96 overflow-y-auto rounded-lg border border-base-300" style={{ scrollbarGutter: "stable" }}>
+              <table className="table table-xs w-full">
+                <thead className="sticky top-0 bg-base-200 z-10">
+                  <tr>
+                    <th>Time</th>
+                    <th>Event</th>
+                    <th>Symbol</th>
+                    <th>Direction</th>
+                    <th>Qty</th>
+                    <th>Price</th>
+                    <th>Details</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {auditEvents.map((evt, i) => (
+                    <tr key={evt.id || i} className="hover">
+                      <td className="whitespace-nowrap text-xs opacity-70">
+                        {formatTimestamp(evt.created_at)}
+                      </td>
+                      <td>
+                        <span className={`badge badge-xs ${eventBadgeClass(evt.event_type)}`}>
+                          {evt.event_type?.replace(/_/g, " ").toLowerCase()}
+                        </span>
+                      </td>
+                      <td className="font-mono text-xs">
+                        {evt.symbol || "—"}
+                      </td>
+                      <td className="text-xs">
+                        {evt.direction ? (
+                          <span className={evt.direction === "buy" ? "text-success" : "text-error"}>
+                            {evt.direction.toUpperCase()}
+                          </span>
+                        ) : "—"}
+                      </td>
+                      <td className="text-xs">{evt.quantity || "—"}</td>
+                      <td className="text-xs">{evt.price ? `$${evt.price}` : "—"}</td>
+                      <td className="text-xs max-w-32 truncate" title={JSON.stringify(evt.metadata || evt.risk_metrics || {})}>
+                        {formatDetails(evt)}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+            {/* Mobile Cards */}
+            <div className="sm:hidden mt-2 space-y-2 max-h-96 overflow-y-auto">
+              {auditEvents.map((evt, i) => (
+                <div key={evt.id || i} className="card bg-base-200 p-3">
+                  <div className="flex justify-between items-start mb-2">
+                    <div className="flex items-center gap-2 flex-wrap">
                       <span className={`badge badge-xs ${eventBadgeClass(evt.event_type)}`}>
                         {evt.event_type?.replace(/_/g, " ").toLowerCase()}
                       </span>
-                    </td>
-                    <td className="font-mono text-xs">
-                      {evt.symbol || "—"}
-                    </td>
-                    <td className="text-xs">
-                      {evt.direction ? (
-                        <span className={evt.direction === "buy" ? "text-success" : "text-error"}>
-                          {evt.direction.toUpperCase()}
-                        </span>
-                      ) : "—"}
-                    </td>
-                    <td className="text-xs">{evt.quantity || "—"}</td>
-                    <td className="text-xs">{evt.price ? `$${evt.price}` : "—"}</td>
-                    <td className="text-xs max-w-32 truncate" title={JSON.stringify(evt.metadata || evt.risk_metrics || {})}>
-                      {evt.order_id ? (
-                        <span className="font-mono" title={evt.order_id}>
-                          {evt.order_id.slice(0, 8)}…
-                        </span>
-                      ) : evt.metadata?.reason ? (
-                        String(evt.metadata.reason).slice(0, 30)
-                      ) : evt.metadata?.error ? (
-                        <span className="text-error">{String(evt.metadata.error).slice(0, 30)}</span>
-                      ) : evt.metadata?.result ? (
-                        <span className={evt.metadata.result === "allowed" ? "text-success" : "text-error"}>
-                          {evt.metadata.result}
-                        </span>
-                      ) : (
-                        "—"
-                      )}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+                      {evt.symbol && <span className="font-mono font-bold text-sm">{evt.symbol}</span>}
+                    </div>
+                    <span className="text-[10px] text-base-content/50 whitespace-nowrap ml-2">
+                      {formatTimestamp(evt.created_at)}
+                    </span>
+                  </div>
+                  <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-sm">
+                    {evt.direction && (
+                      <div><span className="text-base-content/50">Dir:</span> <span className={evt.direction === "buy" ? "text-success" : "text-error"}>{evt.direction.toUpperCase()}</span></div>
+                    )}
+                    {evt.quantity && <div><span className="text-base-content/50">Qty:</span> {evt.quantity}</div>}
+                    {evt.price && <div><span className="text-base-content/50">Price:</span> ${evt.price}</div>}
+                    <div className="col-span-2"><span className="text-base-content/50">Details:</span> <span className="text-xs">{formatDetails(evt)}</span></div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </>
         )}
 
         {!auditLoading && auditEvents.length === 0 && !auditError && !auditNote && (

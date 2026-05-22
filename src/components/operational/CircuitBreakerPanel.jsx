@@ -316,7 +316,7 @@ export default function CircuitBreakerPanel() {
           </h2>
           <div className="flex gap-2">
             <button
-              className="btn btn-ghost btn-sm btn-circle"
+              className="btn btn-ghost btn-sm btn-circle min-h-[44px] sm:min-h-0 sm:btn-sm"
               onClick={fetchData}
               title="Refresh"
             >
@@ -324,10 +324,10 @@ export default function CircuitBreakerPanel() {
             </button>
             {isAdmin && (
               <>
-                <button className="btn btn-outline btn-sm" onClick={() => setShowPresetModal(true)}>
+                <button className="btn btn-outline btn-sm min-h-[44px] sm:min-h-0" onClick={() => setShowPresetModal(true)}>
                   Presets
                 </button>
-                <button className="btn btn-primary btn-sm" onClick={() => setShowAddForm(true)}>
+                <button className="btn btn-primary btn-sm min-h-[44px] sm:min-h-0" onClick={() => setShowAddForm(true)}>
                   + Add Breaker
                 </button>
               </>
@@ -372,7 +372,7 @@ export default function CircuitBreakerPanel() {
                   </div>
                   {isAdmin && (
                     <button
-                      className="btn btn-success btn-xs"
+                      className="btn btn-success btn-sm min-h-[44px] sm:min-h-0 sm:btn-xs"
                       onClick={() => setConfirmDeactivate(halt.id)}
                       disabled={saving}
                     >
@@ -384,7 +384,7 @@ export default function CircuitBreakerPanel() {
             </div>
             {isAdmin && halts.length > 0 && (
               <button
-                className="btn btn-error btn-sm btn-outline mt-2 w-full"
+                className="btn btn-error btn-sm btn-outline mt-2 w-full min-h-[44px] sm:min-h-0"
                 onClick={() => setConfirmDeactivate("ALL")}
                 disabled={saving}
               >
@@ -426,7 +426,8 @@ export default function CircuitBreakerPanel() {
         {/* Breakers Table */}
         <div className="divider mt-2 mb-2"></div>
         <h3 className="font-semibold text-sm opacity-70">Circuit Breaker Configuration</h3>
-        <div className="overflow-x-auto">
+        {/* Desktop Table */}
+        <div className="hidden sm:block overflow-x-auto">
           <table className="table table-sm">
             <thead>
               <tr>
@@ -500,6 +501,71 @@ export default function CircuitBreakerPanel() {
               })}
             </tbody>
           </table>
+        </div>
+        {/* Mobile Cards */}
+        <div className="sm:hidden space-y-2">
+          {breakers.map((breaker) => {
+            const actionInfo = getActionInfo(breaker.action);
+            return (
+              <div key={breaker.breaker_type} className={`card bg-base-200 p-3 ${!breaker.is_active ? "opacity-50" : ""}`}>
+                <div className="flex justify-between items-start mb-2">
+                  <div>
+                    <div className="font-bold text-sm">{getBreakerLabel(breaker.breaker_type)}</div>
+                    <div className="text-xs text-base-content/50">{getBreakerDescription(breaker.breaker_type)}</div>
+                  </div>
+                  <input
+                    type="checkbox"
+                    className="toggle toggle-success"
+                    checked={breaker.is_active}
+                    onChange={() => handleToggleBreaker(breaker)}
+                    disabled={!isAdmin}
+                  />
+                </div>
+                <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-sm">
+                  <div>
+                    <span className="text-base-content/50">Threshold:</span>{" "}
+                    <span className="font-mono">
+                      {breaker.threshold_unit === "dollars" ? "$" : ""}
+                      {breaker.threshold_value}
+                      {breaker.threshold_unit === "percent" ? "%" : breaker.threshold_unit === "count" ? "" : ""}
+                    </span>
+                  </div>
+                  <div>
+                    <span className="text-base-content/50">Action:</span>{" "}
+                    <span className={`badge ${actionInfo.color} badge-xs`}>{actionInfo.label}</span>
+                  </div>
+                  <div>
+                    <span className="text-base-content/50">Triggers:</span> {breaker.trigger_count || 0}
+                    {breaker.last_triggered_at && (
+                      <div className="text-xs text-base-content/40">{new Date(breaker.last_triggered_at).toLocaleString()}</div>
+                    )}
+                  </div>
+                </div>
+                {isAdmin && (
+                  <div className="flex gap-2 mt-2 pt-2 border-t border-base-content/10">
+                    <button
+                      className="btn btn-ghost btn-sm flex-1 min-h-[44px] sm:min-h-0"
+                      onClick={() => setEditForm({
+                        breaker_type: breaker.breaker_type,
+                        threshold_value: breaker.threshold_value,
+                        threshold_unit: breaker.threshold_unit,
+                        action: breaker.action,
+                        cooldown_minutes: breaker.cooldown_minutes,
+                      })}
+                    >
+                      Edit
+                    </button>
+                    <button
+                      className="btn btn-ghost btn-sm flex-1 min-h-[44px] sm:min-h-0 text-error"
+                      onClick={() => handleDeleteBreaker(breaker.breaker_type)}
+                    >
+                      Delete
+                    </button>
+                  </div>
+                )}
+              </div>
+            );
+          })}
         </div>
 
         {/* Add Breaker Modal */}
