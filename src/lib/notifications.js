@@ -204,7 +204,7 @@ function isInQuietHours(quietHours) {
 /**
  * Critical alert types that bypass quiet hours.
  */
-const CRITICAL_ALERT_TYPES = new Set(["kill_switch", "risk_breach"]);
+const CRITICAL_ALERT_TYPES = new Set(["kill_switch", "risk_breach", "price_alert"]);
 
 /**
  * Dispatch a notification through the user's preferred channels.
@@ -312,6 +312,7 @@ function mapAlertTypeToCategory(type) {
     strategy_signal: "SIGNAL",
     campaign_complete: "SYSTEM",
     reconciliation: "SYSTEM",
+    price_alert: "PRICE",
   };
   return mapping[type] || "SYSTEM";
 }

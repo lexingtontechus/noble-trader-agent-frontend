@@ -5,6 +5,7 @@ import { PriceFeedProvider, usePriceFeed } from "@/context/PriceFeedContext";
 import TickerTape from "./TickerTape";
 import WatchlistPanel from "./WatchlistPanel";
 import LiveCandlestickChart from "./LiveCandlestickChart";
+import PriceAlertPanel from "./PriceAlertPanel";
 
 /**
  * PriceFeedPage — Real-time market data dashboard.
@@ -63,6 +64,8 @@ function PriceFeedContent() {
     marketStatus,
   } = usePriceFeed();
   const [showMobileWatchlist, setShowMobileWatchlist] = useState(false);
+  const [showMobileAlerts, setShowMobileAlerts] = useState(false);
+  const { setSelectedSymbol, prices } = usePriceFeed();
 
   return (
     <div className="flex flex-col h-[calc(100dvh-4rem)]">
@@ -90,6 +93,26 @@ function PriceFeedContent() {
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
             </svg>
           </button>
+
+          {/* Mobile: Alerts toggle button */}
+          <button
+            className="md:hidden btn btn-sm btn-circle btn-ghost absolute bottom-2 right-2 z-20 bg-base-100/80 border border-base-300 min-w-[44px] min-h-[44px] sm:min-w-0 sm:min-h-0"
+            onClick={() => setShowMobileAlerts(!showMobileAlerts)}
+            aria-label={showMobileAlerts ? "Hide alerts" : "Show alerts"}
+          >
+            <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+              <path d="M10 2a6 6 0 00-6 6v3.586l-.707.707A1 1 0 004 14h12a1 1 0 00.707-1.707L16 11.586V8a6 6 0 00-6-6z" />
+              <path d="M10 18a3 3 0 01-3-3h6a3 3 0 01-3 3z" />
+            </svg>
+          </button>
+        </div>
+
+        {/* Alerts — sidebar, hidden on mobile */}
+        <div className="hidden md:flex w-56 shrink-0 border-l border-base-300 bg-base-100 overflow-hidden">
+          <PriceAlertPanel
+            onSymbolSelect={(sym) => setSelectedSymbol(sym)}
+            currentPrices={prices}
+          />
         </div>
 
         {/* Mobile: Watchlist as fixed bottom sheet overlay */}
@@ -122,6 +145,47 @@ function PriceFeedContent() {
               {/* Watchlist content */}
               <div className="flex-1 overflow-y-auto">
                 <WatchlistPanel />
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Mobile: Alerts as fixed bottom sheet overlay */}
+        {showMobileAlerts && (
+          <div className="md:hidden fixed inset-0 z-30">
+            {/* Backdrop */}
+            <div
+              className="absolute inset-0 bg-black/40"
+              onClick={() => setShowMobileAlerts(false)}
+            />
+
+            {/* Bottom sheet */}
+            <div className="absolute bottom-0 left-0 right-0 bg-base-100 border-t border-base-300 rounded-t-xl max-h-[60dvh] overflow-hidden flex flex-col shadow-2xl">
+              {/* Drag handle */}
+              <div className="flex justify-center pt-2 pb-1">
+                <div className="w-10 h-1 rounded-full bg-base-300" />
+              </div>
+
+              {/* Header */}
+              <div className="flex items-center justify-between px-4 pb-2">
+                <span className="text-sm font-bold">Price Alerts</span>
+                <button
+                  className="btn btn-ghost btn-sm min-h-[44px] sm:min-h-0"
+                  onClick={() => setShowMobileAlerts(false)}
+                >
+                  ✕
+                </button>
+              </div>
+
+              {/* Alerts content */}
+              <div className="flex-1 overflow-y-auto">
+                <PriceAlertPanel
+                  onSymbolSelect={(sym) => {
+                    setSelectedSymbol(sym);
+                    setShowMobileAlerts(false);
+                  }}
+                  currentPrices={prices}
+                />
               </div>
             </div>
           </div>

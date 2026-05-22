@@ -41,6 +41,7 @@ export const ALERT_TYPES = {
   RISK: "RISK",
   REGIME: "REGIME",
   SYSTEM: "SYSTEM",
+  PRICE: "PRICE",
 };
 
 export const SEVERITY_LEVELS = {
@@ -72,6 +73,7 @@ const TYPE_EMOJI = {
   RISK: "⚠️",
   REGIME: "🔄",
   SYSTEM: "🔧",
+  PRICE: "🔔",
 };
 
 const SEVERITY_EMOJI = {
@@ -101,6 +103,8 @@ function getDiscordWebhookUrl(alertType) {
       return DISCORD_WEBHOOK_STATUS;
     case ALERT_TYPES.SYSTEM:
       return DISCORD_WEBHOOK_STATUS;
+    case ALERT_TYPES.PRICE:
+      return DISCORD_WEBHOOK_SIGNALS;
     default:
       return DISCORD_WEBHOOK_STATUS;
   }

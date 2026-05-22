@@ -61,6 +61,8 @@ const TABLE_MAP = {
   evolutionLog: "ta_evolution_log",
   // Phase 6: Renko HFT Pipeline
   renkoSnapshot: "ta_renko_snapshot",
+  // Phase 7: Price Alerts
+  priceAlert: "ta_price_alerts",
 };
 
 function tableName(model) {
@@ -294,6 +296,8 @@ export const db = {
   evolutionLog: createModelProxy("evolutionLog"),
   // Phase 6: Renko HFT Pipeline
   renkoSnapshot: createModelProxy("renkoSnapshot"),
+  // Phase 7: Price Alerts
+  priceAlert: createModelProxy("priceAlert"),
 };
 
 export default db;

@@ -42,7 +42,7 @@ export const POST = withAuth(async (request, context, authContext) => {
 
     if (!type) {
       return Response.json(
-        { error: "Alert type is required (SIGNAL | TRADE | RISK | REGIME | SYSTEM)" },
+        { error: "Alert type is required (SIGNAL | TRADE | RISK | REGIME | SYSTEM | PRICE)" },
         { status: 400 }
       );
     }
@@ -54,7 +54,7 @@ export const POST = withAuth(async (request, context, authContext) => {
       );
     }
 
-    const validTypes = ["SIGNAL", "TRADE", "RISK", "REGIME", "SYSTEM"];
+    const validTypes = ["SIGNAL", "TRADE", "RISK", "REGIME", "SYSTEM", "PRICE"];
     if (!validTypes.includes(type)) {
       return Response.json(
         { error: `Invalid alert type: ${type}. Must be one of: ${validTypes.join(", ")}` },

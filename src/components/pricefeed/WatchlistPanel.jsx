@@ -2,6 +2,7 @@
 
 import { useState, useRef, useEffect, useMemo } from "react";
 import { usePriceFeed } from "@/context/PriceFeedContext";
+import usePriceAlerts from "@/hooks/usePriceAlerts";
 
 /**
  * WatchlistPanel — Searchable symbol watchlist with add/remove,
@@ -72,6 +73,16 @@ export default function WatchlistPanel() {
   };
 
   const isAlreadyAdded = (symbol) => watchlist.some((w) => w.symbol === symbol);
+
+  // ── Alert counts per symbol ──────────────────────────────────────────────
+  const { getAlertCount } = usePriceAlerts();
+  const alertCounts = useMemo(() => {
+    const counts = {};
+    for (const item of watchlist) {
+      counts[item.symbol] = getAlertCount(item.symbol);
+    }
+    return counts;
+  }, [watchlist, getAlertCount]);
 
   // ── Stats summary ─────────────────────────────────────────────────────
   const gainersCount = gainers.length;
@@ -148,6 +159,7 @@ export default function WatchlistPanel() {
             isSelected={selectedSymbol === item.symbol}
             onSelect={() => setSelectedSymbol(item.symbol)}
             onRemove={() => removeFromWatchlist(item.symbol)}
+            alertCount={alertCounts[item.symbol] || 0}
           />
         ))}
       </div>
@@ -169,7 +181,7 @@ export default function WatchlistPanel() {
 
 // ── Individual Watchlist Item with flash + sparkline ──────────────────────
 
-function WatchlistItem({ item, isSelected, onSelect, onRemove }) {
+function WatchlistItem({ item, isSelected, onSelect, onRemove, alertCount = 0 }) {
   const [flashDirection, setFlashDirection] = useState(null); // "up" | "down" | null
   const prevPriceRef = useRef(null);
 
@@ -202,6 +214,14 @@ function WatchlistItem({ item, isSelected, onSelect, onRemove }) {
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2 min-w-0">
           <span className="font-bold text-sm truncate">{item.symbol}</span>
+          {alertCount > 0 && (
+            <span className="badge badge-primary badge-xs" title={`${alertCount} alert${alertCount > 1 ? 's' : ''}`}>
+              <svg xmlns="http://www.w3.org/2000/svg" className="h-2.5 w-2.5" viewBox="0 0 20 20" fill="currentColor">
+                <path d="M10 2a6 6 0 00-6 6v3.586l-.707.707A1 1 0 004 14h12a1 1 0 00.707-1.707L16 11.586V8a6 6 0 00-6-6z" />
+              </svg>
+              {alertCount}
+            </span>
+          )}
           {item.name && (
             <span className="text-xs text-base-content/40 truncate hidden sm:inline">
               {item.name}
