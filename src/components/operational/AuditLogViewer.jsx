@@ -353,7 +353,7 @@ export default function AuditLogViewer({ bffFetch }) {
               <input type="checkbox" className="toggle toggle-xs toggle-primary" checked={autoRefresh} onChange={(e) => setAutoRefresh(e.target.checked)} />
               <span className="text-xs opacity-70">Auto</span>
             </label>
-            <button className="btn btn-primary btn-sm" onClick={handleExport}>
+            <button className="btn btn-primary min-h-[44px] sm:min-h-0 sm:btn-sm" onClick={handleExport}>
               <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
               CSV
             </button>
@@ -462,7 +462,7 @@ export default function AuditLogViewer({ bffFetch }) {
             </>
           )}
           {hasActiveFilters && (
-            <button className="btn btn-ghost btn-sm" onClick={clearFilters}>Clear</button>
+            <button className="btn btn-ghost min-h-[44px] sm:min-h-0 sm:btn-sm" onClick={clearFilters}>Clear</button>
           )}
           <span className="text-xs opacity-50 ml-auto">{total} events</span>
         </div>

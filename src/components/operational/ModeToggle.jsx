@@ -157,7 +157,7 @@ export default function ModeToggle({ bffFetch }) {
         <div className="flex gap-2">
           {mode !== "paper" && (
             <button
-              className="btn btn-success btn-sm flex-1"
+              className="btn btn-success min-h-[44px] sm:min-h-0 sm:btn-sm flex-1"
               onClick={() => handleRequestModeChange("paper")}
               disabled={loading}
             >
@@ -166,7 +166,7 @@ export default function ModeToggle({ bffFetch }) {
           )}
           {mode !== "simulation" && mode !== "live" && (
             <button
-              className="btn btn-ghost btn-sm flex-1"
+              className="btn btn-ghost min-h-[44px] sm:min-h-0 sm:btn-sm flex-1"
               onClick={() => handleRequestModeChange("simulation")}
               disabled={loading}
             >
@@ -175,7 +175,7 @@ export default function ModeToggle({ bffFetch }) {
           )}
           {mode !== "live" && (
             <button
-              className="btn btn-error btn-sm flex-1"
+              className="btn btn-error min-h-[44px] sm:min-h-0 sm:btn-sm flex-1"
               onClick={() => handleRequestModeChange("live")}
               disabled={loading}
             >

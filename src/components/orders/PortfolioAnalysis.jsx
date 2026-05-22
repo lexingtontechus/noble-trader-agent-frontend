@@ -136,7 +136,7 @@ export default function PortfolioAnalysis({ orders = [], period = '3m' }) {
         <div className="flex items-center gap-2">
           {isExpanded && (
             <button
-              className="btn btn-sm btn-ghost gap-1"
+              className="btn min-h-[44px] sm:min-h-0 sm:btn-sm btn-ghost gap-1"
               onClick={fetchAll}
               disabled={Object.values(loading).some(Boolean)}
             >
@@ -152,7 +152,7 @@ export default function PortfolioAnalysis({ orders = [], period = '3m' }) {
             </button>
           )}
           <button
-            className={`btn btn-sm ${isExpanded ? 'btn-primary' : 'btn-outline btn-primary'}`}
+            className={`btn min-h-[44px] sm:min-h-0 sm:btn-sm ${isExpanded ? 'btn-primary' : 'btn-outline btn-primary'}`}
             onClick={() => setIsExpanded(!isExpanded)}
           >
             {isExpanded ? (

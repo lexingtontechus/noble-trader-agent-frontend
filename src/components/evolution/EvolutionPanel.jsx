@@ -719,7 +719,7 @@ export default function EvolutionPanel() {
                 <div className="text-sm font-medium">{actionResult.success ? 'Success' : 'Error'}</div>
                 <div className="text-xs mt-0.5">{actionResult.message}</div>
               </div>
-              <button className="btn btn-xs btn-ghost" onClick={() => setActionResult(null)}>Dismiss</button>
+              <button className="btn min-h-[44px] sm:min-h-0 sm:btn-xs btn-ghost" onClick={() => setActionResult(null)}>Dismiss</button>
             </div>
           )}
         </div>

@@ -143,7 +143,7 @@ export default function McpIntegrationPanel() {
             {availableCount}/{tools.length} tools
           </span>
           <button
-            className="btn btn-outline btn-sm"
+            className="btn btn-outline min-h-[44px] sm:min-h-0 sm:btn-sm"
             onClick={handleTestConnection}
             disabled={testing}
           >
@@ -167,7 +167,7 @@ export default function McpIntegrationPanel() {
             )}
           </svg>
           <span className="text-sm">{testResult.message}</span>
-          <button className="btn btn-ghost btn-xs" onClick={() => setTestResult(null)}>
+          <button className="btn btn-ghost min-h-[44px] sm:min-h-0 sm:btn-xs" onClick={() => setTestResult(null)}>
             Dismiss
           </button>
         </div>
@@ -189,7 +189,7 @@ export default function McpIntegrationPanel() {
                 {connectionConfig?.direct?.url || "https://noble-trader-fastapi-backend.onrender.com/mcp"}
               </code>
               <button
-                className="btn btn-ghost btn-xs"
+                className="btn btn-ghost min-h-[44px] sm:min-h-0 sm:btn-xs"
                 onClick={() => handleCopy(connectionConfig?.direct?.url || "", "direct")}
               >
                 {copied === "direct" ? "Copied!" : "Copy"}
@@ -211,7 +211,7 @@ export default function McpIntegrationPanel() {
                 {connectionConfig?.bff?.url || "/api/mcp"}
               </code>
               <button
-                className="btn btn-ghost btn-xs"
+                className="btn btn-ghost min-h-[44px] sm:min-h-0 sm:btn-xs"
                 onClick={() => handleCopy(connectionConfig?.bff?.url || "", "bff")}
               >
                 {copied === "bff" ? "Copied!" : "Copy"}
@@ -243,7 +243,7 @@ export default function McpIntegrationPanel() {
                 <code>{getClaudeDesktopConfig()}</code>
               </pre>
               <button
-                className="btn btn-ghost btn-xs absolute top-2 right-2"
+                className="btn btn-ghost min-h-[44px] sm:min-h-0 sm:btn-xs absolute top-2 right-2"
                 onClick={() => handleCopy(getClaudeDesktopConfig(), "claude")}
               >
                 {copied === "claude" ? "Copied!" : "Copy"}
@@ -262,7 +262,7 @@ export default function McpIntegrationPanel() {
                 <code>{getCursorConfig()}</code>
               </pre>
               <button
-                className="btn btn-ghost btn-xs absolute top-2 right-2"
+                className="btn btn-ghost min-h-[44px] sm:min-h-0 sm:btn-xs absolute top-2 right-2"
                 onClick={() => handleCopy(getCursorConfig(), "cursor")}
               >
                 {copied === "cursor" ? "Copied!" : "Copy"}
@@ -279,19 +279,19 @@ export default function McpIntegrationPanel() {
             <h4 className="card-title text-sm">Available Tools</h4>
             <div className="flex items-center gap-1">
               <button
-                className={`btn btn-xs ${toolsFilter === "all" ? "btn-primary" : "btn-ghost"}`}
+                className={`btn min-h-[44px] sm:min-h-0 sm:btn-xs ${toolsFilter === "all" ? "btn-primary" : "btn-ghost"}`}
                 onClick={() => setToolsFilter("all")}
               >
                 All ({tools.length})
               </button>
               <button
-                className={`btn btn-xs ${toolsFilter === "available" ? "btn-primary" : "btn-ghost"}`}
+                className={`btn min-h-[44px] sm:min-h-0 sm:btn-xs ${toolsFilter === "available" ? "btn-primary" : "btn-ghost"}`}
                 onClick={() => setToolsFilter("available")}
               >
                 Available ({availableCount})
               </button>
               <button
-                className={`btn btn-xs ${toolsFilter === "locked" ? "btn-primary" : "btn-ghost"}`}
+                className={`btn min-h-[44px] sm:min-h-0 sm:btn-xs ${toolsFilter === "locked" ? "btn-primary" : "btn-ghost"}`}
                 onClick={() => setToolsFilter("locked")}
               >
                 Locked ({lockedCount})
@@ -365,7 +365,7 @@ export default function McpIntegrationPanel() {
               : "Upgrade to Premium for more MCP tools including backtest runs and strategy signals."}
           </span>
           <button
-            className="btn btn-warning btn-xs"
+            className="btn btn-warning min-h-[44px] sm:min-h-0 sm:btn-xs"
             onClick={() => window.dispatchEvent(
               new CustomEvent("noble:navigate", { detail: { view: "settings", tab: "plan" } })
             )}

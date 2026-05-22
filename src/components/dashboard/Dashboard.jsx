@@ -175,7 +175,7 @@ export default function Dashboard() {
             </span>
             {!hasSubscriptions && (
               <button
-                className="btn btn-sm btn-primary gap-1 shadow-md"
+                className="btn min-h-[44px] sm:min-h-0 sm:btn-sm btn-primary gap-1 shadow-md"
                 onClick={() =>
                   subscribeAll(DEFAULT_TICKERS.map((t) => t.symbol))
                 }
@@ -194,7 +194,7 @@ export default function Dashboard() {
           {Object.keys(PERIOD_MAP).map((p) => (
             <button
               key={p}
-              className={`btn btn-sm ${period === p ? "btn-active btn-primary" : ""}`}
+              className={`btn min-h-[44px] sm:min-h-0 sm:btn-sm ${period === p ? "btn-active btn-primary" : ""}`}
               onClick={() => handlePeriodChange(p)}
             >
               {p}
@@ -217,7 +217,7 @@ export default function Dashboard() {
 
           {/* Manual refresh */}
           <button
-            className="btn btn-sm btn-ghost"
+            className="btn min-h-[44px] sm:min-h-0 sm:btn-sm btn-ghost"
             onClick={fetchAllTickers}
             disabled={anyLoading}
           >
@@ -256,7 +256,7 @@ export default function Dashboard() {
           {/* Comparison toggle */}
           {allLoaded && (
             <button
-              className={`btn btn-sm ${showComparison ? "btn-primary" : "btn-ghost"}`}
+              className={`btn min-h-[44px] sm:min-h-0 sm:btn-sm ${showComparison ? "btn-primary" : "btn-ghost"}`}
               onClick={() => setShowComparison(!showComparison)}
             >
               {showComparison ? "Hide Comparison" : "Compare"}
@@ -275,7 +275,7 @@ export default function Dashboard() {
             <div className="font-medium">Backend appears offline</div>
             <div className="text-xs opacity-70">All ticker fetches failed. The analysis backend may be experiencing issues.</div>
           </div>
-          <button className="btn btn-sm btn-ghost" onClick={fetchAllTickers}>Retry All</button>
+          <button className="btn min-h-[44px] sm:min-h-0 sm:btn-sm btn-ghost" onClick={fetchAllTickers}>Retry All</button>
         </div>
       )}
 

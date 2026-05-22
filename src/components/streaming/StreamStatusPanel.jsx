@@ -34,7 +34,7 @@ export default function StreamStatusPanel() {
             {/* Go Live All / Stop All buttons */}
             {hasSubscriptions ? (
               <button
-                className="btn btn-xs btn-error gap-1"
+                className={`btn min-h-[44px] sm:min-h-0 sm:btn-xs btn-error gap-1`}
                 onClick={unsubscribeAll}
               >
                 <svg
@@ -61,7 +61,7 @@ export default function StreamStatusPanel() {
               </button>
             ) : (
               <button
-                className="btn btn-xs btn-primary gap-1"
+                className={`btn min-h-[44px] sm:min-h-0 sm:btn-xs btn-primary gap-1`}
                 onClick={() => subscribeAll(DEFAULT_SYMBOLS)}
               >
                 <svg
@@ -93,7 +93,7 @@ export default function StreamStatusPanel() {
             </p>
             <div className="flex flex-col items-center gap-2">
               <button
-                className="btn btn-sm btn-primary gap-1"
+                className="btn min-h-[44px] sm:min-h-0 sm:btn-sm btn-primary gap-1"
                 onClick={() => subscribeAll(DEFAULT_SYMBOLS)}
               >
                 <svg
@@ -173,7 +173,7 @@ export default function StreamStatusPanel() {
                     )}
                     {/* Per-symbol stop button */}
                     <button
-                      className="btn btn-xs btn-ghost btn-circle text-error"
+                      className="btn min-h-[44px] sm:min-h-0 sm:btn-xs btn-ghost btn-circle text-error"
                       onClick={() => unsubscribe(symbol)}
                       title={`Stop ${symbol}`}
                     >

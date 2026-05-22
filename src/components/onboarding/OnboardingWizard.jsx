@@ -114,7 +114,7 @@ export default function OnboardingWizard({ onComplete }) {
             {STEPS.map((s, i) => (
               <div key={s.key} className="flex items-center gap-2">
                 <button
-                  className={`btn btn-circle btn-sm ${
+                  className={`btn btn-circle min-w-[44px] min-h-[44px] sm:min-w-0 sm:min-h-0 sm:btn-sm ${
                     i === step
                       ? "btn-primary"
                       : i < step
@@ -312,7 +312,7 @@ export default function OnboardingWizard({ onComplete }) {
                       You can connect a live Alpaca account from the Settings page at any time.
                     </p>
                     <button
-                      className="btn btn-warning btn-sm mt-2"
+                      className="btn btn-warning min-h-[44px] sm:min-h-0 sm:btn-sm mt-2"
                       onClick={() => {
                         handleComplete();
                         window.dispatchEvent(
@@ -373,7 +373,7 @@ export default function OnboardingWizard({ onComplete }) {
 
               <div className="text-center">
                 <button
-                  className={`btn btn-ghost btn-sm ${completing ? "btn-disabled" : ""}`}
+                  className={`btn btn-ghost min-h-[44px] sm:min-h-0 sm:btn-sm ${completing ? "btn-disabled" : ""}`}
                   onClick={handleComplete}
                   disabled={completing}
                 >

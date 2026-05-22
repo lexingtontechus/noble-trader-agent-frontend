@@ -55,7 +55,7 @@ export default function ThemeSwitcher() {
   // Prevent hydration mismatch - render placeholder until mounted
   if (!mounted) {
     return (
-      <div className="btn btn-ghost btn-sm btn-circle">
+      <div className="btn btn-ghost min-w-[44px] min-h-[44px] sm:min-w-0 sm:min-h-0 sm:btn-sm btn-circle">
         <svg className="h-5 w-5 fill-current" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24">
           <path d="M12,5c-3.87,0-7,3.13-7,7s3.13,7,7,7s7-3.13,7-7S15.87,5,12,5z M12,17c-2.76,0-5-2.24-5-5s2.24-5,5-5s5,2.24,5,5S14.76,17,12,17z" />
         </svg>
@@ -65,7 +65,7 @@ export default function ThemeSwitcher() {
 
   return (
     <div className="dropdown dropdown-end">
-      <div tabIndex={0} role="button" className="btn btn-ghost btn-sm btn-circle" aria-label="Change theme">
+      <div tabIndex={0} role="button" className="btn btn-ghost min-w-[44px] min-h-[44px] sm:min-w-0 sm:min-h-0 sm:btn-sm btn-circle" aria-label="Change theme">
         <label className="swap swap-rotate">
           {/* Sun icon (shown in dark themes) */}
           <svg className="swap-on h-5 w-5 fill-current" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24">

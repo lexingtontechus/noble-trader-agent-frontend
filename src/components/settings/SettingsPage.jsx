@@ -128,7 +128,7 @@ export default function SettingsPage({ initialTab = "profile" }) {
             Your Alpaca keys are stored in the legacy Clerk format. Migrate to encrypted database storage for improved security.
           </span>
           <button
-            className={`btn btn-warning btn-sm ${migrating ? "btn-disabled" : ""}`}
+            className={`btn btn-warning min-h-[44px] sm:min-h-0 sm:btn-sm ${migrating ? "btn-disabled" : ""}`}
             onClick={handleMigration}
             disabled={migrating}
           >
@@ -206,7 +206,7 @@ export default function SettingsPage({ initialTab = "profile" }) {
                 {/* Clerk UserProfile link — opens in a modal/panel */}
                 <a
                   href="/user-profile"
-                  className="btn btn-outline btn-sm"
+                  className="btn btn-outline min-h-[44px] sm:min-h-0 sm:btn-sm"
                   target="_blank"
                   rel="noopener noreferrer"
                 >
@@ -223,7 +223,7 @@ export default function SettingsPage({ initialTab = "profile" }) {
                     You have admin privileges. Access the admin panel for advanced diagnostics.
                   </p>
                   <button
-                    className="btn btn-error btn-sm"
+                    className="btn btn-error min-h-[44px] sm:min-h-0 sm:btn-sm"
                     onClick={() => window.dispatchEvent(
                       new CustomEvent("noble:navigate", { detail: { view: "admin" } })
                     )}

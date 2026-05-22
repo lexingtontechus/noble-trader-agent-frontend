@@ -84,7 +84,7 @@ export default function SimulationPanel({ symbol, prices = [], currentPrice = nu
 
       {/* Run Button */}
       <div className="flex items-center gap-3">
-        <button className={`btn btn-sm gap-1 ${loading ? 'btn-ghost' : 'btn-primary'}`} onClick={runSimulation} disabled={loading}>
+        <button className={`btn min-h-[44px] sm:min-h-0 sm:btn-sm gap-1 ${loading ? 'btn-ghost' : 'btn-primary'}`} onClick={runSimulation} disabled={loading}>
           {loading ? (<><span className="loading loading-spinner loading-xs" />Simulating...</>) : (<><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polygon points="5 3 19 12 5 21 5 3" /></svg>Run Simulation</>)}
         </button>
         {simulation && <span className="text-xs text-base-content/50">{nPaths} paths × {horizon} steps</span>}
@@ -95,7 +95,7 @@ export default function SimulationPanel({ symbol, prices = [], currentPrice = nu
         <div className="alert alert-error alert-sm">
           <svg xmlns="http://www.w3.org/2000/svg" className="stroke-current shrink-0 h-4 w-4" fill="none" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M10 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2m7-2a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
           <span className="text-sm">{error}</span>
-          <button className="btn btn-xs btn-ghost" onClick={runSimulation}>Retry</button>
+          <button className="btn min-h-[44px] sm:min-h-0 sm:btn-xs btn-ghost" onClick={runSimulation}>Retry</button>
         </div>
       )}
 

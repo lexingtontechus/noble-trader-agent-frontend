@@ -571,7 +571,7 @@ export default function SystemHealthDashboard() {
           <span className="text-4xl mb-2">⚠️</span>
           <h3 className="font-semibold">Failed to load system health</h3>
           <p className="text-sm text-base-content/60 mt-1">{error}</p>
-          <button className="btn btn-sm btn-primary mt-3" onClick={fetchHealth}>
+          <button className="btn min-h-[44px] sm:min-h-0 sm:btn-sm btn-primary mt-3" onClick={fetchHealth}>
             Retry
           </button>
         </div>
@@ -601,7 +601,7 @@ export default function SystemHealthDashboard() {
             <option value={300000}>5m</option>
           </select>
           <button
-            className="btn btn-xs btn-outline"
+            className="btn min-h-[44px] sm:min-h-0 sm:btn-xs btn-outline"
             onClick={fetchHealth}
             disabled={loading}
           >

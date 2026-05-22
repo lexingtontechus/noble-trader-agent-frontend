@@ -51,10 +51,10 @@ export default function SearchResults({ data, onBuySell }) {
     <div className="space-y-4 animate-fade-in-up">
       {/* Buy/Sell Buttons */}
       <div className="flex gap-3 flex-wrap items-center">
-        <button className="btn btn-success btn-sm" onClick={() => onBuySell(symbol)}>
+        <button className="btn btn-success min-h-[44px] sm:min-h-0 sm:btn-sm" onClick={() => onBuySell(symbol)}>
           Buy {yahooToAlpacaSymbol(symbol) || symbol}
         </button>
-        <button className="btn btn-error btn-sm" onClick={() => onBuySell(symbol)}>
+        <button className="btn btn-error min-h-[44px] sm:min-h-0 sm:btn-sm" onClick={() => onBuySell(symbol)}>
           Sell {yahooToAlpacaSymbol(symbol) || symbol}
         </button>
         {yahooToAlpacaSymbol(symbol) !== symbol && yahooToAlpacaSymbol(symbol) !== null && (

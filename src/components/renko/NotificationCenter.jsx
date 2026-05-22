@@ -182,7 +182,7 @@ export default function NotificationCenter() {
     <div className="relative" ref={dropdownRef}>
       {/* Bell button */}
       <button
-        className="btn btn-ghost btn-sm btn-circle relative"
+        className="btn btn-ghost min-h-[44px] sm:min-h-0 sm:btn-sm btn-circle relative"
         onClick={() => {
           setOpen(!open);
           // Mark as read when opening
@@ -233,14 +233,14 @@ export default function NotificationCenter() {
               {alerts.length > 0 && (
                 <>
                   <button
-                    className="btn btn-xs btn-ghost"
+                    className="btn min-h-[44px] sm:min-h-0 sm:btn-xs btn-ghost"
                     onClick={handleMarkAllRead}
                     aria-label="Mark all as read"
                   >
                     ✓ Read
                   </button>
                   <button
-                    className="btn btn-xs btn-ghost text-error"
+                    className="btn min-h-[44px] sm:min-h-0 sm:btn-xs btn-ghost text-error"
                     onClick={handleClearAll}
                     aria-label="Clear all notifications"
                   >

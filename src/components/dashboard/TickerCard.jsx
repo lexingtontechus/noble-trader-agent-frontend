@@ -69,7 +69,7 @@ function CommentaryCardWrapper({ symbol, regime, sizing, risk }) {
           </svg>
           <span>AI commentary unavailable: {error}</span>
           <button
-            className="btn btn-xs btn-ghost ml-auto"
+            className="btn min-h-[44px] sm:min-h-0 sm:btn-xs btn-ghost ml-auto"
             onClick={fetchCommentary}
           >
             Retry

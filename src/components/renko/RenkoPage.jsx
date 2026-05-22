@@ -50,7 +50,7 @@ class RenkoErrorBoundary extends Component {
               {this.state.error?.message || "Unknown error"}
             </div>
             <button
-              className="btn btn-sm btn-ghost mt-2"
+              className="btn min-h-[44px] sm:min-h-0 sm:btn-sm btn-ghost mt-2"
               onClick={() =>
                 this.setState({ hasError: false, error: null })
               }
@@ -614,7 +614,7 @@ export default function RenkoPage() {
 
             {/* Warm Up button — feeds 6mo of historical data */}
             <button
-              className={`btn btn-sm ${warmingUp ? "btn-disabled" : "btn-secondary"}`}
+              className={`btn min-h-[44px] sm:min-h-0 sm:btn-sm ${warmingUp ? "btn-disabled" : "btn-secondary"}`}
               onClick={handleWarmUp}
               disabled={warmingUp}
             >
@@ -630,7 +630,7 @@ export default function RenkoPage() {
 
             {/* Process tick button */}
             <button
-              className="btn btn-sm btn-primary"
+              className="btn min-h-[44px] sm:min-h-0 sm:btn-sm btn-primary"
               onClick={handleProcessTick}
               disabled={warmingUp}
             >
@@ -639,7 +639,7 @@ export default function RenkoPage() {
 
             {/* Refresh button */}
             <button
-              className="btn btn-sm btn-ghost"
+              className="btn min-h-[44px] sm:min-h-0 sm:btn-sm btn-ghost"
               onClick={() => fetchAllData(true)}
               disabled={loading}
             >
@@ -667,7 +667,7 @@ export default function RenkoPage() {
 
             {/* Live Stream toggle */}
             <button
-              className={`btn btn-sm ${streaming ? "btn-accent" : "btn-outline"}`}
+              className={`btn min-h-[44px] sm:min-h-0 sm:btn-sm ${streaming ? "btn-accent" : "btn-outline"}`}
               onClick={() => setStreaming(!streaming)}
               title={streaming ? "Stop live stream" : "Start live stream"}
             >
@@ -686,7 +686,7 @@ export default function RenkoPage() {
               <button
                 key={sym}
                 onClick={() => handleSymbolChange(sym)}
-                className={`btn btn-xs gap-1 font-mono whitespace-nowrap ${
+                className={`btn min-h-[44px] sm:min-h-0 sm:btn-xs gap-1 font-mono whitespace-nowrap ${
                   isSelected
                     ? "btn-primary"
                     : st?.active
@@ -739,7 +739,7 @@ export default function RenkoPage() {
                   <h3 className="font-bold text-sm">Backend Unavailable</h3>
                   <div className="text-xs opacity-80">{error}</div>
                   <button
-                    className="btn btn-xs btn-ghost mt-2"
+                    className="btn min-h-[44px] sm:min-h-0 sm:btn-xs btn-ghost mt-2"
                     onClick={() => fetchAllData(true)}
                   >
                     Retry

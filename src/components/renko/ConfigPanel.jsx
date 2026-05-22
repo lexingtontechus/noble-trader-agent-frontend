@@ -374,7 +374,7 @@ export default function ConfigPanel({ config = {}, onSave, onReset, saving }) {
       {/* Action Buttons */}
       <div className="flex items-center justify-between gap-3 pt-2">
         <button
-          className="btn btn-sm btn-error btn-outline"
+          className="btn min-h-[44px] sm:min-h-0 sm:btn-sm btn-error btn-outline"
           onClick={handleReset}
           disabled={saving}
         >
@@ -398,7 +398,7 @@ export default function ConfigPanel({ config = {}, onSave, onReset, saving }) {
         </button>
 
         <button
-          className={`btn btn-sm btn-primary ${saving ? "loading" : ""}`}
+          className={`btn min-h-[44px] sm:min-h-0 sm:btn-sm btn-primary ${saving ? "loading" : ""}`}
           onClick={handleSave}
           disabled={saving || !hasChanges}
         >

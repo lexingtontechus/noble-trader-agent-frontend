@@ -9,7 +9,7 @@ export default function ErrorState({ message, onRetry }) {
         <div className="text-xs">{message || 'An unexpected error occurred. Please try again.'}</div>
       </div>
       {onRetry && (
-        <button className="btn btn-sm btn-ghost" onClick={onRetry}>
+        <button className="btn min-h-[44px] sm:min-h-0 sm:btn-sm btn-ghost" onClick={onRetry}>
           Retry
         </button>
       )}

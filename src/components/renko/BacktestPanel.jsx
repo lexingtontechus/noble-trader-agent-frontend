@@ -408,7 +408,7 @@ export default function BacktestPanel({
       <div className="flex flex-col gap-2">
         <div className="flex gap-3">
           <button
-            className="btn btn-sm btn-primary flex-1"
+            className="btn min-h-[44px] sm:min-h-0 sm:btn-sm btn-primary flex-1"
             onClick={handleRunBacktest}
             disabled={running || optimizing || analyzing}
           >
@@ -422,7 +422,7 @@ export default function BacktestPanel({
             )}
           </button>
           <button
-            className="btn btn-sm btn-secondary flex-1"
+            className="btn min-h-[44px] sm:min-h-0 sm:btn-sm btn-secondary flex-1"
             onClick={handleOptimize}
             disabled={running || optimizing || analyzing}
           >
@@ -439,7 +439,7 @@ export default function BacktestPanel({
 
         {/* Deep Analysis button — calls Phase 6+7 dedicated endpoints */}
         <button
-          className="btn btn-sm btn-outline w-full"
+          className="btn min-h-[44px] sm:min-h-0 sm:btn-sm btn-outline w-full"
           onClick={handleDeepAnalysis}
           disabled={running || optimizing || analyzing}
         >

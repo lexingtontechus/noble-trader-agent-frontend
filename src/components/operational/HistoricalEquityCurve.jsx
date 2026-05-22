@@ -361,7 +361,7 @@ export default function HistoricalEquityCurve() {
           <div className="alert alert-error">
             <span>Failed to load historical data: {error}</span>
           </div>
-          <button className="btn btn-sm btn-primary mt-2" onClick={fetchSnapshots}>
+          <button className="btn min-h-[44px] sm:min-h-0 sm:btn-sm btn-primary mt-2" onClick={fetchSnapshots}>
             Retry
           </button>
         </div>
@@ -400,7 +400,7 @@ export default function HistoricalEquityCurve() {
               beyond Alpaca&apos;s 30-day API limit.
             </p>
             <button
-              className={`btn btn-primary btn-sm ${capturing ? "loading" : ""}`}
+              className={`btn btn-primary min-h-[44px] sm:min-h-0 sm:btn-sm ${capturing ? "loading" : ""}`}
               onClick={handleCapture}
               disabled={capturing}
             >
@@ -461,7 +461,7 @@ export default function HistoricalEquityCurve() {
               </span>
             )}
             <button
-              className={`btn btn-xs btn-outline ${capturing ? "loading" : ""}`}
+              className={`btn min-h-[44px] sm:min-h-0 sm:btn-xs btn-outline ${capturing ? "loading" : ""}`}
               onClick={handleCapture}
               disabled={capturing}
               title="Capture a new portfolio snapshot now"
@@ -485,13 +485,13 @@ export default function HistoricalEquityCurve() {
               Capture Now
             </button>
             <button
-              className={`btn btn-xs ${showDrawdown ? "btn-error" : "btn-ghost"}`}
+              className={`btn min-h-[44px] sm:min-h-0 sm:btn-xs ${showDrawdown ? "btn-error" : "btn-ghost"}`}
               onClick={() => setShowDrawdown(!showDrawdown)}
             >
               Drawdown
             </button>
             <button
-              className="btn btn-xs btn-ghost"
+              className="btn min-h-[44px] sm:min-h-0 sm:btn-xs btn-ghost"
               onClick={fetchSnapshots}
               disabled={loading}
             >
@@ -505,7 +505,7 @@ export default function HistoricalEquityCurve() {
           {DATE_RANGES.map((r) => (
             <button
               key={r.value}
-              className={`btn btn-xs ${selectedRange === r.value ? "btn-primary" : "btn-ghost"}`}
+              className={`btn min-h-[44px] sm:min-h-0 sm:btn-xs ${selectedRange === r.value ? "btn-primary" : "btn-ghost"}`}
               onClick={() => setSelectedRange(r.value)}
             >
               {r.label}

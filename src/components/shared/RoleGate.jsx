@@ -68,7 +68,7 @@ export default function RoleGate({
           </p>
           <div className="card-actions mt-4">
             <button
-              className="btn btn-ghost btn-sm"
+              className="btn btn-ghost min-h-[44px] sm:min-h-0 sm:btn-sm"
               onClick={() => window.dispatchEvent(
                 new CustomEvent("noble:navigate", { detail: { view: "settings", tab: "profile" } })
               )}

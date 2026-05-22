@@ -231,7 +231,7 @@ export default function LivePnLDashboard({ compact = false }) {
           <div className="alert alert-error">
             <span>Failed to load portfolio data: {error}</span>
           </div>
-          <button className="btn btn-sm btn-primary mt-2" onClick={refresh}>
+          <button className="btn min-h-[44px] sm:min-h-0 sm:btn-sm btn-primary mt-2" onClick={refresh}>
             Retry
           </button>
         </div>

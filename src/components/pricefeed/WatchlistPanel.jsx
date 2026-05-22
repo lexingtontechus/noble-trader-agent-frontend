@@ -92,7 +92,7 @@ export default function WatchlistPanel() {
           </div>
         </div>
         <button
-          className="btn btn-ghost btn-xs"
+          className="btn btn-ghost min-h-[44px] sm:min-h-0 sm:btn-xs"
           onClick={() => setShowSearch(!showSearch)}
         >
           {showSearch ? "✕" : "+ Add"}
@@ -204,7 +204,7 @@ export default function WatchlistPanel() {
       {selectedSymbol && (
         <div className="px-3 py-2 border-t border-base-300">
           <button
-            className="btn btn-ghost btn-xs text-error w-full"
+            className="btn btn-ghost min-h-[44px] sm:min-h-0 sm:btn-xs text-error w-full"
             onClick={() => removeFromWatchlist(selectedSymbol)}
           >
             Remove {selectedSymbol}

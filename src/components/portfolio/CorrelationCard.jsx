@@ -131,7 +131,7 @@ export default function CorrelationCard() {
         {error && (
           <div className="alert alert-error alert-sm mb-3">
             <span className="text-xs">{error}</span>
-            <button className="btn btn-xs btn-ghost ml-auto" onClick={detect}>
+            <button className="btn min-h-[44px] sm:min-h-0 sm:btn-xs btn-ghost ml-auto" onClick={detect}>
               Retry
             </button>
           </div>

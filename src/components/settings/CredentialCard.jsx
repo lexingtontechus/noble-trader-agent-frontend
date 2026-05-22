@@ -166,7 +166,7 @@ export default function CredentialCard({
                     {isValid ? "Connected" : isValid === false ? "Invalid Keys" : "Unknown"}
                   </span>
                   <button
-                    className={`btn btn-xs btn-outline ${testing ? "btn-disabled" : ""}`}
+                    className={`btn btn-xs btn-outline min-h-[44px] sm:min-h-0 sm:btn-xs ${testing ? "btn-disabled" : ""}`}
                     onClick={handleTest}
                     disabled={testing}
                   >
@@ -244,7 +244,7 @@ export default function CredentialCard({
           />
 
           <button
-            className={`btn btn-primary btn-sm ${saving ? "btn-disabled" : ""}`}
+            className={`btn btn-primary min-h-[44px] sm:min-h-0 sm:btn-sm ${saving ? "btn-disabled" : ""}`}
             onClick={handleSave}
             disabled={saving || !apiKey.trim() || !secretKey.trim()}
           >
@@ -277,7 +277,7 @@ export default function CredentialCard({
               Remove your {label} Alpaca keys to disconnect your trading account.
             </p>
             <button
-              className={`btn btn-error btn-outline btn-sm ${removing ? "btn-disabled" : ""}`}
+              className={`btn btn-error btn-outline min-h-[44px] sm:min-h-0 sm:btn-sm ${removing ? "btn-disabled" : ""}`}
               onClick={handleRemove}
               disabled={removing}
             >

@@ -79,7 +79,7 @@ class TradingErrorBoundary extends Component {
           <div>
             <h3 className="font-bold">Rendering Error</h3>
             <div className="text-xs mt-1">{this.state.error?.message || 'Unknown error'}</div>
-            <button className="btn btn-sm btn-ghost mt-2" onClick={() => this.setState({ hasError: false, error: null })}>
+            <button className="btn min-h-[44px] sm:min-h-0 sm:btn-sm btn-ghost mt-2" onClick={() => this.setState({ hasError: false, error: null })}>
               Try Again
             </button>
           </div>
@@ -1161,20 +1161,20 @@ function TradeCard({ trade, onApprove, onBlock, onValidate, approved, validating
         {approved === null && (
           <div className="flex items-center gap-2 mt-3">
             <button
-              className="btn btn-sm btn-success gap-1"
+              className="btn min-h-[44px] sm:min-h-0 sm:btn-sm btn-success gap-1"
               onClick={() => onApprove(trade.id || trade.symbol)}
             >
               <IconCheck size={14} /> Approve
             </button>
             <button
-              className="btn btn-sm btn-error btn-outline gap-1"
+              className="btn min-h-[44px] sm:min-h-0 sm:btn-sm btn-error btn-outline gap-1"
               onClick={() => onBlock(trade.id || trade.symbol)}
             >
               <IconX size={14} /> Block
             </button>
             {!validationStatus && !isValidating && (
               <button
-                className="btn btn-sm btn-outline btn-info gap-1 ml-auto"
+                className="btn min-h-[44px] sm:min-h-0 sm:btn-sm btn-outline btn-info gap-1 ml-auto"
                 onClick={() => onValidate(trade.id || trade.symbol)}
               >
                 <IconFlask size={14} /> Validate
@@ -1239,7 +1239,7 @@ function ScheduledOrderCard({ order, onRemove }) {
         )}
       </div>
       {onRemove && (
-        <button className="btn btn-xs btn-ghost" onClick={() => onRemove(order.id)}>
+        <button className="btn min-h-[44px] sm:min-h-0 sm:btn-xs btn-ghost" onClick={() => onRemove(order.id)}>
           <IconX size={14} />
         </button>
       )}
@@ -1777,7 +1777,7 @@ const delays = [600, 1200, 1500, 1200, 2000, 1500, 1800, 1000]
           <span className="badge badge-primary badge-sm">Automated</span>
         </div>
         {phase !== 'idle' && (
-          <button className="btn btn-sm btn-ghost gap-1" onClick={handleReset}>
+          <button className="btn min-h-[44px] sm:min-h-0 sm:btn-sm btn-ghost gap-1" onClick={handleReset}>
             <IconRefresh size={14} /> Reset
           </button>
         )}
@@ -1819,7 +1819,7 @@ const delays = [600, 1200, 1500, 1200, 2000, 1500, 1800, 1000]
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M10 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2m7-2a9 9 0 11-18 0 9 9 0 0118 0z" />
           </svg>
           <span className="text-sm">{error}</span>
-          <button className="btn btn-sm btn-ghost" onClick={() => setError(null)}>Dismiss</button>
+          <button className="btn min-h-[44px] sm:min-h-0 sm:btn-sm btn-ghost" onClick={() => setError(null)}>Dismiss</button>
         </div>
       )}
 
@@ -1909,14 +1909,14 @@ const delays = [600, 1200, 1500, 1200, 2000, 1500, 1800, 1000]
               </div>
               <div className="flex items-center gap-2">
                 <button
-                  className="btn btn-sm btn-success gap-1"
+                  className="btn min-h-[44px] sm:min-h-0 sm:btn-sm btn-success gap-1"
                   onClick={handleApproveAll}
                   disabled={pendingCount === 0}
                 >
                   <IconCheck size={14} /> Approve All
                 </button>
                 <button
-                  className="btn btn-sm btn-outline btn-info gap-1"
+                  className="btn min-h-[44px] sm:min-h-0 sm:btn-sm btn-outline btn-info gap-1"
                   onClick={() => {
                     recommendations.forEach(t => {
                       const id = t.id || t.symbol
@@ -1929,7 +1929,7 @@ const delays = [600, 1200, 1500, 1200, 2000, 1500, 1800, 1000]
                   <IconFlask size={14} /> Validate All
                 </button>
                 <button
-                  className="btn btn-sm btn-error btn-outline gap-1"
+                  className="btn min-h-[44px] sm:min-h-0 sm:btn-sm btn-error btn-outline gap-1"
                   onClick={handleBlockAll}
                   disabled={pendingCount === 0}
                 >
@@ -1992,7 +1992,7 @@ const delays = [600, 1200, 1500, 1200, 2000, 1500, 1800, 1000]
           {!allDecided && hasApprovedTrades && (
             <div className="flex justify-center">
               <button
-                className="btn btn-primary btn-sm gap-2"
+                className="btn btn-primary min-h-[44px] sm:min-h-0 sm:btn-sm gap-2"
                 onClick={() => executeDialogRef.current?.showModal()}
               >
                 <IconPlay size={16} /> Execute {approvedCount} Approved Trade{approvedCount !== 1 ? 's' : ''} Now
@@ -2118,7 +2118,7 @@ const delays = [600, 1200, 1500, 1200, 2000, 1500, 1800, 1000]
                   disabled={telegramStatus === 'sending'}
                 />
                 <button
-                  className="btn btn-sm btn-info gap-1 shrink-0"
+                  className="btn min-h-[44px] sm:min-h-0 sm:btn-sm btn-info gap-1 shrink-0"
                   onClick={handleTelegramSend}
                   disabled={!telegramChatId.trim() || telegramStatus === 'sending'}
                 >
@@ -2211,7 +2211,7 @@ const delays = [600, 1200, 1500, 1200, 2000, 1500, 1800, 1000]
                           )}
                         </div>
                         <button
-                          className="btn btn-xs btn-warning gap-1"
+                          className="btn min-h-[44px] sm:min-h-0 sm:btn-xs btn-warning gap-1"
                           onClick={() => handleScheduleOrder(order)}
                           disabled={!scheduleDate || !scheduleTime}
                         >
@@ -2298,10 +2298,10 @@ const delays = [600, 1200, 1500, 1200, 2000, 1500, 1800, 1000]
           </div>
           <div className="modal-action">
             <form method="dialog">
-              <button className="btn btn-ghost btn-sm">Cancel</button>
+              <button className="btn btn-ghost min-h-[44px] sm:min-h-0 sm:btn-sm">Cancel</button>
             </form>
             <button
-              className="btn btn-primary btn-sm gap-1"
+              className="btn btn-primary min-h-[44px] sm:min-h-0 sm:btn-sm gap-1"
               onClick={() => {
                 executeDialogRef.current?.close()
                 // Defer execution to next tick so modal closes first

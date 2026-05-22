@@ -209,7 +209,7 @@ export default function BatchConfigModal({ signals = [], analysisId, onClose, on
               {["kelly", "fixed", "risk_parity"].map(mode => (
                 <button
                   key={mode}
-                  className={`btn btn-sm ${config.positionSizingMode === mode ? "btn-primary" : "btn-ghost"}`}
+                  className={`btn min-h-[44px] sm:min-h-0 sm:btn-sm ${config.positionSizingMode === mode ? "btn-primary" : "btn-ghost"}`}
                   onClick={() => updateConfig("positionSizingMode", mode)}
                 >
                   {mode === "kelly" ? "Kelly Criterion" : mode === "fixed" ? "Fixed Qty" : "Risk Parity"}
@@ -300,14 +300,14 @@ export default function BatchConfigModal({ signals = [], analysisId, onClose, on
         {/* Actions */}
         <div className="modal-action">
           <button
-            className="btn btn-ghost btn-sm"
+            className="btn btn-ghost min-h-[44px] sm:min-h-0 sm:btn-sm"
             onClick={onClose}
             disabled={loading}
           >
             Cancel
           </button>
           <button
-            className="btn btn-primary btn-sm"
+            className="btn btn-primary min-h-[44px] sm:min-h-0 sm:btn-sm"
             onClick={handleCreate}
             disabled={loading || trades.length === 0}
           >

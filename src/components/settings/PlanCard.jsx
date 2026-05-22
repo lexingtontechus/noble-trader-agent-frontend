@@ -165,12 +165,12 @@ export default function PlanCard({ currentPlan, onPlanChange }) {
                 {/* Action Button */}
                 <div className="card-actions mt-4">
                   {isCurrentPlan ? (
-                    <button className="btn btn-sm btn-disabled w-full" disabled>
+                    <button className="btn min-h-[44px] sm:min-h-0 sm:btn-sm btn-disabled w-full" disabled>
                       Current Plan
                     </button>
                   ) : isUpgrade ? (
                     <button
-                      className={`btn btn-sm w-full ${
+                      className={`btn min-h-[44px] sm:min-h-0 sm:btn-sm w-full ${
                         plan.key === "premium" ? "btn-warning" :
                         plan.key === "institutional" ? "btn-secondary" :
                         "btn-primary"
@@ -185,7 +185,7 @@ export default function PlanCard({ currentPlan, onPlanChange }) {
                       )}
                     </button>
                   ) : (
-                    <button className="btn btn-sm btn-ghost w-full" disabled>
+                    <button className="btn min-h-[44px] sm:min-h-0 sm:btn-sm btn-ghost w-full" disabled>
                       Downgrade
                     </button>
                   )}

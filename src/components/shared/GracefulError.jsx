@@ -141,7 +141,7 @@ export default function GracefulError({
         </p>
         {actionType && (
           <button
-            className="btn btn-sm btn-ghost btn-outline gap-1"
+            className="btn min-h-[44px] sm:min-h-0 sm:btn-sm btn-ghost btn-outline gap-1"
             onClick={handleAction}
           >
             {ACTION_LABELS[actionType] || 'Retry'}
@@ -167,7 +167,7 @@ export default function GracefulError({
           </p>
           {actionType && (
             <button
-              className="btn btn-sm btn-primary btn-outline mt-3 gap-1"
+              className="btn min-h-[44px] sm:min-h-0 sm:btn-sm btn-primary btn-outline mt-3 gap-1"
               onClick={handleAction}
             >
               {ACTION_LABELS[actionType] || 'Try Again'}

@@ -429,7 +429,7 @@ export default function SmokeTestPanel() {
           <div className="flex items-center gap-2">
             {isAdmin && (
               <button
-                className="btn btn-primary btn-sm"
+                className="btn btn-primary min-h-[44px] sm:min-h-0 sm:btn-sm"
                 onClick={handleRunTest}
                 disabled={loading}
               >
@@ -461,7 +461,7 @@ export default function SmokeTestPanel() {
         {error && (
           <div className="alert alert-error shadow-sm mt-2">
             <span className="text-sm">{error}</span>
-            <button className="btn btn-xs btn-ghost" onClick={() => setError(null)}>Dismiss</button>
+            <button className="btn min-h-[44px] sm:min-h-0 sm:btn-xs btn-ghost" onClick={() => setError(null)}>Dismiss</button>
           </div>
         )}
 

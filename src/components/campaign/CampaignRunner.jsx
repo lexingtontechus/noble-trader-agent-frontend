@@ -140,14 +140,14 @@ export default function CampaignRunner({ campaignId, onClose }) {
           {isActive && (
             <>
               <button
-                className="btn btn-warning btn-sm"
+                className="btn btn-warning min-h-[44px] sm:min-h-0 sm:btn-sm"
                 onClick={() => handleAction("pause")}
                 disabled={actionLoading !== null}
               >
                 {actionLoading === "pause" ? <span className="loading loading-spinner loading-xs"></span> : "Pause"}
               </button>
               <button
-                className="btn btn-error btn-sm"
+                className="btn btn-error min-h-[44px] sm:min-h-0 sm:btn-sm"
                 onClick={() => handleAction("stop")}
                 disabled={actionLoading !== null}
               >
@@ -158,14 +158,14 @@ export default function CampaignRunner({ campaignId, onClose }) {
           {isPaused && (
             <>
               <button
-                className="btn btn-primary btn-sm"
+                className="btn btn-primary min-h-[44px] sm:min-h-0 sm:btn-sm"
                 onClick={() => handleAction("resume")}
                 disabled={actionLoading !== null}
               >
                 {actionLoading === "resume" ? <span className="loading loading-spinner loading-xs"></span> : "Resume"}
               </button>
               <button
-                className="btn btn-error btn-sm"
+                className="btn btn-error min-h-[44px] sm:min-h-0 sm:btn-sm"
                 onClick={() => handleAction("stop")}
                 disabled={actionLoading !== null}
               >
@@ -174,7 +174,7 @@ export default function CampaignRunner({ campaignId, onClose }) {
             </>
           )}
           {isTerminal && onClose && (
-            <button className="btn btn-ghost btn-sm" onClick={onClose}>
+            <button className="btn btn-ghost min-h-[44px] sm:min-h-0 sm:btn-sm" onClick={onClose}>
               Close
             </button>
           )}

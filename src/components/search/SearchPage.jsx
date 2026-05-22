@@ -173,7 +173,7 @@ export default function SearchPage() {
           {PERIODS.map((p) => (
             <button
               key={p.key}
-              className={`btn btn-sm ${period === p.key ? 'btn-primary' : 'btn-ghost'}`}
+              className={`btn min-h-[44px] sm:min-h-0 sm:btn-sm ${period === p.key ? 'btn-primary' : 'btn-ghost'}`}
               onClick={() => {
                 setPeriod(p.key);
                 if (results) doSearch(query, p.key);
@@ -195,7 +195,7 @@ export default function SearchPage() {
             return (
               <button
                 key={ticker}
-                className={`btn btn-sm btn-outline ${isNonStock ? 'gap-1' : ''}`}
+                className={`btn min-h-[44px] sm:min-h-0 sm:btn-sm btn-outline ${isNonStock ? 'gap-1' : ''}`}
                 onClick={() => handleTickerClick(ticker)}
               >
                 {ticker}
@@ -224,7 +224,7 @@ export default function SearchPage() {
                   {symbol}
                 </button>
                 <button
-                  className="btn btn-ghost btn-xs"
+                  className="btn min-h-[44px] sm:min-h-0 sm:btn-xs btn-ghost"
                   onClick={() => handleRemoveRecent(symbol)}
                   aria-label={`Remove ${symbol}`}
                 >
@@ -273,7 +273,7 @@ export default function SearchPage() {
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M10 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2m7-2a9 9 0 11-18 0 9 9 0 0118 0z" />
           </svg>
           <span>{error}</span>
-          <button className="btn btn-sm btn-ghost" onClick={handleRetry}>Retry</button>
+          <button className="btn min-h-[44px] sm:min-h-0 sm:btn-sm btn-ghost" onClick={handleRetry}>Retry</button>
         </div>
       )}
 

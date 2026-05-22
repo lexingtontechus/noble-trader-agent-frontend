@@ -316,7 +316,7 @@ export default function NotificationPreferences() {
                   Always enabled. Notifications appear in the bell icon dropdown and as toast popups.
                 </p>
                 <button
-                  className="btn btn-xs btn-outline btn-primary mt-2"
+                  className="btn min-h-[44px] sm:min-h-0 sm:btn-xs btn-outline btn-primary mt-2"
                   onClick={() => handleTest("in_app")}
                   disabled={testing.in_app}
                 >
@@ -373,7 +373,7 @@ export default function NotificationPreferences() {
 
                 <div className="flex items-center gap-2">
                   <button
-                    className="btn btn-xs btn-outline"
+                    className="btn min-h-[44px] sm:min-h-0 sm:btn-xs btn-outline"
                     onClick={handleTestDiscordConnection}
                     disabled={!discordWebhookUrl.trim() || discordConnected === "testing"}
                   >
@@ -384,7 +384,7 @@ export default function NotificationPreferences() {
                     )}
                   </button>
                   <button
-                    className="btn btn-xs btn-outline btn-primary"
+                    className="btn min-h-[44px] sm:min-h-0 sm:btn-xs btn-outline btn-primary"
                     onClick={() => handleTest("discord")}
                     disabled={testing.discord || !channels.discord}
                   >
@@ -474,7 +474,7 @@ export default function NotificationPreferences() {
           {/* Quick actions */}
           <div className="flex gap-2 mt-3">
             <button
-              className="btn btn-xs btn-ghost"
+              className="btn min-h-[44px] sm:min-h-0 sm:btn-xs btn-ghost"
               onClick={() => {
                 const allOn = {};
                 Object.keys(ALERT_TYPE_META).forEach((k) => { allOn[k] = true; });
@@ -484,7 +484,7 @@ export default function NotificationPreferences() {
               Enable All
             </button>
             <button
-              className="btn btn-xs btn-ghost"
+              className="btn min-h-[44px] sm:min-h-0 sm:btn-xs btn-ghost"
               onClick={() => {
                 const allOff = {};
                 Object.keys(ALERT_TYPE_META).forEach((k) => { allOff[k] = false; });
@@ -639,7 +639,7 @@ export default function NotificationPreferences() {
       {/* ── Actions ───────────────────────────────────────────────────── */}
       <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3">
         <button
-          className={`btn btn-primary btn-sm ${saving ? "btn-disabled" : ""}`}
+          className={`btn btn-primary min-h-[44px] sm:min-h-0 sm:btn-sm ${saving ? "btn-disabled" : ""}`}
           onClick={handleSave}
           disabled={saving || !hasChanges}
         >
@@ -650,7 +650,7 @@ export default function NotificationPreferences() {
           )}
         </button>
         <button
-          className="btn btn-ghost btn-sm"
+          className="btn btn-ghost min-h-[44px] sm:min-h-0 sm:btn-sm"
           onClick={handleReset}
           disabled={saving}
         >

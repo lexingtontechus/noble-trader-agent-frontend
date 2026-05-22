@@ -115,7 +115,7 @@ export default function ClerkAuthPanel() {
           <span className="badge badge-primary badge-sm">Live</span>
         </div>
         <button
-          className={`btn btn-sm btn-primary ${running ? 'btn-disabled' : ''}`}
+          className={`btn btn-primary min-h-[44px] sm:min-h-0 sm:btn-sm ${running ? 'btn-disabled' : ''}`}
           onClick={runAllTests}
           disabled={running}
         >
@@ -138,7 +138,7 @@ export default function ClerkAuthPanel() {
               <h4 className="text-sm font-semibold">/auth/clerk/config</h4>
               <div className="flex items-center gap-2">
                 <StatusBadge status={getStatus('config')} />
-                <button className="btn btn-xs btn-ghost" onClick={() => runSingle('config')}>↻</button>
+                <button className="btn min-h-[44px] sm:min-h-0 sm:btn-xs btn-ghost" onClick={() => runSingle('config')}>↻</button>
               </div>
             </div>
             {loading.config && <span className="loading loading-dots loading-sm" />}
@@ -165,7 +165,7 @@ export default function ClerkAuthPanel() {
               <h4 className="text-sm font-semibold">/auth/clerk/me</h4>
               <div className="flex items-center gap-2">
                 <StatusBadge status={getStatus('me')} />
-                <button className="btn btn-xs btn-ghost" onClick={() => runSingle('me')}>↻</button>
+                <button className="btn min-h-[44px] sm:min-h-0 sm:btn-xs btn-ghost" onClick={() => runSingle('me')}>↻</button>
               </div>
             </div>
             {loading.me && <span className="loading loading-dots loading-sm" />}
@@ -194,7 +194,7 @@ export default function ClerkAuthPanel() {
               <h4 className="text-sm font-semibold">/auth/clerk/verify</h4>
               <div className="flex items-center gap-2">
                 <StatusBadge status={getStatus('verify')} />
-                <button className="btn btn-xs btn-ghost" onClick={() => runSingle('verify')}>↻</button>
+                <button className="btn min-h-[44px] sm:min-h-0 sm:btn-xs btn-ghost" onClick={() => runSingle('verify')}>↻</button>
               </div>
             </div>
             {loading.verify && <span className="loading loading-dots loading-sm" />}
@@ -233,7 +233,7 @@ export default function ClerkAuthPanel() {
               <h4 className="text-sm font-semibold">Clerk JWT Token</h4>
               <div className="flex items-center gap-2">
                 <StatusBadge status={getStatus('token')} />
-                <button className="btn btn-xs btn-ghost" onClick={() => runSingle('token')}>↻</button>
+                <button className="btn min-h-[44px] sm:min-h-0 sm:btn-xs btn-ghost" onClick={() => runSingle('token')}>↻</button>
               </div>
             </div>
             {loading.token && <span className="loading loading-dots loading-sm" />}
@@ -246,7 +246,7 @@ export default function ClerkAuthPanel() {
                       {tokenData.token_preview}
                     </code>
                     <button
-                      className="btn btn-xs btn-ghost btn-circle shrink-0"
+                      className="btn min-h-[44px] sm:min-h-0 sm:btn-xs btn-ghost btn-circle shrink-0"
                       onClick={() => navigator.clipboard?.writeText(tokenData.token)}
                       title="Copy full JWT"
                     >

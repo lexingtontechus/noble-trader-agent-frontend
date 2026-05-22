@@ -203,7 +203,7 @@ export default function OrdersPage() {
             {PERIODS.map((p) => (
               <button
                 key={p.key}
-                className={`btn btn-sm join-item ${period === p.key ? 'btn-primary' : 'btn-ghost'}`}
+                className={`btn min-h-[44px] sm:min-h-0 sm:btn-sm join-item ${period === p.key ? 'btn-primary' : 'btn-ghost'}`}
                 onClick={() => setPeriod(p.key)}
               >
                 {p.label}
@@ -213,7 +213,7 @@ export default function OrdersPage() {
 
           {/* Refresh */}
           <button
-            className="btn btn-sm btn-ghost gap-1"
+            className="btn min-h-[44px] sm:min-h-0 sm:btn-sm btn-ghost gap-1"
             onClick={refreshAll}
             title="Refresh data"
           >
@@ -225,7 +225,7 @@ export default function OrdersPage() {
 
           {/* Key Manager Toggle */}
           <button
-            className="btn btn-sm btn-ghost gap-1"
+            className="btn min-h-[44px] sm:min-h-0 sm:btn-sm btn-ghost gap-1"
             onClick={() => setShowKeyManager(!showKeyManager)}
             title="Manage Alpaca keys"
           >

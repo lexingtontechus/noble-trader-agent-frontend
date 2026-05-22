@@ -247,7 +247,7 @@ export default function OrderModal({ symbol, onClose, onSuccess }) {
         <div className="modal-box max-w-2xl p-8 bg-base-300 w-full">
           {/* Close button */}
           <button
-            className="btn btn-sm btn-circle btn-ghost absolute right-3 top-3 z-10 hover:bg-base-300"
+            className="btn min-h-[44px] sm:min-h-0 sm:btn-sm btn-circle btn-ghost absolute right-3 top-3 z-10 hover:bg-base-300"
             onClick={onClose}
             aria-label="Close modal"
           >

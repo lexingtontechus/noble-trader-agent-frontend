@@ -77,7 +77,7 @@ export default function CampaignList({ onSelect }) {
         {["all", "running", "paused", "completed", "stopped_loss_streak", "stopped_max_drawdown"].map(f => (
           <button
             key={f}
-            className={`btn btn-xs ${filter === f ? "btn-primary" : "btn-ghost"}`}
+            className={`btn min-h-[44px] sm:min-h-0 sm:btn-xs ${filter === f ? "btn-primary" : "btn-ghost"}`}
             onClick={() => setFilter(f)}
           >
             {f === "all" ? "All" : STATUS_LABELS[f] || f}

@@ -63,7 +63,7 @@ export default function PlanGate({
           <div className="card-actions mt-4">
             <a
               href="#settings-plan"
-              className="btn btn-primary btn-sm"
+              className="btn btn-primary min-h-[44px] sm:min-h-0 sm:btn-sm"
               onClick={(e) => {
                 e.preventDefault();
                 // Dispatch a custom event that SettingsPage listens to

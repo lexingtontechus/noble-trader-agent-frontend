@@ -160,7 +160,7 @@ export default function AlpacaKeySetup({ onConfigured, onRemoved, isManaging = f
 
           <div className="flex gap-2 mt-2">
             <button
-              className={`btn btn-primary btn-sm ${saving ? 'btn-disabled' : ''}`}
+              className={`btn btn-primary min-h-[44px] sm:min-h-0 sm:btn-sm ${saving ? 'btn-disabled' : ''}`}
               onClick={handleSave}
               disabled={saving || !apiKey.trim() || !secretKey.trim()}
             >
@@ -180,7 +180,7 @@ export default function AlpacaKeySetup({ onConfigured, onRemoved, isManaging = f
             Remove your Alpaca keys to disconnect your trading account.
           </p>
           <button
-            className={`btn btn-error btn-outline btn-sm ${removing ? 'btn-disabled' : ''}`}
+            className={`btn btn-error btn-outline min-h-[44px] sm:min-h-0 sm:btn-sm ${removing ? 'btn-disabled' : ''}`}
             onClick={handleRemove}
             disabled={removing}
           >

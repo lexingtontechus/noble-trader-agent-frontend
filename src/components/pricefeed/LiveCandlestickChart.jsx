@@ -644,7 +644,7 @@ export default function LiveCandlestickChart() {
           <div className="absolute inset-0 flex items-center justify-center z-10">
             <div className="alert alert-error alert-sm max-w-md">
               <span className="text-xs">{error}</span>
-              <button className="btn btn-xs btn-ghost" onClick={fetchChartData}>Retry</button>
+              <button className="btn min-h-[44px] sm:min-h-0 sm:btn-xs btn-ghost" onClick={fetchChartData}>Retry</button>
             </div>
           </div>
         )}

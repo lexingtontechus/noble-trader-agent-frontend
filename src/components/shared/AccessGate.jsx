@@ -111,7 +111,7 @@ export default function AccessGate({
             {missingPlan && (
               <a
                 href="#settings-plan"
-                className="btn btn-primary btn-sm"
+                className="btn btn-primary min-h-[44px] sm:min-h-0 sm:btn-sm"
                 onClick={(e) => {
                   e.preventDefault();
                   window.dispatchEvent(
@@ -124,7 +124,7 @@ export default function AccessGate({
             )}
             {missingRole && (
               <button
-                className="btn btn-ghost btn-sm"
+                className="btn btn-ghost min-h-[44px] sm:min-h-0 sm:btn-sm"
                 onClick={() => window.dispatchEvent(
                   new CustomEvent("noble:navigate", { detail: { view: "settings", tab: "profile" } })
                 )}

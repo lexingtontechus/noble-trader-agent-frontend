@@ -179,7 +179,7 @@ export default function ApiKeyManager() {
           </span>
           {meta.canCreate && (
             <button
-              className="btn btn-primary btn-sm"
+              className="btn btn-primary min-h-[44px] sm:min-h-0 sm:btn-sm"
               onClick={() => setShowCreateForm(true)}
               disabled={creating}
             >
@@ -199,7 +199,7 @@ export default function ApiKeyManager() {
             Free plan keys expire after 30 days. Upgrade to <strong>Premium</strong> for a permanent API key with rotation support.
           </span>
           <button
-            className="btn btn-warning btn-xs"
+            className="btn btn-warning min-h-[44px] sm:min-h-0 sm:btn-xs"
             onClick={() => window.dispatchEvent(
               new CustomEvent("noble:navigate", { detail: { view: "settings", tab: "plan" } })
             )}
@@ -232,13 +232,13 @@ export default function ApiKeyManager() {
             </div>
             <div className="card-actions justify-end mt-3">
               <button
-                className="btn btn-ghost btn-sm"
+                className="btn btn-ghost min-h-[44px] sm:min-h-0 sm:btn-sm"
                 onClick={() => setShowCreateForm(false)}
               >
                 Cancel
               </button>
               <button
-                className="btn btn-primary btn-sm"
+                className="btn btn-primary min-h-[44px] sm:min-h-0 sm:btn-sm"
                 onClick={handleCreate}
                 disabled={creating || !newKeyName.trim()}
               >
@@ -263,7 +263,7 @@ export default function ApiKeyManager() {
                 {newlyCreatedKey.key}
               </code>
               <button
-                className="btn btn-sm btn-ghost"
+                className="btn min-h-[44px] sm:min-h-0 sm:btn-sm btn-ghost"
                 onClick={() => handleCopy(newlyCreatedKey.key)}
               >
                 {copied ? "Copied!" : "Copy"}
@@ -281,7 +281,7 @@ export default function ApiKeyManager() {
             )}
           </div>
           <button
-            className="btn btn-sm btn-ghost"
+            className="btn min-h-[44px] sm:min-h-0 sm:btn-sm btn-ghost"
             onClick={() => setNewlyCreatedKey(null)}
           >
             Dismiss
@@ -299,7 +299,7 @@ export default function ApiKeyManager() {
             </p>
             {meta.canCreate && (
               <button
-                className="btn btn-primary btn-sm mt-2"
+                className="btn btn-primary min-h-[44px] sm:min-h-0 sm:btn-sm mt-2"
                 onClick={() => setShowCreateForm(true)}
               >
                 Create Your First API Key
@@ -341,7 +341,7 @@ export default function ApiKeyManager() {
                     <div className="flex items-center gap-1">
                       {key.isActive && isPremium && (
                         <button
-                          className="btn btn-ghost btn-xs"
+                          className="btn btn-ghost min-h-[44px] sm:min-h-0 sm:btn-xs"
                           onClick={() => handleRotate(key.id)}
                           disabled={creating}
                           title="Rotate this key (premium+)"
@@ -351,7 +351,7 @@ export default function ApiKeyManager() {
                       )}
                       {key.isActive && (
                         <button
-                          className="btn btn-ghost btn-xs text-error"
+                          className="btn btn-ghost min-h-[44px] sm:min-h-0 sm:btn-xs text-error"
                           onClick={() => handleRevoke(key.id)}
                           title="Revoke this key permanently"
                         >

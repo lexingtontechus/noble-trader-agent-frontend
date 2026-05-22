@@ -32,7 +32,7 @@ export default function AlertHistory() {
             )}
           </h3>
           {alerts.length > 0 && (
-            <button className="btn btn-xs btn-ghost" onClick={clearAlerts}>
+            <button className="btn min-h-[44px] sm:min-h-0 sm:btn-xs btn-ghost" onClick={clearAlerts}>
               Clear
             </button>
           )}

@@ -139,7 +139,7 @@ function ComingSoonCard({ title, description, icon, onRetry }) {
         {onRetry && (
           <div className="mt-3 flex justify-end">
             <button
-              className="btn btn-xs btn-ghost gap-1 text-info"
+              className="btn min-h-[44px] sm:min-h-0 sm:btn-xs btn-ghost gap-1 text-info"
               onClick={onRetry}
             >
               <svg
@@ -396,7 +396,7 @@ function CorrelationDetection({ symbols, positions, onCorrelationData }) {
                 {hint && <div className="text-xs opacity-70 mt-1">{hint}</div>}
               </div>
             </div>
-            <button className="btn btn-xs btn-ghost" onClick={detect}>
+            <button className="btn min-h-[44px] sm:min-h-0 sm:btn-xs btn-ghost" onClick={detect}>
               {errorCode === "SERVICE_STARTING" ? "Retry Now" : "Retry"}
             </button>
           </div>
@@ -775,7 +775,7 @@ function PortfolioOptimizer({ positions, totalValue }) {
                 {hint && <div className="text-xs opacity-70 mt-1">{hint}</div>}
               </div>
             </div>
-            <button className="btn btn-xs btn-ghost" onClick={optimize}>
+            <button className="btn min-h-[44px] sm:min-h-0 sm:btn-xs btn-ghost" onClick={optimize}>
               {errorCode === "SERVICE_STARTING" ? "Retry Now" : "Retry"}
             </button>
           </div>

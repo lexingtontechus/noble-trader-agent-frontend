@@ -514,7 +514,7 @@ export default function OrderTracker({ symbol }) {
                 <h3 className="font-bold text-sm">Failed to load orders</h3>
                 <div className="text-xs opacity-80">{error}</div>
                 <button
-                  className="btn btn-xs btn-ghost mt-2"
+                  className="btn min-h-[44px] sm:min-h-0 sm:btn-xs btn-ghost mt-2"
                   onClick={() => fetchOrders(true)}
                 >
                   Retry

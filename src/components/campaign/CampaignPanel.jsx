@@ -57,14 +57,14 @@ export default function CampaignPanel({ signals = [], symbol, stats = {} }) {
         <div className="flex items-center gap-2">
           {view === "runner" && (
             <button
-              className="btn btn-ghost btn-xs"
+              className="btn btn-ghost min-h-[44px] sm:min-h-0 sm:btn-xs"
               onClick={() => setView("list")}
             >
               All Campaigns
             </button>
           )}
           <button
-            className="btn btn-primary btn-sm"
+            className="btn btn-primary min-h-[44px] sm:min-h-0 sm:btn-sm"
             onClick={() => setShowBatchConfig(true)}
             disabled={actionableSignals.length === 0}
           >

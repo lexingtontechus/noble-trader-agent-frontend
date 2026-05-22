@@ -85,7 +85,7 @@ export default function SimulatePage() {
           <h3 className="card-title text-base mb-3">Select Symbol</h3>
           <div className="flex flex-wrap gap-2 mb-4">
             {POPULAR_SYMBOLS.map((s) => (
-              <button key={s.symbol} className={`btn btn-sm gap-1 ${selectedSymbol === s.symbol ? 'btn-primary' : 'btn-ghost'}`} onClick={() => handleSelectSymbol(s.symbol)}>
+              <button key={s.symbol} className={`btn min-h-[44px] sm:min-h-0 sm:btn-sm gap-1 ${selectedSymbol === s.symbol ? 'btn-primary' : 'btn-ghost'}`} onClick={() => handleSelectSymbol(s.symbol)}>
                 <span className="font-mono">{s.symbol}</span>
                 <span className="text-xs opacity-50">{s.name}</span>
               </button>
@@ -93,7 +93,7 @@ export default function SimulatePage() {
           </div>
           <form onSubmit={handleCustomSubmit} className="flex gap-2">
             <input type="text" placeholder="Enter symbol (e.g. MSFT)" className="input input-sm input-bordered flex-1 font-mono" value={customSymbol} onChange={(e) => setCustomSymbol(String(e.target.value).toUpperCase())} />
-            <button type="submit" className="btn btn-sm btn-primary" disabled={!customSymbol.trim()}>Load</button>
+            <button type="submit" className="btn min-h-[44px] sm:min-h-0 sm:btn-sm btn-primary" disabled={!customSymbol.trim()}>Load</button>
           </form>
           {activeSymbol && (
             <div className="flex items-center gap-2 mt-3">
