@@ -247,3 +247,37 @@ Stage Summary:
 - AUTH_EXPIRED is handled separately — doesn't kill the portfolio UI, allows reconnect
 - Navbar "P&L" fix is in the code — Vercel needs to redeploy (stale deployment confirmed)
 - All 12 Supabase integration tests pass
+
+---
+Task ID: VERCEL-CRON-FIX
+Agent: Main Agent
+Task: Fix Vercel deployment failures caused by vercel.json cron schedule exceeding hobby plan limits
+
+Work Log:
+- Investigated why Vercel hasn't picked up GitHub changes since yesterday
+- Discovered root cause: vercel.json had "crons": [{"schedule": "*/5 * * * *"}]
+  which is a 5-minute schedule. Vercel Hobby plan only allows once-per-day cron jobs.
+  Having a sub-daily schedule causes a HARD DEPLOYMENT FAILURE — every deploy is
+  rejected with: "Hobby accounts are limited to daily cron jobs."
+- This explains ALL stale deployment issues (SSE 403 fix, Navbar P&L fix, API key
+  system — none of them were deployed because Vercel was rejecting every build)
+- Removed crons from vercel.json (replaced with API cache headers only)
+- Created Supabase pg_cron migration (028_pg_cron_health_check.sql) that uses
+  pg_net.http_get() to call /api/health/cron every 5 minutes
+- pg_cron schedule: every 5min during market hours (Mon-Fri 13:00-21:00 UTC),
+  every 30min off-hours
+- Also scheduled daily portfolio snapshot capture via pg_cron
+- Updated health cron route docs to reference pg_cron instead of Vercel Cron
+- Added source tracking (pg_cron vs manual) in health check response
+- Pushed to GitHub: commit 4b403ec
+
+Stage Summary:
+- vercel.json crons removed — Vercel should immediately start deploying again
+- pg_cron migration created but must be run manually in Supabase SQL Editor
+- Steps to complete pg_cron setup:
+  1. Go to Supabase Dashboard → SQL Editor
+  2. Run: CREATE EXTENSION IF NOT EXISTS pg_cron WITH SCHEMA pg_catalog;
+  3. Run: CREATE EXTENSION IF NOT EXISTS pg_net WITH SCHEMA extensions;
+  4. Set app settings: ALTER DATABASE postgres SET app.settings.cron_secret = 'your-secret';
+  5. Run the 028_pg_cron_health_check.sql migration
+- All previous fixes (SSE, Navbar P&L, API keys) should deploy once Vercel rebuilds
