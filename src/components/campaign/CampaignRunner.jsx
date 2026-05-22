@@ -261,7 +261,9 @@ export default function CampaignRunner({ campaignId, onClose }) {
               <span className="text-xs font-medium text-base-content/60 uppercase tracking-wider">Trades</span>
               <span className="badge badge-xs badge-ghost">{campaign.trades.length}</span>
             </div>
-            <div className="overflow-x-auto max-h-64 overflow-y-auto" style={{ scrollbarWidth: "thin" }}>
+
+            {/* Desktop Table View */}
+            <div className="hidden sm:block overflow-x-auto max-h-64 overflow-y-auto" style={{ scrollbarWidth: "thin" }}>
               <table className="table table-sm">
                 <thead>
                   <tr>
@@ -302,6 +304,53 @@ export default function CampaignRunner({ campaignId, onClose }) {
                   })}
                 </tbody>
               </table>
+            </div>
+
+            {/* Mobile Card View */}
+            <div className="sm:hidden space-y-2 max-h-64 overflow-y-auto">
+              {campaign.trades.map((trade) => {
+                const tStyle = TRADE_STATUS_STYLES[trade.status] || TRADE_STATUS_STYLES.error;
+                const pnl = trade.realized_pnl || 0;
+                return (
+                  <div
+                    key={trade.id}
+                    className={`bg-base-300/50 rounded-lg p-3 ${trade.status === "pending" ? "opacity-40" : ""}`}
+                  >
+                    {/* Top row: Symbol + Side + P&L */}
+                    <div className="flex items-center justify-between mb-2">
+                      <div className="flex items-center gap-2">
+                        <span className="font-mono text-base-content/30 text-xs">#{trade.trade_index}</span>
+                        <span className="font-mono font-bold text-sm">{trade.symbol}</span>
+                        <span className={`badge badge-xs ${trade.side === "buy" ? "badge-success" : "badge-error"}`}>
+                          {trade.side.toUpperCase()}
+                        </span>
+                      </div>
+                      <span className={`font-mono text-sm font-bold ${pnl > 0 ? "text-success" : pnl < 0 ? "text-error" : ""}`}>
+                        {pnl !== 0 ? `${pnl > 0 ? "+" : ""}$${pnl.toFixed(2)}` : "—"}
+                      </span>
+                    </div>
+                    {/* Detail grid */}
+                    <div className="grid grid-cols-3 gap-x-4 gap-y-1 text-xs">
+                      <div>
+                        <div className="text-base-content/50">Qty</div>
+                        <div className="font-mono">{trade.qty}</div>
+                      </div>
+                      <div>
+                        <div className="text-base-content/50">Fill</div>
+                        <div className="font-mono">{trade.fill_price ? `$${trade.fill_price.toFixed(2)}` : "—"}</div>
+                      </div>
+                      <div>
+                        <div className="text-base-content/50">Exit</div>
+                        <div className="font-mono">{trade.exit_price ? `$${trade.exit_price.toFixed(2)}` : "—"}</div>
+                      </div>
+                    </div>
+                    {/* Status badge */}
+                    <div className="mt-1.5">
+                      <span className={`badge badge-xs ${tStyle.badge}`}>{tStyle.label}</span>
+                    </div>
+                  </div>
+                );
+              })}
             </div>
           </div>
         </div>

@@ -235,7 +235,7 @@ export default function BatchConfigModal({ signals = [], analysisId, onClose, on
           <div className="flex items-center gap-2 mb-3">
             <span className="text-xs font-medium text-base-content/60 uppercase tracking-wider">Campaign Preview</span>
           </div>
-          <div className="grid grid-cols-4 gap-3">
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
             <div className="text-center">
               <div className="font-mono font-bold text-lg text-primary">{trades.length}</div>
               <div className="text-[10px] text-base-content/40 uppercase">Trades</div>
