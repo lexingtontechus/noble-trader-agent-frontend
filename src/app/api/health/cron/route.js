@@ -1,7 +1,16 @@
 /**
- * Cron-based health check: Vercel Cron pings this endpoint every 5 minutes.
- * It checks the FastAPI backend health and sends a Discord alert if down.
+ * Cron-based health check: Called by Supabase pg_cron (via pg_net HTTP) every 5 minutes.
+ *
+ * Previously used Vercel Cron Jobs, but Vercel Hobby plan limits cron jobs to
+ * once per day. Having a 5-minute schedule in vercel.json caused ALL deployments to
+ * fail with: "Hobby accounts are limited to daily cron jobs."
+ *
+ * Now triggered by:
+ *   1. Supabase pg_cron → pg_net.http_get() → this endpoint
+ *   2. Manual browser/API call for testing
+ *
  * The endpoint is protected by CRON_SECRET to prevent unauthorized calls.
+ * If CRON_SECRET is not set, the endpoint is open (dev mode only).
  */
 
 import { FASTAPI_BASE } from "@/lib/config";
@@ -15,6 +24,8 @@ export async function GET(request) {
   // Verify cron secret to prevent abuse
   const authHeader = request.headers.get("authorization");
   const cronSecret = process.env.CRON_SECRET;
+
+  // In production, require CRON_SECRET. In dev, allow unauthenticated access.
   if (cronSecret && authHeader !== `Bearer ${cronSecret}`) {
     return Response.json({ error: "Unauthorized" }, { status: 401 });
   }
@@ -65,11 +76,17 @@ export async function GET(request) {
     }
   }
 
+  // Log the source of the request (pg_cron vs manual)
+  const source = request.headers.get("user-agent")?.includes("pg_net")
+    ? "pg_cron"
+    : "manual";
+
   return Response.json({
     status: backendStatus,
     consecutiveFailures,
     latency_ms: latencyMs,
     checked_at: new Date().toISOString(),
+    source,
   });
 }
 
