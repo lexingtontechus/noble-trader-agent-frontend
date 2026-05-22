@@ -546,36 +546,68 @@ export default function LiveCandlestickChart() {
 
   return (
     <div className="flex flex-col h-full">
-      {/* Chart header */}
-      <div className="px-4 py-2 border-b border-base-300 flex items-center justify-between flex-wrap gap-2">
-        <div className="flex items-center gap-3">
-          <h3 className="text-lg font-bold">{selectedSymbol}</h3>
-          {currentPrice && (
-            <div className="flex items-center gap-2">
-              <span className="text-xl font-mono font-bold">
-                ${formatPrice(currentPrice.price, selectedSymbol)}
+      {/* Chart header — stacks on mobile */}
+      <div className="px-3 sm:px-4 py-2 border-b border-base-300 flex flex-col gap-2">
+        {/* Symbol + price row */}
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2 sm:gap-3">
+            <h3 className="text-base sm:text-lg font-bold">{selectedSymbol}</h3>
+            {currentPrice && (
+              <div className="flex items-center gap-1.5 sm:gap-2">
+                <span className="text-base sm:text-xl font-mono font-bold">
+                  ${formatPrice(currentPrice.price, selectedSymbol)}
+                </span>
+                <span className={`badge badge-sm font-mono ${currentPrice.change > 0 ? "badge-success" : currentPrice.change < 0 ? "badge-error" : "badge-ghost"}`}>
+                  {currentPrice.change > 0 ? "+" : ""}{currentPrice.change.toFixed(2)}%
+                </span>
+              </div>
+            )}
+            {connected && (
+              <span className="badge badge-xs badge-success gap-1">
+                <span className="w-1.5 h-1.5 rounded-full bg-success animate-pulse"></span>
+                Live
               </span>
-              <span className={`badge badge-sm font-mono ${currentPrice.change > 0 ? "badge-success" : currentPrice.change < 0 ? "badge-error" : "badge-ghost"}`}>
-                {currentPrice.change > 0 ? "+" : ""}{currentPrice.change.toFixed(2)}%
-              </span>
-            </div>
-          )}
-          {connected && (
-            <span className="badge badge-xs badge-success gap-1">
-              <span className="w-1.5 h-1.5 rounded-full bg-success animate-pulse"></span>
-              Live
-            </span>
-          )}
+            )}
+          </div>
+
+          {/* Indicator menu — always visible */}
+          <div className="relative">
+            <button
+              className={`btn btn-sm sm:btn-xs min-h-[44px] sm:min-h-0 ${activeIndicators.length > 0 ? "btn-secondary" : "btn-ghost"}`}
+              onClick={() => setShowIndicatorMenu(!showIndicatorMenu)}
+            >
+              <span className="sm:hidden">Ind.</span>
+              <span className="hidden sm:inline">Indicators</span>
+              {activeIndicators.length > 0 && <span className="badge badge-xs badge-primary ml-1">{activeIndicators.length}</span>}
+            </button>
+            {showIndicatorMenu && (
+              <div className="absolute right-0 top-full mt-1 z-50 bg-base-100 border border-base-300 rounded-lg shadow-lg p-2 min-w-[180px]">
+                {Object.entries(INDICATORS).map(([key, ind]) => (
+                  <label key={key} className="flex items-center gap-2 px-2 py-2 sm:py-1.5 hover:bg-base-200 rounded cursor-pointer text-sm sm:text-xs min-h-[44px] sm:min-h-0">
+                    <input
+                      type="checkbox"
+                      className="checkbox checkbox-sm sm:checkbox-xs"
+                      checked={activeIndicators.includes(key)}
+                      onChange={() => toggleIndicator(key)}
+                    />
+                    <span className="w-3 h-0.5 rounded" style={{ backgroundColor: ind.color }} />
+                    <span>{ind.label}</span>
+                    <span className="text-base-content/40 ml-auto hidden sm:inline">{ind.params.join(", ")}</span>
+                  </label>
+                ))}
+              </div>
+            )}
+          </div>
         </div>
 
-        {/* Controls row */}
-        <div className="flex items-center gap-2 flex-wrap">
+        {/* Controls row — scrollable on mobile */}
+        <div className="flex items-center gap-2 overflow-x-auto scrollbar-none -mx-3 px-3 sm:mx-0 sm:px-0 sm:flex-wrap">
           {/* Chart type selector */}
-          <div className="flex items-center gap-0.5">
+          <div className="flex items-center gap-0.5 flex-shrink-0">
             {CHART_TYPES.map((ct) => (
               <button
                 key={ct.key}
-                className={`btn btn-xs ${chartType === ct.key ? "btn-primary" : "btn-ghost"}`}
+                className={`btn btn-sm sm:btn-xs min-h-[36px] sm:min-h-0 ${chartType === ct.key ? "btn-primary" : "btn-ghost"}`}
                 onClick={() => setChartType(ct.key)}
               >
                 {ct.label}
@@ -583,39 +615,15 @@ export default function LiveCandlestickChart() {
             ))}
           </div>
 
-          {/* Indicator menu */}
-          <div className="relative">
-            <button
-              className={`btn btn-xs ${activeIndicators.length > 0 ? "btn-secondary" : "btn-ghost"}`}
-              onClick={() => setShowIndicatorMenu(!showIndicatorMenu)}
-            >
-              Indicators {activeIndicators.length > 0 && `(${activeIndicators.length})`}
-            </button>
-            {showIndicatorMenu && (
-              <div className="absolute right-0 top-full mt-1 z-50 bg-base-100 border border-base-300 rounded-lg shadow-lg p-2 min-w-[160px]">
-                {Object.entries(INDICATORS).map(([key, ind]) => (
-                  <label key={key} className="flex items-center gap-2 px-2 py-1.5 hover:bg-base-200 rounded cursor-pointer text-xs">
-                    <input
-                      type="checkbox"
-                      className="checkbox checkbox-xs"
-                      checked={activeIndicators.includes(key)}
-                      onChange={() => toggleIndicator(key)}
-                    />
-                    <span className="w-3 h-0.5 rounded" style={{ backgroundColor: ind.color }} />
-                    <span>{ind.label}</span>
-                    <span className="text-base-content/40 ml-auto">{ind.params.join(", ")}</span>
-                  </label>
-                ))}
-              </div>
-            )}
-          </div>
+          {/* Divider */}
+          <span className="text-base-content/20 flex-shrink-0">|</span>
 
           {/* Period selector */}
-          <div className="flex items-center gap-0.5">
+          <div className="flex items-center gap-0.5 flex-shrink-0">
             {PERIOD_OPTIONS.map((opt) => (
               <button
                 key={opt.key}
-                className={`btn btn-xs ${chartPeriod === opt.key ? "btn-primary" : "btn-ghost"}`}
+                className={`btn btn-sm sm:btn-xs min-h-[36px] sm:min-h-0 ${chartPeriod === opt.key ? "btn-primary" : "btn-ghost"}`}
                 onClick={() => handlePeriodChange(opt.key)}
               >
                 {opt.label}

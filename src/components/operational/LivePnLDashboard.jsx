@@ -266,7 +266,7 @@ export default function LivePnLDashboard({ compact = false }) {
             )}
             {/* Phase 5: CSV Export */}
             <button
-              className="btn btn-xs btn-outline"
+              className="btn btn-sm sm:btn-xs btn-outline min-h-[44px] sm:min-h-0"
               onClick={() => exportPnlCsv("1M", "all")}
               title="Export P&L data as CSV"
             >
@@ -277,20 +277,20 @@ export default function LivePnLDashboard({ compact = false }) {
             </button>
             {/* Phase 5: Risk Metrics toggle */}
             <button
-              className={`btn btn-xs ${showRiskMetrics ? "btn-primary" : "btn-ghost"}`}
+              className={`btn btn-sm sm:btn-xs min-h-[44px] sm:min-h-0 ${showRiskMetrics ? "btn-primary" : "btn-ghost"}`}
               onClick={() => setShowRiskMetrics(!showRiskMetrics)}
             >
               Risk
             </button>
             {/* Phase 5: Alerts toggle */}
             <button
-              className={`btn btn-xs ${showAlertConfig ? "btn-warning" : "btn-ghost"}`}
+              className={`btn btn-sm sm:btn-xs min-h-[44px] sm:min-h-0 ${showAlertConfig ? "btn-warning" : "btn-ghost"}`}
               onClick={() => setShowAlertConfig(!showAlertConfig)}
             >
               Alerts {activeAlerts.length > 0 && <span className="badge badge-xs badge-error ml-1">{activeAlerts.length}</span>}
             </button>
             <button
-              className="btn btn-xs btn-ghost"
+              className="btn btn-sm sm:btn-xs btn-ghost min-h-[44px] sm:min-h-0"
               onClick={refresh}
               disabled={loading}
             >
@@ -406,87 +406,87 @@ export default function LivePnLDashboard({ compact = false }) {
                 <span className="loading loading-spinner loading-md text-primary" />
               </div>
             ) : riskMetrics && riskMetrics.n_data_points > 0 ? (
-              <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-2">
+              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-2">
                 {/* Sharpe */}
                 <div className="bg-base-100 rounded p-2 text-center">
-                  <div className="text-[10px] text-base-content/50 uppercase tracking-wider">Sharpe</div>
+                  <div className="text-xs sm:text-[10px] text-base-content/50 uppercase tracking-wider">Sharpe</div>
                   <div className={`font-mono font-bold text-sm ${riskMetrics.sharpe_ratio > 1 ? "text-success" : riskMetrics.sharpe_ratio < 0 ? "text-error" : ""}`}>
                     {riskMetrics.sharpe_ratio.toFixed(2)}
                   </div>
                 </div>
                 {/* Sortino */}
                 <div className="bg-base-100 rounded p-2 text-center">
-                  <div className="text-[10px] text-base-content/50 uppercase tracking-wider">Sortino</div>
+                  <div className="text-xs sm:text-[10px] text-base-content/50 uppercase tracking-wider">Sortino</div>
                   <div className={`font-mono font-bold text-sm ${riskMetrics.sortino_ratio > 1.5 ? "text-success" : riskMetrics.sortino_ratio < 0 ? "text-error" : ""}`}>
                     {riskMetrics.sortino_ratio.toFixed(2)}
                   </div>
                 </div>
                 {/* Max Drawdown */}
                 <div className="bg-base-100 rounded p-2 text-center">
-                  <div className="text-[10px] text-base-content/50 uppercase tracking-wider">Max DD</div>
+                  <div className="text-xs sm:text-[10px] text-base-content/50 uppercase tracking-wider">Max DD</div>
                   <div className={`font-mono font-bold text-sm ${riskMetrics.max_drawdown_pct < -10 ? "text-error" : riskMetrics.max_drawdown_pct < -5 ? "text-warning" : ""}`}>
                     {riskMetrics.max_drawdown_pct.toFixed(2)}%
                   </div>
                 </div>
                 {/* Current DD */}
                 <div className="bg-base-100 rounded p-2 text-center">
-                  <div className="text-[10px] text-base-content/50 uppercase tracking-wider">Current DD</div>
+                  <div className="text-xs sm:text-[10px] text-base-content/50 uppercase tracking-wider">Current DD</div>
                   <div className={`font-mono font-bold text-sm ${riskMetrics.current_drawdown_pct < -5 ? "text-error" : riskMetrics.current_drawdown_pct < -2 ? "text-warning" : ""}`}>
                     {riskMetrics.current_drawdown_pct.toFixed(2)}%
                   </div>
                 </div>
                 {/* VaR 95% */}
                 <div className="bg-base-100 rounded p-2 text-center">
-                  <div className="text-[10px] text-base-content/50 uppercase tracking-wider">VaR 95%</div>
+                  <div className="text-xs sm:text-[10px] text-base-content/50 uppercase tracking-wider">VaR 95%</div>
                   <div className="font-mono font-bold text-sm">
                     ${riskMetrics.var_95.toLocaleString("en-US", { maximumFractionDigits: 0 })}
                   </div>
                 </div>
                 {/* Win Rate */}
                 <div className="bg-base-100 rounded p-2 text-center">
-                  <div className="text-[10px] text-base-content/50 uppercase tracking-wider">Win Rate</div>
+                  <div className="text-xs sm:text-[10px] text-base-content/50 uppercase tracking-wider">Win Rate</div>
                   <div className={`font-mono font-bold text-sm ${(riskMetrics.win_rate || 0) > 0.5 ? "text-success" : "text-error"}`}>
                     {((riskMetrics.win_rate || 0) * 100).toFixed(1)}%
                   </div>
                 </div>
                 {/* Calmar */}
                 <div className="bg-base-100 rounded p-2 text-center">
-                  <div className="text-[10px] text-base-content/50 uppercase tracking-wider">Calmar</div>
+                  <div className="text-xs sm:text-[10px] text-base-content/50 uppercase tracking-wider">Calmar</div>
                   <div className="font-mono font-bold text-sm">
                     {riskMetrics.calmar_ratio.toFixed(2)}
                   </div>
                 </div>
                 {/* Annual Vol */}
                 <div className="bg-base-100 rounded p-2 text-center">
-                  <div className="text-[10px] text-base-content/50 uppercase tracking-wider">Ann Vol</div>
+                  <div className="text-xs sm:text-[10px] text-base-content/50 uppercase tracking-wider">Ann Vol</div>
                   <div className="font-mono font-bold text-sm">
                     {(riskMetrics.annual_vol * 100).toFixed(1)}%
                   </div>
                 </div>
                 {/* Profit Factor */}
                 <div className="bg-base-100 rounded p-2 text-center">
-                  <div className="text-[10px] text-base-content/50 uppercase tracking-wider">Profit Factor</div>
+                  <div className="text-xs sm:text-[10px] text-base-content/50 uppercase tracking-wider">Profit Factor</div>
                   <div className={`font-mono font-bold text-sm ${riskMetrics.profit_factor > 1 ? "text-success" : "text-error"}`}>
                     {riskMetrics.profit_factor.toFixed(2)}
                   </div>
                 </div>
                 {/* Annual Return */}
                 <div className="bg-base-100 rounded p-2 text-center">
-                  <div className="text-[10px] text-base-content/50 uppercase tracking-wider">Ann Return</div>
+                  <div className="text-xs sm:text-[10px] text-base-content/50 uppercase tracking-wider">Ann Return</div>
                   <div className={`font-mono font-bold text-sm ${riskMetrics.annual_return_pct > 0 ? "text-success" : "text-error"}`}>
                     {riskMetrics.annual_return_pct.toFixed(2)}%
                   </div>
                 </div>
                 {/* CVaR 95% */}
                 <div className="bg-base-100 rounded p-2 text-center">
-                  <div className="text-[10px] text-base-content/50 uppercase tracking-wider">CVaR 95%</div>
+                  <div className="text-xs sm:text-[10px] text-base-content/50 uppercase tracking-wider">CVaR 95%</div>
                   <div className="font-mono font-bold text-sm">
                     ${riskMetrics.cvar_95.toLocaleString("en-US", { maximumFractionDigits: 0 })}
                   </div>
                 </div>
                 {/* Max Consec Losses */}
                 <div className="bg-base-100 rounded p-2 text-center">
-                  <div className="text-[10px] text-base-content/50 uppercase tracking-wider">Max Loss Streak</div>
+                  <div className="text-xs sm:text-[10px] text-base-content/50 uppercase tracking-wider">Max Loss Streak</div>
                   <div className="font-mono font-bold text-sm">
                     {riskMetrics.max_consecutive_losses}
                   </div>
@@ -666,7 +666,7 @@ export default function LivePnLDashboard({ compact = false }) {
                 <span className="loading loading-spinner loading-md text-primary" />
               </div>
             ) : chartData.length > 0 ? (
-              <div className="bg-base-200 rounded-lg p-2" style={{ height: 280 }}>
+              <div className="bg-base-200 rounded-lg p-2 h-[220px] sm:h-[280px]">
                 <ResponsiveContainer width="100%" height="100%">
                   <AreaChart data={chartData} margin={{ top: 10, right: 10, left: 10, bottom: 0 }}>
                     <defs>
@@ -733,9 +733,10 @@ export default function LivePnLDashboard({ compact = false }) {
           <div className="mt-4">
             <div className="flex items-center justify-between mb-2">
               <h3 className="font-bold text-sm">Positions & P&L Attribution</h3>
-              <span className="text-xs text-base-content/50">Click column headers to sort</span>
+              <span className="text-xs text-base-content/50 hidden sm:inline">Click column headers to sort</span>
             </div>
-            <div className="overflow-x-auto">
+            {/* Desktop Table */}
+            <div className="hidden sm:block overflow-x-auto">
               <table className="table table-sm">
                 <thead>
                   <tr>
@@ -808,6 +809,49 @@ export default function LivePnLDashboard({ compact = false }) {
                 </tfoot>
               </table>
             </div>
+            {/* Mobile Card View */}
+            <div className="sm:hidden space-y-2">
+              {sortedPositions.map((p) => {
+                const pl = parseFloat(p.unrealized_pl) || 0;
+                const plpc = parseFloat(p.unrealized_plpc) || 0;
+                return (
+                  <div key={p.symbol} className="bg-base-200 rounded-lg p-3">
+                    <div className="flex items-center justify-between mb-1">
+                      <div className="flex items-center gap-2">
+                        <span className="font-bold">{p.symbol}</span>
+                        <span className={`badge badge-xs ${parseInt(p.qty) > 0 ? "badge-success" : "badge-error"}`}>
+                          {parseInt(p.qty) > 0 ? "LONG" : "SHORT"}
+                        </span>
+                      </div>
+                      <span className={`font-mono font-bold ${pnlColor(pl)}`}>
+                        {formatCurrency(pl)}
+                      </span>
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <div className="flex gap-3 text-xs text-base-content/60">
+                        <span>Qty: {Math.abs(parseInt(p.qty) || 0)}</span>
+                        <span>Entry: ${parseFloat(p.avg_entry_price).toFixed(2)}</span>
+                      </div>
+                      <span className={`badge badge-sm ${pnlBadge(plpc)}`}>
+                        {formatPercent(plpc * 100)}
+                      </span>
+                    </div>
+                  </div>
+                );
+              })}
+              {/* Total row */}
+              <div className="bg-base-300/50 rounded-lg p-3 flex items-center justify-between">
+                <span className="font-bold">Total</span>
+                <div className="flex items-center gap-2">
+                  <span className={`font-mono font-bold ${pnlColor(totalUnrealizedPnl)}`}>
+                    {formatCurrency(totalUnrealizedPnl)}
+                  </span>
+                  <span className={`badge badge-sm ${pnlBadge(totalUnrealizedPnlPc)}`}>
+                    {formatPercent(totalUnrealizedPnlPc)}
+                  </span>
+                </div>
+              </div>
+            </div>
           </div>
         ) : (
           <div className="mt-4 text-center py-8 text-base-content/40">
@@ -878,7 +922,8 @@ export default function LivePnLDashboard({ compact = false }) {
             </div>
           ) : (
             <>
-              <div className="overflow-x-auto">
+              {/* Desktop Table */}
+              <div className="hidden sm:block overflow-x-auto">
                 <table className="table table-sm">
                   <thead>
                     <tr>
@@ -923,6 +968,46 @@ export default function LivePnLDashboard({ compact = false }) {
                     })}
                   </tbody>
                 </table>
+              </div>
+              {/* Mobile Card View */}
+              <div className="sm:hidden space-y-2">
+                {recentTrades.slice(0, 10).map((trade, idx) => {
+                  const netAmt = parseFloat(trade.net_amount) || 0;
+                  const tradeTime = trade.transaction_timestamp
+                    ? new Date(trade.transaction_timestamp)
+                    : trade.date
+                      ? new Date(trade.date)
+                      : null;
+                  return (
+                    <div key={trade.id || idx} className="bg-base-200 rounded-lg p-3">
+                      <div className="flex items-center justify-between mb-1">
+                        <div className="flex items-center gap-2">
+                          <span className="font-bold">{trade.symbol || "-"}</span>
+                          <span className={`badge badge-xs ${trade.side === "buy" ? "badge-success" : "badge-error"}`}>
+                            {(trade.side || "-").toUpperCase()}
+                          </span>
+                        </div>
+                        {netAmt !== 0 && (
+                          <span className={`font-mono font-bold text-sm ${pnlColor(netAmt)}`}>
+                            {formatCurrency(netAmt)}
+                          </span>
+                        )}
+                      </div>
+                      <div className="flex items-center justify-between text-xs text-base-content/60">
+                        <span className="font-mono">
+                          {tradeTime
+                            ? tradeTime.toLocaleDateString("en-US", { month: "short", day: "numeric" }) +
+                              " " +
+                              tradeTime.toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit" })
+                            : "-"}
+                        </span>
+                        <span className="font-mono">
+                          {parseFloat(trade.qty) || 0} @ ${parseFloat(trade.price || trade.fill_price || 0).toFixed(2)}
+                        </span>
+                      </div>
+                    </div>
+                  );
+                })}
               </div>
 
               {/* Realized P&L by Symbol Breakdown */}

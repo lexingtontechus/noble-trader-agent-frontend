@@ -86,39 +86,80 @@ export default function OpenPositions({ positions, loading, error, onRetry, onSe
             <p className="text-sm">No open positions</p>
           </div>
         ) : (
-          <div className="max-h-96 overflow-y-auto">
-            <table className="table table-zebra table-sm">
-              <thead>
-                <tr>
-                  <th>Symbol</th>
-                  <th>Qty</th>
-                  <th>Avg Entry</th>
-                  <th>Current</th>
-                  <th>Market Value</th>
-                  <th>Unrealized P&L</th>
-                </tr>
-              </thead>
-              <tbody>
-                {positions.map((pos, idx) => (
-                  <tr key={pos.asset_id || pos.symbol || idx}>
-                    <td className="font-medium">{pos.symbol}</td>
-                    <td>{pos.qty}</td>
-                    <td>{fmt(pos.avg_entry_price)}</td>
-                    <td>{fmt(pos.current_price)}</td>
-                    <td>{fmt(pos.market_value)}</td>
-                    <td>
-                      <div className={pnlClass(pos.unrealized_pl)}>
-                        <span>{fmtPnl(pos.unrealized_pl)}</span>
-                        {pos.unrealized_plpc != null && (
-                          <span className="text-xs ml-1 opacity-70">({fmtPct(parseFloat(pos.unrealized_plpc) * 100)})</span>
-                        )}
-                      </div>
-                    </td>
+          <>
+            {/* Desktop Table View */}
+            <div className="hidden sm:block max-h-96 overflow-y-auto">
+              <table className="table table-zebra table-sm">
+                <thead>
+                  <tr>
+                    <th>Symbol</th>
+                    <th>Qty</th>
+                    <th>Avg Entry</th>
+                    <th>Current</th>
+                    <th>Market Value</th>
+                    <th>Unrealized P&L</th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+                </thead>
+                <tbody>
+                  {positions.map((pos, idx) => (
+                    <tr key={pos.asset_id || pos.symbol || idx}>
+                      <td className="font-medium">{pos.symbol}</td>
+                      <td>{pos.qty}</td>
+                      <td>{fmt(pos.avg_entry_price)}</td>
+                      <td>{fmt(pos.current_price)}</td>
+                      <td>{fmt(pos.market_value)}</td>
+                      <td>
+                        <div className={pnlClass(pos.unrealized_pl)}>
+                          <span>{fmtPnl(pos.unrealized_pl)}</span>
+                          {pos.unrealized_plpc != null && (
+                            <span className="text-xs ml-1 opacity-70">({fmtPct(parseFloat(pos.unrealized_plpc) * 100)})</span>
+                          )}
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+
+            {/* Mobile Card View */}
+            <div className="sm:hidden space-y-2 max-h-96 overflow-y-auto">
+              {positions.map((pos, idx) => (
+                <div key={pos.asset_id || pos.symbol || idx} className="bg-base-300/50 rounded-lg p-3">
+                  <div className="flex items-center justify-between mb-1.5">
+                    <span className="font-bold text-base">{pos.symbol}</span>
+                    <span className={`font-mono font-bold text-sm ${pnlClass(pos.unrealized_pl)}`}>
+                      {fmtPnl(pos.unrealized_pl)}
+                    </span>
+                  </div>
+                  {pos.unrealized_plpc != null && (
+                    <div className="flex justify-end mb-2">
+                      <span className={`badge badge-sm ${parseFloat(pos.unrealized_pl) >= 0 ? 'badge-success' : 'badge-error'}`}>
+                        {fmtPct(parseFloat(pos.unrealized_plpc) * 100)}
+                      </span>
+                    </div>
+                  )}
+                  <div className="grid grid-cols-3 gap-2 text-xs">
+                    <div>
+                      <div className="text-base-content/50">Qty</div>
+                      <div className="font-mono">{pos.qty}</div>
+                    </div>
+                    <div>
+                      <div className="text-base-content/50">Entry</div>
+                      <div className="font-mono">{fmt(pos.avg_entry_price)}</div>
+                    </div>
+                    <div>
+                      <div className="text-base-content/50">Current</div>
+                      <div className="font-mono">{fmt(pos.current_price)}</div>
+                    </div>
+                  </div>
+                  <div className="mt-1.5 text-xs text-base-content/50">
+                    Market Value: <span className="font-mono text-base-content/70">{fmt(pos.market_value)}</span>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </>
         )}
       </div>
     </div>

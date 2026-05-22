@@ -290,15 +290,15 @@ function AllocationBar({ symbol, weight, color = 'bg-primary' }) {
   const pct = typeof weight === 'number' ? weight * 100 : parseFloat(weight) * 100
   const isNaN_ = isNaN(pct)
   return (
-    <div className="flex items-center gap-3">
-      <span className="font-mono text-sm w-20 truncate">{symbol}</span>
-      <div className="flex-1 bg-base-300 rounded-full h-3 overflow-hidden">
+    <div className="flex items-center gap-2 sm:gap-3">
+      <span className="font-mono text-xs sm:text-sm w-14 sm:w-20 truncate">{symbol}</span>
+      <div className="flex-1 bg-base-300 rounded-full h-2.5 sm:h-3 overflow-hidden">
         <div
           className={`${color} h-full rounded-full transition-all duration-700`}
           style={{ width: isNaN_ ? '0%' : `${Math.min(Math.abs(pct), 100)}%` }}
         />
       </div>
-      <span className="font-mono text-sm w-16 text-right">
+      <span className="font-mono text-xs sm:text-sm w-14 sm:w-16 text-right">
         {isNaN_ ? '---' : `${pct.toFixed(1)}%`}
       </span>
     </div>
@@ -590,7 +590,8 @@ function AnalysisSummary({ data }) {
               </div>
               <h3 className="font-semibold text-sm">Risk Analysis</h3>
             </div>
-            <div className="overflow-x-auto">
+            {/* Desktop Table */}
+            <div className="hidden sm:block overflow-x-auto">
               <table className="table table-sm">
                 <thead>
                   <tr>
@@ -637,6 +638,48 @@ function AnalysisSummary({ data }) {
                 </tbody>
               </table>
             </div>
+            {/* Mobile Card View */}
+            <div className="sm:hidden space-y-2">
+              {Object.entries(riskAnalysis).map(([symbol, data]) => {
+                const riskScore = typeof data.risk_score === 'number' ? data.risk_score : 0.5
+                const varDaily = typeof data.var_daily === 'number' ? data.var_daily : 0
+                const cvarDaily = typeof data.cvar_daily === 'number' ? data.cvar_daily : 0
+                const breach = data.risk_limit_breach === true
+                return (
+                  <div key={symbol} className="bg-base-300/50 rounded-lg p-3">
+                    <div className="flex items-center justify-between mb-2">
+                      <span className="font-mono font-bold">{symbol}</span>
+                      {breach ? (
+                        <span className="badge badge-sm badge-error gap-1">
+                          <IconAlertTriangle size={12} /> Breach
+                        </span>
+                      ) : (
+                        <span className="badge badge-sm badge-success">OK</span>
+                      )}
+                    </div>
+                    <div className="flex items-center gap-2 mb-2">
+                      <span className="text-xs text-base-content/50 w-20">Risk Score</span>
+                      <progress
+                        className={`progress flex-1 ${riskScore > 0.7 ? 'progress-error' : riskScore > 0.4 ? 'progress-warning' : 'progress-success'}`}
+                        value={riskScore}
+                        max="1"
+                      />
+                      <span className="font-mono text-xs font-bold">{(riskScore * 100).toFixed(0)}%</span>
+                    </div>
+                    <div className="grid grid-cols-2 gap-2 text-xs">
+                      <div>
+                        <span className="text-base-content/50">VaR: </span>
+                        <span className="font-mono text-error">{(varDaily * 100).toFixed(2)}%</span>
+                      </div>
+                      <div>
+                        <span className="text-base-content/50">CVaR: </span>
+                        <span className="font-mono text-error">{(cvarDaily * 100).toFixed(2)}%</span>
+                      </div>
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
           </div>
         </div>
       )}
@@ -652,7 +695,8 @@ function AnalysisSummary({ data }) {
               <h3 className="font-semibold text-sm">TDA Anomaly Detection</h3>
               <span className="badge badge-xs badge-ghost ml-auto">Topological Analysis</span>
             </div>
-            <div className="overflow-x-auto">
+            {/* Desktop Table */}
+            <div className="hidden sm:block overflow-x-auto">
               <table className="table table-sm">
                 <thead>
                   <tr>
@@ -722,6 +766,65 @@ function AnalysisSummary({ data }) {
                   })}
                 </tbody>
               </table>
+            </div>
+            {/* Mobile Card View */}
+            <div className="sm:hidden space-y-2">
+              {Object.entries(tdaAnalysis).map(([symbol, data]) => {
+                const anomaly = typeof data.anomaly_score === 'number' ? data.anomaly_score : null
+                const regimeChange = typeof data.regime_change_probability === 'number' ? data.regime_change_probability : null
+                const betti0 = data.betti_0 ?? '-'
+                const betti1 = data.betti_1 ?? '-'
+                const entropy = typeof data.total_entropy === 'number' ? data.total_entropy : null
+                const isAnomalous = anomaly != null && anomaly >= 1.5
+                const isRegimeChange = regimeChange != null && regimeChange >= 0.6
+                const alertLevel = isAnomalous && anomaly >= 2.25 ? 'critical' : isRegimeChange ? 'high' : isAnomalous ? 'medium' : 'none'
+                return (
+                  <div key={symbol} className="bg-base-300/50 rounded-lg p-3">
+                    <div className="flex items-center justify-between mb-2">
+                      <span className="font-mono font-bold">{symbol}</span>
+                      {alertLevel !== 'none' ? (
+                        <span className={`badge badge-sm ${alertLevel === 'critical' ? 'badge-error' : alertLevel === 'high' ? 'badge-warning' : 'badge-info'}`}>
+                          {alertLevel.toUpperCase()}
+                        </span>
+                      ) : (
+                        <span className="badge badge-sm badge-success">OK</span>
+                      )}
+                    </div>
+                    <div className="grid grid-cols-2 gap-x-4 gap-y-1.5 text-xs">
+                      <div className="flex justify-between">
+                        <span className="text-base-content/50">Anomaly</span>
+                        {anomaly != null ? (
+                          <span className={`font-mono font-bold ${anomaly >= 2.25 ? 'text-error' : anomaly >= 1.5 ? 'text-warning' : 'text-success'}`}>
+                            {anomaly.toFixed(2)}
+                          </span>
+                        ) : <span className="text-base-content/30">N/A</span>}
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-base-content/50">Regime Chg</span>
+                        {regimeChange != null ? (
+                          <span className={`font-mono font-bold ${regimeChange >= 0.6 ? 'text-error' : regimeChange >= 0.3 ? 'text-warning' : 'text-success'}`}>
+                            {(regimeChange * 100).toFixed(1)}%
+                          </span>
+                        ) : <span className="text-base-content/30">N/A</span>}
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-base-content/50">Betti-0</span>
+                        <span className="font-mono">{betti0}</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-base-content/50">Betti-1</span>
+                        <span className="font-mono">{betti1}</span>
+                      </div>
+                      <div className="flex justify-between col-span-2">
+                        <span className="text-base-content/50">Entropy</span>
+                        {entropy != null ? (
+                          <span className={`font-mono ${entropy >= 0.8 ? 'text-warning font-bold' : ''}`}>{entropy.toFixed(2)}</span>
+                        ) : <span className="text-base-content/30">N/A</span>}
+                      </div>
+                    </div>
+                  </div>
+                )
+              })}
             </div>
           </div>
         </div>

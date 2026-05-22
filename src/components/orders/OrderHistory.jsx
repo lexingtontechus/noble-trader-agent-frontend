@@ -100,34 +100,60 @@ export default function OrderHistory({ orders, loading, error, onRetry, onSetupK
             <p className="text-sm">No orders found for this period</p>
           </div>
         ) : (
-          <div className="max-h-96 overflow-y-auto">
-            <table className="table table-zebra table-sm">
-              <thead>
-                <tr>
-                  <th>Date</th>
-                  <th>Symbol</th>
-                  <th>Side</th>
-                  <th>Type</th>
-                  <th>Qty</th>
-                  <th>Status</th>
-                  <th>Filled Price</th>
-                </tr>
-              </thead>
-              <tbody>
-                {orders.map((order, idx) => (
-                  <tr key={order.id || idx}>
-                    <td className="text-xs whitespace-nowrap">{formatDate(order.submitted_at || order.created_at)}</td>
-                    <td className="font-medium">{order.symbol}</td>
-                    <td>{sideBadge(order.side)}</td>
-                    <td className="text-xs uppercase">{order.type}</td>
-                    <td>{order.qty || order.filled_qty || '—'}</td>
-                    <td>{statusBadge(order.status)}</td>
-                    <td>{fmtPrice(order.filled_avg_price)}</td>
+          <>
+            {/* Desktop Table View */}
+            <div className="hidden sm:block max-h-96 overflow-y-auto">
+              <table className="table table-zebra table-sm">
+                <thead>
+                  <tr>
+                    <th>Date</th>
+                    <th>Symbol</th>
+                    <th>Side</th>
+                    <th>Type</th>
+                    <th>Qty</th>
+                    <th>Status</th>
+                    <th>Filled Price</th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+                </thead>
+                <tbody>
+                  {orders.map((order, idx) => (
+                    <tr key={order.id || idx}>
+                      <td className="text-xs whitespace-nowrap">{formatDate(order.submitted_at || order.created_at)}</td>
+                      <td className="font-medium">{order.symbol}</td>
+                      <td>{sideBadge(order.side)}</td>
+                      <td className="text-xs uppercase">{order.type}</td>
+                      <td>{order.qty || order.filled_qty || '—'}</td>
+                      <td>{statusBadge(order.status)}</td>
+                      <td>{fmtPrice(order.filled_avg_price)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+
+            {/* Mobile Card View */}
+            <div className="sm:hidden space-y-2 max-h-96 overflow-y-auto">
+              {orders.map((order, idx) => (
+                <div key={order.id || idx} className="bg-base-300/50 rounded-lg p-3">
+                  <div className="flex items-center justify-between mb-1">
+                    <span className="font-bold">{order.symbol}</span>
+                    <div className="flex items-center gap-1.5">
+                      {sideBadge(order.side)}
+                      {statusBadge(order.status)}
+                    </div>
+                  </div>
+                  <div className="flex items-center justify-between text-xs text-base-content/60">
+                    <span>{formatDate(order.submitted_at || order.created_at)}</span>
+                    <span className="uppercase">{order.type}</span>
+                  </div>
+                  <div className="flex items-center justify-between mt-1 text-sm">
+                    <span className="text-base-content/50">Qty: {order.qty || order.filled_qty || '—'}</span>
+                    <span className="font-mono">{fmtPrice(order.filled_avg_price)}</span>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </>
         )}
       </div>
     </div>

@@ -150,17 +150,17 @@ export default function SettingsPage({ initialTab = "profile" }) {
         </div>
       )}
 
-      {/* Tab Navigation */}
-      <div role="tablist" className="tabs tabs-bordered">
+      {/* Tab Navigation — scrollable on mobile, icon-only on small screens */}
+      <div role="tablist" className="tabs tabs-bordered overflow-x-auto flex-nowrap scrollbar-none -mx-2 px-2 sm:mx-0 sm:px-0">
         {TABS.map((tab) => (
           <button
             key={tab.key}
             role="tab"
-            className={`tab ${activeTab === tab.key ? "tab-active" : ""}`}
+            className={`tab whitespace-nowrap min-h-[44px] ${activeTab === tab.key ? "tab-active" : ""}`}
             onClick={() => setActiveTab(tab.key)}
           >
-            <span className="mr-1">{tab.icon}</span>
-            {tab.label}
+            <span className="mr-1 text-base">{tab.icon}</span>
+            <span className="hidden sm:inline">{tab.label}</span>
             {tab.key === "live" && plan !== "premium" && plan !== "institutional" && (
               <span className="badge badge-xs badge-error ml-1">PRO</span>
             )}

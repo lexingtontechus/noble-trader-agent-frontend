@@ -20,7 +20,6 @@ function getDisplayName(symbol) {
 }
 
 function colorCodeBestWorst(values, key, higherIsBetter = true) {
-  // values: array of { symbol, value }
   const validValues = values.filter((v) => v.value != null)
   if (validValues.length === 0) return values.map((v) => ({ ...v, className: '' }))
 
@@ -39,11 +38,9 @@ function colorCodeBestWorst(values, key, higherIsBetter = true) {
 export default function ComparisonTable({ tickers }) {
   if (!tickers || tickers.length === 0) return null
 
-  // Only include tickers that have data
   const withData = tickers.filter((t) => t.data?.analysis)
   if (withData.length === 0) return null
 
-  // Extract metrics for each ticker
   const tickerMetrics = tickers.map((t) => {
     const a = t.data?.analysis
     const regime = a?.regime
@@ -67,7 +64,6 @@ export default function ComparisonTable({ tickers }) {
     }
   })
 
-  // Build rows with color coding
   const rows = [
     {
       label: 'Regime',
@@ -75,7 +71,7 @@ export default function ComparisonTable({ tickers }) {
       higherIsBetter: true,
     },
     {
-      label: 'Risk Multiplier',
+      label: 'Risk Mult',
       values: tickerMetrics.map((t) => ({ symbol: t.symbol, value: t.riskMultiplier })),
       higherIsBetter: true,
       format: (v) => formatNum(v),
@@ -83,7 +79,7 @@ export default function ComparisonTable({ tickers }) {
     {
       label: 'VaR 95%',
       values: tickerMetrics.map((t) => ({ symbol: t.symbol, value: t.var95 })),
-      higherIsBetter: false, // less negative is better
+      higherIsBetter: false,
       format: (v) => formatPct(v),
     },
     {
@@ -93,19 +89,19 @@ export default function ComparisonTable({ tickers }) {
       format: (v) => formatPct(v),
     },
     {
-      label: 'Max Drawdown',
+      label: 'Max DD',
       values: tickerMetrics.map((t) => ({ symbol: t.symbol, value: t.maxDrawdown })),
-      higherIsBetter: false, // less negative is better
+      higherIsBetter: false,
       format: (v) => formatPct(v),
     },
     {
-      label: 'Annual Return',
+      label: 'Ann Return',
       values: tickerMetrics.map((t) => ({ symbol: t.symbol, value: t.annualReturn })),
       higherIsBetter: true,
       format: (v) => formatPct(v),
     },
     {
-      label: 'Annual Vol',
+      label: 'Ann Vol',
       values: tickerMetrics.map((t) => ({ symbol: t.symbol, value: t.annualVol })),
       higherIsBetter: false,
       format: (v) => formatPct(v),
@@ -129,7 +125,7 @@ export default function ComparisonTable({ tickers }) {
       format: (v) => formatNum(v),
     },
     {
-      label: 'Recommended Position',
+      label: 'Rec. Position',
       values: tickerMetrics.map((t) => ({ symbol: t.symbol, value: t.recommendedPosition })),
       higherIsBetter: true,
       format: (v) => formatPct(v),
@@ -137,40 +133,79 @@ export default function ComparisonTable({ tickers }) {
   ]
 
   return (
-    <div className="overflow-x-auto">
-      <table className="table table-zebra w-full">
-        <thead>
-          <tr>
-            <th>Metric</th>
-            {tickerMetrics.map((t) => (
-              <th key={t.symbol}>{t.displayName}</th>
-            ))}
-          </tr>
-        </thead>
-        <tbody>
-          {rows.map((row) => {
-            const isText = row.values.some((v) => v.isText)
-            const colored = isText
-              ? row.values.map((v) => ({ ...v, className: '' }))
-              : colorCodeBestWorst(row.values, row.label, row.higherIsBetter)
+    <>
+      {/* Desktop Table View */}
+      <div className="hidden sm:block overflow-x-auto">
+        <table className="table table-zebra w-full">
+          <thead>
+            <tr>
+              <th>Metric</th>
+              {tickerMetrics.map((t) => (
+                <th key={t.symbol}>{t.displayName}</th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map((row) => {
+              const isText = row.values.some((v) => v.isText)
+              const colored = isText
+                ? row.values.map((v) => ({ ...v, className: '' }))
+                : colorCodeBestWorst(row.values, row.label, row.higherIsBetter)
 
-            return (
-              <tr key={row.label}>
-                <td className="text-sm font-semibold text-base-content/70">{row.label}</td>
-                {colored.map((v) => (
-                  <td key={v.symbol} className={`text-sm ${v.className}`}>
-                    {v.isText
-                      ? v.value || 'N/A'
-                      : row.format
-                        ? row.format(v.value)
-                        : String(v.value ?? 'N/A')}
-                  </td>
-                ))}
-              </tr>
-            )
-          })}
-        </tbody>
-      </table>
-    </div>
+              return (
+                <tr key={row.label}>
+                  <td className="text-sm font-semibold text-base-content/70">{row.label}</td>
+                  {colored.map((v) => (
+                    <td key={v.symbol} className={`text-sm ${v.className}`}>
+                      {v.isText
+                        ? v.value || 'N/A'
+                        : row.format
+                          ? row.format(v.value)
+                          : String(v.value ?? 'N/A')}
+                    </td>
+                  ))}
+                </tr>
+              )
+            })}
+          </tbody>
+        </table>
+      </div>
+
+      {/* Mobile Card View — one card per ticker */}
+      <div className="sm:hidden space-y-3">
+        {tickerMetrics.map((t) => (
+          <div key={t.symbol} className="card bg-base-200 shadow-sm">
+            <div className="card-body p-3">
+              <h3 className="font-bold text-base">{t.displayName}</h3>
+              <div className="grid grid-cols-2 gap-x-4 gap-y-1.5 mt-1">
+                {rows.map((row) => {
+                  const val = row.values.find((v) => v.symbol === t.symbol)
+                  const isText = val?.isText
+                  const colored = isText
+                    ? { className: '' }
+                    : colorCodeBestWorst(row.values, row.label, row.higherIsBetter)
+                        .find((v) => v.symbol === t.symbol) || { className: '' }
+
+                  return (
+                    <div key={row.label} className="flex justify-between items-baseline">
+                      <span className="text-xs text-base-content/50">{row.label}</span>
+                      <span className={`text-sm font-mono ${colored.className}`}>
+                        {val == null || val.value == null
+                          ? 'N/A'
+                          : isText
+                            ? val.value || 'N/A'
+                            : row.format
+                              ? row.format(val.value)
+                              : String(val.value)}
+                      </span>
+                    </div>
+                  )
+                })}
+              </div>
+            </div>
+          </div>
+        ))}
+      </div>
+    </>
   )
 }
