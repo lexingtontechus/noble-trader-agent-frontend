@@ -213,3 +213,37 @@ Stage Summary:
 - API key rotation now works for premium users (verified via Supabase test)
 - SSE reconnect loop fixed — credentials_error stops reconnection gracefully
 - Distinguishes NO_KEYS (no error banner) from invalid credentials (shows error)
+
+---
+Task ID: SSE-EVENTSOURCE-FIX-v2
+Agent: Main Agent
+Task: Fix SSE EventSource reconnect loop — convert ALL upstream errors to SSE events + Navbar "P&L" investigation + Supabase integration tests
+
+Work Log:
+- Investigated user's 403 error on /api/stream/pnl in browser console
+- Found root cause: EventSource API cannot read HTTP status codes. ANY non-200 response triggers onerror with no status info, causing infinite reconnect loops
+- Previous fix (b98a907) only handled 403 from FastAPI — 401/429/5xx still returned as JSON errors which EventSource can't process
+- Verified deployed Vercel app still has old code: {key:"ops",label:"Ops"} in NAV_ITEMS (pre-d7c4118)
+- Confirmed local code is correct: {key:"pnl",label:"P&L"} — Vercel deployment is stale
+- Enhanced BFF /api/stream/pnl route to convert ALL upstream error responses to SSE events:
+  - 403 → credentials_error (NO_KEYS)
+  - 401 → credentials_error (AUTH_EXPIRED)
+  - 429 → backend_error (RATE_LIMITED)
+  - 5xx → backend_error (UPSTREAM_ERROR)
+  - Others → backend_error (HTTP_xxx)
+- Added backend_error SSE event handler in PortfolioProvider (transient errors, allows reconnect)
+- Added AUTH_EXPIRED handling in credentials_error — doesn't permanently mark hasKeys=false
+- Ran comprehensive Supabase integration tests (12 tests, all passed):
+  - Connection, schema, CRUD, rotation grace, soft delete, hash collision constraint, count queries, RLS, cross-stack hash consistency
+  - api_keys, rate_limit_violations, user_subscriptions tables all verified
+  - RLS blocks anonymous access correctly
+  - Unique constraint on key_hash working (error code 23505)
+- Build verified (no errors)
+- Pushed to GitHub: commit 33de20a
+
+Stage Summary:
+- SSE route now NEVER returns JSON error responses — all errors become SSE events (HTTP 200)
+- PortfolioProvider handles credentials_error (permanent, stops reconnect) and backend_error (transient, allows reconnect)
+- AUTH_EXPIRED is handled separately — doesn't kill the portfolio UI, allows reconnect
+- Navbar "P&L" fix is in the code — Vercel needs to redeploy (stale deployment confirmed)
+- All 12 Supabase integration tests pass
