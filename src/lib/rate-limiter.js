@@ -123,6 +123,9 @@ export const PATH_TIER_MAP = [
   // API key management
   { pattern: /^\/api\/api-keys/,                  tier: "auth" },
 
+  // MCP proxy routes (inherits backend MCP rate limits)
+  { pattern: /^\/api\/mcp/,                       tier: "data" },
+
   // Public routes
   { pattern: /^\/api\/health\/cron/,              tier: "public" },
   { pattern: /^\/api\/health$/,                   tier: "public" },

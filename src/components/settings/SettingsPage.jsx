@@ -10,6 +10,7 @@ import CredentialCard from "./CredentialCard";
 import PlanCard from "./PlanCard";
 import NotificationPreferences from "./NotificationPreferences";
 import ApiKeyManager from "./ApiKeyManager";
+import McpIntegrationPanel from "./McpIntegrationPanel";
 
 /**
  * SettingsPage — Centralized account management.
@@ -22,6 +23,7 @@ const TABS = [
   { key: "paper", label: "Paper Account", icon: "📝" },
   { key: "live", label: "Live Account", icon: "🔴" },
   { key: "apikeys", label: "API Keys", icon: "🔑" },
+  { key: "mcp", label: "MCP", icon: "🤖" },
   { key: "notifications", label: "Notifications", icon: "🔔" },
   { key: "plan", label: "Plan & Billing", icon: "💎" },
 ];
@@ -264,6 +266,11 @@ export default function SettingsPage({ initialTab = "profile" }) {
         {/* API Keys Tab */}
         {activeTab === "apikeys" && (
           <ApiKeyManager />
+        )}
+
+        {/* MCP Integration Tab */}
+        {activeTab === "mcp" && (
+          <McpIntegrationPanel />
         )}
 
         {/* Notifications Tab */}
