@@ -2,7 +2,7 @@
 
 **Last Updated:** 2026-05-22
 **Version:** v7.0.0 (Production-Grade Institutional Trading Platform)
-**Current Phase:** P6 — Real-Time Price Feed + Advanced Charting
+**Current Phase:** P7 — Mobile-Responsive Overhaul + WebSocket Price Feed
 
 ---
 
@@ -520,3 +520,4 @@ PORT=8000
 | **P4** | Production Readiness | ✅ Complete | Rate Limiting, Encryption, Retention, Multi-Tenant, Deployment Runbook |
 | **P5** | MCP Integration + API Keys | ✅ Complete | MCP BFF proxy, tool discovery, McpIntegrationPanel, API key system, auto-expire cron, pg_cron migration |
 | **P6** | Price Feed + Advanced Charting | ✅ Complete | Finnhub WS hook, OHLCV BFF, TickerTape, WatchlistPanel, LiveCandlestickChart, technical indicators (SMA/EMA/BB/RSI/MACD), PriceFeedPage |
+| **P7** | Mobile-Responsive Overhaul | 🔄 In Progress | P0: Settings tabs scroll, 7 table→card views (ComparisonTable, OrderHistory, OpenPositions, LivePnL positions/trades, Risk Analysis, TDA Anomaly), LiveCandlestickChart mobile controls, AllocationBar responsive, touch targets 44px |
