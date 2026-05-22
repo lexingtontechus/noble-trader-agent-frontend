@@ -1,0 +1,303 @@
+{
+  "$schema": "https://modelcontextprotocol.io/schema/mcp-config.json",
+  "version": "1.0.0",
+  "description": "Noble Trader Agent — MCP Server Configuration for AI-assisted development and operations",
+  "servers": {
+    "noble-trader-api": {
+      "type": "api",
+      "name": "Noble Trader Agent API",
+      "version": "7.0.0",
+      "description": "Complete BFF and FastAPI backend access for trading operations, risk management, and system monitoring",
+      "baseUrl": "https://noble-trader-agent-frontend.vercel.app",
+      "backendUrl": "https://noble-trader-fastapi-backend.onrender.com",
+      "auth": {
+        "type": "bearer",
+        "description": "Clerk JWT token obtained via /api/auth/fastapi-token",
+        "header": "Authorization",
+        "prefix": "Bearer"
+      },
+      "rateLimiting": {
+        "type": "sliding-window",
+        "backend": "upstash-redis",
+        "tiers": {
+          "trade": { "max": 10, "windowMs": 60000 },
+          "order": { "max": 15, "windowMs": 60000 },
+          "backtest": { "max": 5, "windowMs": 300000 },
+          "ai": { "max": 10, "windowMs": 60000 },
+          "write": { "max": 10, "windowMs": 60000 },
+          "data": { "max": 60, "windowMs": 60000 },
+          "admin": { "max": 30, "windowMs": 60000 },
+          "auth": { "max": 20, "windowMs": 60000 },
+          "public": { "max": 100, "windowMs": 60000 }
+        },
+        "planMultipliers": {
+          "free": 1,
+          "premium": 3,
+          "institutional": 10
+        },
+        "headers": {
+          "limit": "X-RateLimit-Limit",
+          "remaining": "X-RateLimit-Remaining",
+          "reset": "X-RateLimit-Reset",
+          "retryAfter": "Retry-After"
+        }
+      },
+      "tools": [
+        {
+          "name": "get_pipeline_state",
+          "description": "Get current Renko pipeline state for a symbol",
+          "endpoint": "/api/renko/[action]?action=state&symbol={symbol}",
+          "method": "GET",
+          "parameters": [
+            { "name": "symbol", "type": "string", "default": "SPY", "required": false }
+          ],
+          "tier": "data",
+          "minRole": "viewer"
+        },
+        {
+          "name": "get_pipeline_stats",
+          "description": "Get comprehensive pipeline statistics",
+          "endpoint": "/api/renko/[action]?action=stats&symbol={symbol}",
+          "method": "GET",
+          "parameters": [
+            { "name": "symbol", "type": "string", "default": "SPY", "required": false }
+          ],
+          "tier": "data",
+          "minRole": "viewer"
+        },
+        {
+          "name": "process_tick",
+          "description": "Process a single tick through the Renko HFT pipeline",
+          "endpoint": "/api/renko/[action]?action=tick",
+          "method": "POST",
+          "parameters": [
+            { "name": "price", "type": "number", "required": true },
+            { "name": "symbol", "type": "string", "default": "SPY", "required": false }
+          ],
+          "tier": "trade",
+          "minRole": "trader"
+        },
+        {
+          "name": "process_batch_ticks",
+          "description": "Process a batch of ticks for backtest or warmup",
+          "endpoint": "/api/renko/[action]?action=tick/batch",
+          "method": "POST",
+          "parameters": [
+            { "name": "prices", "type": "array<number>", "required": true },
+            { "name": "symbol", "type": "string", "default": "SPY", "required": false }
+          ],
+          "tier": "backtest",
+          "minRole": "trader"
+        },
+        {
+          "name": "get_renko_bricks",
+          "description": "Get recent Renko bricks with swing classifications",
+          "endpoint": "/api/renko/[action]?action=bricks&symbol={symbol}",
+          "method": "GET",
+          "parameters": [
+            { "name": "symbol", "type": "string", "default": "SPY", "required": false },
+            { "name": "last_n", "type": "number", "default": 100, "required": false }
+          ],
+          "tier": "data",
+          "minRole": "viewer"
+        },
+        {
+          "name": "get_signals",
+          "description": "Get recent pattern signals",
+          "endpoint": "/api/renko/[action]?action=signals&symbol={symbol}",
+          "method": "GET",
+          "parameters": [
+            { "name": "symbol", "type": "string", "default": "SPY", "required": false }
+          ],
+          "tier": "data",
+          "minRole": "viewer"
+        },
+        {
+          "name": "run_backtest",
+          "description": "Run a walk-forward backtest",
+          "endpoint": "/api/renko/backtest/run",
+          "method": "POST",
+          "parameters": [
+            { "name": "symbol", "type": "string", "required": true },
+            { "name": "prices", "type": "array<number>", "required": true }
+          ],
+          "tier": "backtest",
+          "minRole": "trader"
+        },
+        {
+          "name": "check_circuit_breakers",
+          "description": "Run pre-trade circuit breaker check",
+          "endpoint": "/api/circuit-breakers/check",
+          "method": "POST",
+          "parameters": [
+            { "name": "userId", "type": "string", "required": true },
+            { "name": "symbol", "type": "string", "required": true },
+            { "name": "side", "type": "string", "enum": ["buy", "sell"], "required": true }
+          ],
+          "tier": "trade",
+          "minRole": "trader"
+        },
+        {
+          "name": "get_circuit_breaker_status",
+          "description": "Get circuit breaker configuration and active halts",
+          "endpoint": "/api/circuit-breakers",
+          "method": "GET",
+          "parameters": [],
+          "tier": "admin",
+          "minRole": "admin"
+        },
+        {
+          "name": "run_reconciliation",
+          "description": "Run trade reconciliation between expected and actual fills",
+          "endpoint": "/api/reconciliation/run",
+          "method": "POST",
+          "parameters": [
+            { "name": "userId", "type": "string", "required": true },
+            { "name": "dateFrom", "type": "string", "required": true },
+            { "name": "dateTo", "type": "string", "required": true }
+          ],
+          "tier": "admin",
+          "minRole": "admin"
+        },
+        {
+          "name": "get_audit_log",
+          "description": "Query the immutable trade audit trail",
+          "endpoint": "/api/compliance/audit-log",
+          "method": "GET",
+          "parameters": [
+            { "name": "userId", "type": "string", "required": false },
+            { "name": "eventType", "type": "string", "required": false },
+            { "name": "dateFrom", "type": "string", "required": false },
+            { "name": "dateTo", "type": "string", "required": false }
+          ],
+          "tier": "admin",
+          "minRole": "admin"
+        },
+        {
+          "name": "get_system_health",
+          "description": "Get detailed system health status",
+          "endpoint": "/api/health/detailed",
+          "method": "GET",
+          "parameters": [],
+          "tier": "admin",
+          "minRole": "admin"
+        },
+        {
+          "name": "run_smoke_test",
+          "description": "Run E2E paper trading smoke test (6 steps)",
+          "endpoint": "/api/smoke-test",
+          "method": "POST",
+          "parameters": [],
+          "tier": "admin",
+          "minRole": "admin"
+        },
+        {
+          "name": "get_pnl_intraday",
+          "description": "Get intraday P&L data",
+          "endpoint": "/api/pnl/intraday",
+          "method": "GET",
+          "parameters": [],
+          "tier": "data",
+          "minRole": "viewer"
+        },
+        {
+          "name": "manage_orders",
+          "description": "Create, list, or cancel Alpaca orders",
+          "endpoint": "/api/renko/orders",
+          "method": "POST",
+          "parameters": [
+            { "name": "action", "type": "string", "enum": ["create", "list", "cancel"], "required": true },
+            { "name": "symbol", "type": "string", "required": false },
+            { "name": "side", "type": "string", "enum": ["buy", "sell"], "required": false },
+            { "name": "qty", "type": "number", "required": false }
+          ],
+          "tier": "order",
+          "minRole": "trader"
+        },
+        {
+          "name": "get_portfolio",
+          "description": "Get portfolio data including positions and equity",
+          "endpoint": "/api/portfolio",
+          "method": "GET",
+          "parameters": [],
+          "tier": "data",
+          "minRole": "viewer"
+        },
+        {
+          "name": "manage_campaign",
+          "description": "Create, start, pause, or stop a trading campaign",
+          "endpoint": "/api/campaign",
+          "method": "POST",
+          "parameters": [
+            { "name": "action", "type": "string", "enum": ["create", "start", "pause", "resume", "stop"], "required": true },
+            { "name": "campaignId", "type": "string", "required": false },
+            { "name": "maxTrades", "type": "number", "default": 10, "required": false }
+          ],
+          "tier": "trade",
+          "minRole": "trader"
+        },
+        {
+          "name": "run_retention",
+          "description": "Run data retention/archival or GDPR purge",
+          "endpoint": "/api/retention",
+          "method": "POST",
+          "parameters": [
+            { "name": "action", "type": "string", "enum": ["run_retention", "gdpr_purge"], "required": true },
+            { "name": "userId", "type": "string", "required": false },
+            { "name": "reason", "type": "string", "required": false }
+          ],
+          "tier": "admin",
+          "minRole": "admin"
+        },
+        {
+          "name": "get_rate_limit_violations",
+          "description": "Get recent rate limit violations for monitoring",
+          "endpoint": "/api/operational/rate-limit-violations",
+          "method": "GET",
+          "parameters": [
+            { "name": "limit", "type": "number", "default": 50, "required": false }
+          ],
+          "tier": "admin",
+          "minRole": "admin"
+        },
+        {
+          "name": "kill_switch",
+          "description": "Activate or deactivate the global kill switch",
+          "endpoint": "/api/operational/[action]",
+          "method": "POST",
+          "parameters": [
+            { "name": "action", "type": "string", "enum": ["kill-switch/activate", "kill-switch/deactivate"], "required": true }
+          ],
+          "tier": "admin",
+          "minRole": "admin"
+        }
+      ],
+      "resources": [
+        {
+          "name": "project_reference",
+          "description": "Complete project reference documentation",
+          "uri": "docs/NOBLE-TRADER-REFERENCE.md",
+          "mimeType": "text/markdown"
+        },
+        {
+          "name": "deployment_runbook",
+          "description": "Production deployment runbook",
+          "uri": "docs/DEPLOYMENT-RUNBOOK.md",
+          "mimeType": "text/markdown"
+        },
+        {
+          "name": "project_state",
+          "description": "Current project state and configuration",
+          "uri": "docs/PROJECT_STATE.md",
+          "mimeType": "text/markdown"
+        },
+        {
+          "name": "openapi_spec",
+          "description": "Backend OpenAPI 3.1 specification",
+          "uri": "https://noble-trader-fastapi-backend.onrender.com/openapi.json",
+          "mimeType": "application/json"
+        }
+      ]
+    }
+  }
+}

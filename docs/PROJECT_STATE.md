@@ -1,7 +1,7 @@
 # Noble Trader Agent — Project State
 
-**Last Updated:** 2026-05-21
-**Version:** v7.0.0 (Renko HFT Pipeline + Live Execution + State Persistence + Rate Limiting + Health Monitoring + Multi-Pipeline UI)
+**Last Updated:** 2026-05-22
+**Version:** v7.0.0 (Production-Grade Institutional Trading Platform)
 
 ---
 
@@ -13,18 +13,22 @@
 | **Backend** | FastAPI + Pydantic v2 + hmmlearn + numpy + pandas | Render (Starter) |
 | **Auth** | Clerk JWT → BFF proxy → FastAPI JWKS verification | Clerk |
 | **Broker** | Alpaca (paper trading by default) | Alpaca Markets |
-| **Database** | Supabase (PostgreSQL with RLS) | Supabase |
-| **Cache L1** | Upstash Redis (REST API) | Upstash |
+| **Database** | Supabase (PostgreSQL with RLS + pg_cron + Vault) | Supabase |
+| **Cache L1** | Upstash Redis (REST API, sliding window rate limits) | Upstash |
 | **Cache L2** | In-memory LRU (process-local, 100 max) | — |
-| **Notifications** | Discord Webhooks + Telegram Bot (legacy) + Supabase persistence | Discord / Telegram |
+| **Notifications** | Discord Webhooks (3 channels) + Telegram Bot (legacy) + Supabase persistence | Discord / Telegram |
 | **Live Prices** | Finnhub WebSocket | Finnhub |
 | **Historical Prices** | Yahoo Finance (`yahoo-finance2`) | Yahoo |
+| **Encryption** | AES-256-GCM + PBKDF2 (100k iterations) + key versioning | App-layer |
 
 ### URLs
 - **Frontend:** `https://noble-trader-agent-frontend.vercel.app`
 - **Backend:** `https://noble-trader-fastapi-backend.onrender.com`
 - **GitHub (Frontend):** `https://github.com/lexingtontechus/noble-trader-agent-frontend`
 - **GitHub (Backend):** `https://github.com/lexingtontechus/noble-trader-fastapi-backend`
+
+### Stats
+- **34 lib modules** (11,973 lines) | **84 UI components** across 18 dirs | **93+ BFF API routes** | **26 DB migrations** | **7 pg_cron jobs** | **~70+ tables**
 
 ---
 
@@ -45,13 +49,6 @@ Tick → Brick Engine → Swing Classifier → Pattern Detector → Signal Filte
 | 5 | **Risk Manager** | Brick-denominated SL (3 bricks), TP (5 bricks), trailing stop, time stop |
 | 6 | **Executor** | Alpaca bracket order submission (paper/live) |
 
-### Key Parameters
-- Brick size: $0.50 (fixed by default)
-- SL: 3 bricks, TP: 5 bricks
-- Trailing stop: enabled after 3 bricks profit, 2 brick trail distance
-- Max trades/session: 15, Max daily loss: 10 bricks
-- Regime gate: only trade when HMM regime aligns
-
 ---
 
 ## Data Persistence & Caching
@@ -61,10 +58,6 @@ Tick → Brick Engine → Swing Classifier → Pattern Detector → Signal Filte
 ```
 Redis L1 (fastest, 4h TTL) → Supabase L2 (persistent, 4h TTL) → Yahoo Finance (full warmup)
 ```
-
-- **Redis keys:** `renko:snapshot:{symbol}:{brickSize}`, `renko:price:{symbol}`, `renko:regime:{symbol}`
-- **Supabase table:** `ta_renko_snapshot` with upsert on conflict `(symbol, brick_size)`
-- **Stale strategy:** Show old data immediately + trigger non-blocking background refresh
 
 ---
 
@@ -88,21 +81,63 @@ Redis L1 (fastest, 4h TTL) → Supabase L2 (persistent, 4h TTL) → Yahoo Financ
 | `REGIME` | #system-status | HMM regime transitions |
 | `SYSTEM` | #system-status | Warmup complete, pipeline reset, errors |
 
-### Notification Triggers (Backend)
+---
 
-| Event | Discord Channel | Trigger |
-|-------|----------------|---------|
-| Filtered signal detected | #trade-signals + #trade-executions | `process_tick()` → `filtered` in result |
-| Trade closed (SL/TP) | #trade-executions | `process_tick()` → `trade_result` in result |
-| Large loss (≤ -5 bricks) | #system-status (risk alert) | `trade_result.pnl_bricks <= -5` |
-| Batch warmup complete | #system-status | `tick/batch` endpoint, 50+ ticks |
-| Pipeline reset | #system-status (warning) | `/renko/reset` endpoint |
+## Production Readiness Features (P3-P4)
+
+### Rate Limiting (P4-6A)
+- Redis-backed sliding window counter via Upstash
+- 10 route tiers: trade, order, backtest, ai, write, data, admin, auth, public, default
+- Plan multipliers: free=1x, premium=3x, institutional=10x
+- Rate limit headers on ALL responses (X-RateLimit-Limit, X-RateLimit-Remaining, X-RateLimit-Reset)
+- 429 with Retry-After header when exceeded
+- Violation logging to `rate_limit_violations` table (IP hashed with SHA-256 + pepper)
+
+### Circuit Breaker System (P3-5A)
+- Pre-trade risk checks before every execution
+- 9 default breakers: max_position_size, max_open_positions, daily_loss_limit, max_drawdown, consecutive_loss_stop, order_rate_limit, single_stock_concentration, max_portfolio_heat, sector_concentration
+- Actions: reject_order, halt, alert
+- Trading halts: global, symbol-level, user-level
+- Admin deactivation via BFF routes
+
+### Audit Trail (P3-5B)
+- Immutable append-only `trade_audit_log` table
+- 17 event types from ORDER_SUBMITTED to SMOKE_TEST_RUN
+- Fill poller for Alpaca fill verification
+
+### Reconciliation Engine (P3-5C)
+- Compares expected vs actual trade outcomes
+- Detects: missing fills, phantom fills, price discrepancies, quantity mismatches, stale orders
+- Auto-halts if discrepancy count exceeds threshold (default 3)
+
+### Data Encryption at Rest (P4-6B)
+- AES-256-GCM with PBKDF2 key derivation (100,000 iterations)
+- Key versioning (V1-V10) for rotation without data loss
+- Auto re-encryption on read when key version changes
+- PII hashing (SHA-256 + pepper) for IP addresses
+
+### Data Retention & GDPR (P4-6C)
+- Configurable retention policies per table
+- Archive tables for cold storage
+- GDPR Article 17 per-user data purge with compliance log
+- pg_cron daily archival job at 3 AM UTC
+
+### Multi-Tenant Isolation (P4-6D)
+- `org_id` column on 13 user-scoped tables (nullable, backward-compatible)
+- RLS policies as defense-in-depth for direct DB access
+- Application-level org_id filtering
+
+### Smoke Test (P3-5E)
+- E2E paper trading lifecycle test (6 steps: signal → order → fill → P&L → close → cleanup)
+
+### Broker Abstraction (P2)
+- Interface → Alpaca adapter → factory pattern → `/api/broker/[action]` route
 
 ---
 
 ## Backend API Endpoints
 
-### v5.0 Renko HFT Pipeline
+### Renko HFT Pipeline
 
 | Endpoint | Method | Description | Auth Level |
 |----------|--------|-------------|------------|
@@ -120,10 +155,8 @@ Redis L1 (fastest, 4h TTL) → Supabase L2 (persistent, 4h TTL) → Yahoo Financ
 | `/renko/config` | POST | Update pipeline configuration (resets pipeline) | admin |
 | `/renko/reset` | POST | Reset pipeline for a symbol | admin |
 | `/renko/backtest/stats` | GET | Backtest/trading statistics from journal | any role |
-| `/renko/backtest/run/stream` | POST | SSE streaming backtest with progressive chunked results | admin/trader |
-| `/health` | GET | Health check + Discord status | any role |
 
-### v2.x-v4.0 Regime Platform Endpoints (also deployed)
+### Regime Platform Endpoints
 
 | Endpoint | Method | Description | Auth Level |
 |----------|--------|-------------|------------|
@@ -155,28 +188,185 @@ Redis L1 (fastest, 4h TTL) → Supabase L2 (persistent, 4h TTL) → Yahoo Financ
 | `/gpu/benchmark` | POST | HMM fit/predict latency benchmark | admin/trader |
 | `/feeds/start` | POST | Start Alpaca/Binance/IB feed | admin/trader |
 | `/feeds/status` | GET | Feed adapter health | any role |
+| `/health` | GET | Health check + Discord status | public |
 
 ---
 
-## Frontend BFF API Routes
+## Frontend BFF API Routes (93+)
 
+### Renko Routes
 | Route | Methods | Description |
 |-------|---------|-------------|
-| `/api/renko/[action]` | GET/POST | Proxy to FastAPI `/renko/*` (state, bricks, signals, tick, config, reset...) |
-| `/api/renko/warmup` | GET/POST | Cache-aware warmup: Redis L1 → Supabase L2 → Yahoo Finance |
-| `/api/renko/backtest/run/stream` | POST | SSE streaming backtest with progressive chunked results (pipes FastAPI stream) |
-| `/api/renko/signal-alert` | POST | Signal/trade/risk alert dispatch (Supabase + Discord + Telegram) |
-| `/api/renko/orders` | GET/POST/DELETE | Alpaca order management with bracket orders |
-| `/api/renko/tick-stream` | POST | Batch tick feeding from Finnhub WebSocket |
-| `/api/alerts` | GET/POST/DELETE | Alert history from Supabase |
-| `/api/clerk/alpaca-keys` | GET/POST | Alpaca API key management via Clerk `private.metadata` |
-| `/api/auth/clerk-*` | GET/POST | Clerk auth bridge to FastAPI |
-| `/api/backtest/run` | POST | Run walk-forward backtest (30+ metrics) |
-| `/api/backtest/history` | GET | Paginated list of saved backtest results |
-| `/api/backtest/detail/[id]` | GET/DELETE | Fetch or delete a backtest result |
-| `/api/backtest/compare` | POST | Side-by-side comparison of saved results |
-| `/api/backtest/optimize` | POST | Parameter grid sweep |
-| `/api/backtest/export` | POST | Export result as CSV/JSON |
+| `/api/renko/[action]` | GET/POST | Proxy to FastAPI `/renko/*` |
+| `/api/renko/warmup` | GET/POST | Cache-aware warmup: Redis L1 → Supabase L2 → Yahoo |
+| `/api/renko/backtest/run/stream` | POST | SSE streaming backtest |
+| `/api/renko/backtest/run` | POST | Run backtest |
+| `/api/renko/backtest/compare` | POST | Compare backtests |
+| `/api/renko/backtest/optimize` | POST | Parameter sweep |
+| `/api/renko/backtest/monte-carlo` | POST | Monte Carlo simulation |
+| `/api/renko/backtest/walk-forward` | POST | Walk-forward analysis |
+| `/api/renko/signal-alert` | POST | Signal alert dispatch |
+| `/api/renko/orders` | GET/POST/DELETE | Alpaca order management |
+| `/api/renko/tick-stream` | POST | Batch tick feeding from Finnhub |
+
+### Alpaca Routes
+| Route | Methods | Description |
+|-------|---------|-------------|
+| `/api/alpaca/account` | GET | Account info |
+| `/api/alpaca/activities` | GET | Account activities |
+| `/api/alpaca/orders` | GET | List orders |
+| `/api/alpaca/orders/create` | POST | Create order |
+| `/api/alpaca/portfolio/history` | GET | Portfolio history |
+| `/api/alpaca/positions` | GET | Open positions |
+
+### Campaign Routes
+| Route | Methods | Description |
+|-------|---------|-------------|
+| `/api/campaign` | GET/POST | List/create campaigns |
+| `/api/campaign/[id]` | GET/PATCH/DELETE | Campaign CRUD |
+| `/api/campaign/tick` | GET/POST | Campaign tick (CRON_SECRET) |
+
+### Trading Routes
+| Route | Methods | Description |
+|-------|---------|-------------|
+| `/api/trading/analyze` | POST | Trading analysis |
+| `/api/trading/validate` | POST | Walk-forward validation |
+| `/api/trading/approve` | POST | Approve recommendation |
+| `/api/trading/approve-all` | POST | Bulk approve |
+| `/api/trading/execute` | POST | Execute via Alpaca |
+| `/api/trading/status` | GET | Recommendations status |
+| `/api/trading/recommendations` | GET | Recommendations list |
+| `/api/trading/schedule` | GET/POST | Scheduled orders |
+| `/api/trading/schedule/execute` | POST | Execute scheduled order |
+| `/api/trading/ping` | GET | Health check |
+
+### Credential Routes
+| Route | Methods | Description |
+|-------|---------|-------------|
+| `/api/credentials/[type]` | GET/POST/DELETE | Credential CRUD (encrypted) |
+| `/api/clerk/alpaca-keys` | GET/POST | Clerk metadata keys (legacy) |
+| `/api/clerk/alpaca-keys-status` | GET | Key status check |
+
+### Broker Routes
+| Route | Methods | Description |
+|-------|---------|-------------|
+| `/api/broker/[action]` | GET/POST | Broker abstraction layer |
+
+### Circuit Breaker Routes
+| Route | Methods | Description |
+|-------|---------|-------------|
+| `/api/circuit-breakers` | GET | List breakers |
+| `/api/circuit-breakers/check` | POST | Pre-trade check |
+| `/api/circuit-breakers/halts` | GET | List active halts |
+| `/api/circuit-breakers/halts/deactivate` | POST | Deactivate halt (admin) |
+
+### Compliance Routes
+| Route | Methods | Description |
+|-------|---------|-------------|
+| `/api/compliance/report` | GET | Compliance report |
+| `/api/compliance/journal` | GET | Trade journal |
+| `/api/compliance/audit-log` | GET | Audit log |
+| `/api/compliance/audit-log/export` | GET | Export audit log |
+
+### Reconciliation Routes
+| Route | Methods | Description |
+|-------|---------|-------------|
+| `/api/reconciliation/run` | POST | Run reconciliation |
+| `/api/reconciliation/history` | GET | Past reconciliation runs |
+| `/api/reconciliation/auto` | POST | Auto-reconciliation |
+
+### P&L Routes
+| Route | Methods | Description |
+|-------|---------|-------------|
+| `/api/pnl/intraday` | GET | Intraday P&L |
+| `/api/pnl/history` | GET | P&L history |
+| `/api/pnl/alerts` | GET/POST | P&L alert thresholds |
+| `/api/pnl/export` | GET | Export P&L data |
+
+### Portfolio Routes
+| Route | Methods | Description |
+|-------|---------|-------------|
+| `/api/portfolio` | GET | Portfolio data |
+| `/api/portfolio/correlation` | GET | Correlation matrix |
+| `/api/portfolio/optimizer` | GET | Portfolio optimization |
+| `/api/portfolio/snapshot` | GET | Historical snapshots |
+| `/api/portfolio/snapshot/capture` | POST | Capture snapshot |
+
+### Operational Routes
+| Route | Methods | Description |
+|-------|---------|-------------|
+| `/api/operational/[action]` | GET/POST | Kill switch, mode toggle |
+| `/api/operational/rate-limit-violations` | GET | Rate limit violation log |
+| `/api/smoke-test` | POST | Run E2E smoke test |
+
+### Retention Routes
+| Route | Methods | Description |
+|-------|---------|-------------|
+| `/api/retention` | GET/POST | Retention status & actions (admin) |
+
+### Health Routes
+| Route | Methods | Description |
+|-------|---------|-------------|
+| `/api/health` | GET | Backend health check |
+| `/api/health/detailed` | GET | Full system health (auth required) |
+| `/api/health/cron` | GET | Cron health check (CRON_SECRET) |
+
+### Notification Routes
+| Route | Methods | Description |
+|-------|---------|-------------|
+| `/api/notifications/preferences` | GET/POST | Notification preferences |
+| `/api/alerts` | GET/POST/DELETE | Alert history |
+
+### Auth Routes
+| Route | Methods | Description |
+|-------|---------|-------------|
+| `/api/auth/clerk-config` | GET | Clerk config (public) |
+| `/api/auth/clerk-me` | GET | Current user profile |
+| `/api/auth/clerk-token` | GET | Clerk JWT token |
+| `/api/auth/clerk-verify` | GET | Verify Clerk session |
+| `/api/auth/fastapi-token` | GET | FastAPI auth token |
+| `/api/auth/jwt-test` | GET | JWT test endpoint |
+| `/api/auth/role` | GET/POST | Role management |
+
+### Other Routes
+| Route | Methods | Description |
+|-------|---------|-------------|
+| `/api/analyse` | POST | Full analysis pipeline |
+| `/api/backtest/run` | POST | Walk-forward backtest |
+| `/api/backtest/history` | GET | Backtest history |
+| `/api/backtest/detail/[id]` | GET/DELETE | Backtest detail |
+| `/api/backtest/compare` | POST | Compare backtests |
+| `/api/backtest/optimize` | POST | Parameter sweep |
+| `/api/backtest/export` | POST | Export backtest |
+| `/api/commentary` | POST | AI market commentary |
+| `/api/correlation/detect` | POST | Cross-asset correlation |
+| `/api/evolution/summary` | GET | Evolution state |
+| `/api/evolution/variants` | GET/POST | Variant management |
+| `/api/evolution/feedback` | POST | Record feedback |
+| `/api/evolution/ab-test` | GET/POST/DELETE | A/B test management |
+| `/api/evolution/optimize` | POST | Optuna optimization |
+| `/api/evolution/rotate` | POST | Strategy rotation |
+| `/api/evolution/performance` | GET | Performance records |
+| `/api/fills/poll` | POST | Poll Alpaca fills |
+| `/api/observation/build` | POST | 24-feature observation vector |
+| `/api/onboarding` | GET/POST/PUT | Onboarding status |
+| `/api/optimise/full` | POST | Full optimization |
+| `/api/prices` | POST | Yahoo Finance prices |
+| `/api/risk/dashboard` | GET | Risk dashboard data |
+| `/api/simulate` | POST | Monte Carlo simulation |
+| `/api/stream/sse` | GET | SSE price ticks |
+| `/api/stream/latest-price` | GET | Latest price |
+| `/api/stream/pnl` | GET | SSE P&L stream |
+| `/api/stream/seed` | POST | Seed stream data |
+| `/api/stream/session` | GET | Stream session |
+| `/api/stream/tick` | POST | Push tick |
+| `/api/subscription/status` | GET | Subscription status |
+| `/api/subscription/webhook` | POST | Payment webhook (Helio) |
+| `/api/subscription/request-upgrade` | POST | Request plan upgrade |
+| `/api/tda/scan` | POST | TDA scan |
+| `/api/tda/alerts` | GET | TDA alerts |
+| `/api/telegram/chat-id` | GET | Telegram chat ID |
+| `/api/telegram/report` | POST | Telegram report |
 
 ---
 
@@ -188,15 +378,20 @@ Redis L1 (fastest, 4h TTL) → Supabase L2 (persistent, 4h TTL) → Yahoo Financ
 NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY=
 CLERK_SECRET_KEY=
 NEXT_PUBLIC_FASTAPI_BASE_URL=https://noble-trader-fastapi-backend.onrender.com
-FASTAPI_USER=
-FASTAPI_PASSWORD=
 NEXT_PUBLIC_SUPABASE_URL=
 NEXT_PUBLIC_SUPABASE_PUBLISHABLE_DEFAULT_KEY=
+SUPABASE_SERVICE_ROLE_KEY=
+SUPABASE_ENCRYPTION_KEY=
+SUPABASE_ENCRYPTION_KEY_V2=              # Key rotation (P4-6B)
+SUPABASE_ENCRYPTION_ACTIVE_VERSION=       # Active key version (default: highest)
 UPSTASH_REDIS_REST_URL=
 UPSTASH_REDIS_REST_TOKEN=
+CRON_SECRET=
 DISCORD_WEBHOOK_SIGNALS=
 DISCORD_WEBHOOK_EXECUTIONS=
 DISCORD_WEBHOOK_STATUS=
+ALPACA_PAPER_API_KEY=                    # Cron fallback
+ALPACA_PAPER_SECRET_KEY=                 # Cron fallback
 TELEGRAM_BOT_TOKEN=
 TELEGRAM_CHAT_ID=
 NEXT_PUBLIC_FINNHUB_API_KEY=
@@ -213,6 +408,7 @@ DISCORD_WEBHOOK_EXECUTIONS=
 DISCORD_WEBHOOK_STATUS=
 REDIS_URL=
 CLERK_SECRET_KEY=
+PORT=8000
 ```
 
 ---
@@ -224,108 +420,21 @@ CLERK_SECRET_KEY=
 - **Clerk `private.metadata`** for Alpaca keys — DO NOT modify `proxy.js`
 - **BFF pattern** — all backend calls go through NextJS API routes, never directly from client
 - **Graceful degradation** — Redis/Telegram/Discord failures never crash the app
+- **Rate limiting ON by default** — all withAuth() routes have rate limiting; opt-out with `skipRateLimit:true`
+- **Circuit breakers before every trade** — `checkCircuitBreakers()` called before order submission
+- **Audit logging for all trade events** — immutable `trade_audit_log` records
+- **PII never logged in plaintext** — IP addresses hashed with SHA-256 + pepper
+- **Key rotation support** — add V2 env var + set active version for transparent rotation
+- **4 public routes only** — `/api/health`, `/api/auth/clerk-config`, `/api/subscription/webhook`, `/api/health/cron`
 
 ---
 
-## Gap Analysis & Feature Roadmap
+## Phase Completion History
 
-### Completed ✅
-
-| # | Gap | Solution | Status |
-|---|-----|----------|--------|
-| 1 | Auth/Alpaca key management concerns | Clerk proxy.js already handles this | ✅ No change needed |
-| 2 | Centralized notification system | Built Discord + Telegram + Supabase alerting | ✅ Implemented |
-| 3 | Render performance for production | Will upgrade Render plan when moving to production | ✅ Deferred to production |
-| 5 | Need structured alert delivery | Implemented 3-channel alerting with Discord | ✅ Implemented |
-| 6 | Redis caching for speed | Upstash Redis L1 cache (snapshots, price, regime) | ✅ Implemented |
-| 7 | Wire notifications to pipeline | Discord notifications wired into renko/router.py | ✅ Implemented |
-| 8 | Notification delivery channel | Discord webhooks (3 channels: signals, executions, status) | ✅ Implemented |
-| 9 | Confirmed need for alerting | Full notification system built and verified | ✅ Implemented |
-| 15 | **Missing backtest endpoints** | Added /backtest/optimize (grid sweep), /backtest/export (CSV/JSON) | ✅ Implemented |
-| 16 | **Missing backtest BFF routes** | Added /api/backtest/optimize and /api/backtest/export BFF proxies | ✅ Implemented |
-| 17 | **Missing backtest client helpers** | Added 6 functions to fastapi-client.js (history, detail, compare, delete, optimize, export) | ✅ Implemented |
-| 18 | **SSE endpoints had no auth** | Added `get_authed_user` dependency to `/sse/{symbol}` and `/sse/alerts` | ✅ Fixed |
-| 19 | **Renko write ops allowed viewers** | Upgraded tick/batch/backtest endpoints from `get_authed_user` to `require_write` | ✅ Fixed |
-| 20 | **JWT claims were null** | Added "server" JWT template support + Clerk API enrichment fallback | ✅ Fixed |
-| 21 | **Role system inconsistent** | Unified default to "viewer", added `useRole().canAccess()`, server sync | ✅ Fixed |
-
-### Pending 🔲
-
-| # | Gap | Proposal | Priority |
-|---|-----|----------|----------|
-| 4 | **Executor not wired to pipeline** | Router-level async bridge with per-request executor, dry_run/live_enabled flags, admin toggle | ✅ Implemented |
-| 10 | **Session filter blocks warmup signals** | Added `warmup_mode` flag to SignalFilter — bypasses session/cooldown during backtest/warmup | ✅ Implemented |
-| 11 | **No pipeline state persistence across restarts** | Upgraded to Render Starter (no sleep) + Supabase snapshot save/restore every 100 bricks | ✅ Implemented |
-| 12 | **Health monitoring / uptime alerts** | Vercel Cron every 5 min → Discord alerts on 2+ consecutive failures, recovery notifications | ✅ Implemented |
-| 13 | **Rate limiting on BFF routes** | IP-based rate limiting on all Renko and P&L BFF routes (heavy: 10/min, write: 30/min, read: 60/min) | ✅ Implemented |
-| 14 | **Single-symbol limitation** | Multi-pipeline status bar showing all 8 symbols with position/P&L indicators | ✅ Implemented |
-
----
-
-## Gap #4 — Implementation (Completed)
-
-The executor is now fully wired via a **router-level async bridge**:
-
-```
-Pipeline (sync) → process_tick() → _pending_execution payload
-Router (async) → consume_pending_execution() → resolve user credentials → executor.execute() → Alpaca API
-Router (async) → consume_pending_close() → executor.close_position() → Alpaca API
-```
-
-Key design decisions:
-- **Pipeline stays synchronous** — deterministic backtesting preserved
-- **Per-request executors** — user credentials never cached in pipelines
-- **Two-gate safety** — both `dry_run=False` AND `live_enabled=True` required for real orders
-- **Admin toggle** — `POST /renko/live/toggle` with Discord notification
-- **Default safe** — `dry_run=True`, `live_enabled=False` by default
-
-New endpoints:
-- `GET /renko/live/status` — check execution mode
-- `POST /renko/live/toggle` — enable/disable live execution (admin only)
-- `POST /renko/snapshot/restore` — restore pipeline from Supabase snapshot
-
----
-
-## Auth Flow
-
-1. Clerk signs in user → session ID available via `auth().sessionId`
-2. BFF routes call `getClerkJWT(sessionId)` which tries "server" JWT template first, then default JWT
-3. BFF forwards `Authorization: Bearer <token>` to FastAPI backend
-4. FastAPI validates via Clerk JWKS (`get_authed_user()`)
-5. If JWT claims are null (no template), backend enriches via Clerk API (`_enrich_from_clerk_api()`, 5-min cache)
-6. All 57 backend endpoints now require auth (SSE endpoints fixed, renko write ops upgraded)
-7. Alpaca keys stored in Clerk `private.metadata` → retrieved via BFF `proxy.js`
-8. **DO NOT modify `proxy.js`** — it handles Alpaca key management
-
-### Role System
-
-| Role | Access | Default |
-|------|--------|----------|
-| `admin` | Full access (config, reset, kill-switch, all write ops) | No |
-| `trader` | Read + write (tick ingestion, backtests, regime, equity) | No |
-| `viewer` | Read-only (state, stats, bricks, signals, trades) | **Yes** |
-
-- Client: `useRole()` hook with `canAccess(role)` + server sync via `/api/auth/role`
-- Server: `clerk-metadata.js` → `getRoleInfo()`
-- UI: `<RoleGate require="trader">` with loading + `requireServerSync`
-
----
-
-## Test Credentials
-
-- Email: `zai@0xdweb.com`
-- Password: `zai0xdweb`
-
----
-
-## File Index (download/ directory)
-
-| File | Description |
-|------|-------------|
-| `PROJECT_STATE.md` | This file — project state, architecture, gap analysis |
-| `BACKTESTING_UI_PROPOSAL.md` | Proposal for backtesting UI feature |
-| `Noble_Trader_Agent_Project_Description.docx` | Full project description document |
-| `MarketRegimeTrader_Backend_Project_Description.docx` | Backend-only project description |
-| `renko_snapshot_migration.sql` | Supabase migration SQL for ta_renko_snapshot table |
-| `noble-trader-project-20260507-085320.zip` | Full project snapshot archive |
-| `00000000000007_backtest_results.sql` | Supabase migration for ta_backtest_result table |
+| Phase | Description | Status | Key Deliverables |
+|-------|-------------|--------|-----------------|
+| **P0** | Live Trading Blockers | ✅ Complete | Kill switch, mode toggle, operational page |
+| **P1** | Server-Side Auth + Per-Feature RBAC | ✅ Complete | withAuth() middleware, RoleGate, PlanGate, AccessGate |
+| **P2** | Feature Delivery | ✅ Complete | Compliance, Broker Abstraction, Equity Curve, Notifications |
+| **P3** | Institutional Hardening | ✅ Complete | Circuit Breakers, Audit Trail, Reconciliation, System Health, Smoke Test |
+| **P4** | Production Readiness | ✅ Complete | Rate Limiting, Encryption, Retention, Multi-Tenant, Deployment Runbook |
