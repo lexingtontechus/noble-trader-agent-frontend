@@ -15,6 +15,7 @@ import AdminPage from "@/components/admin/AdminPage";
 import RenkoPage from "@/components/renko/RenkoPage";
 import OperationalPage from "@/components/operational/OperationalPage";
 import SettingsPage from "@/components/settings/SettingsPage";
+import PriceFeedPage from "@/components/pricefeed/PriceFeedPage";
 import OnboardingWizard from "@/components/onboarding/OnboardingWizard";
 import { StreamProvider } from "@/context/StreamContext";
 import { PortfolioProvider } from "@/context/PortfolioContext";
@@ -111,26 +112,29 @@ export default function Home() {
         setActiveView("dashboard");
       } else if ((e.metaKey || e.ctrlKey) && e.key === "2") {
         e.preventDefault();
-        setActiveView("orders");
+        setActiveView("prices");
       } else if ((e.metaKey || e.ctrlKey) && e.key === "3") {
         e.preventDefault();
-        setSafeActiveView("trade");
+        setActiveView("orders");
       } else if ((e.metaKey || e.ctrlKey) && e.key === "4") {
         e.preventDefault();
-        setActiveView("simulate");
+        setSafeActiveView("trade");
       } else if ((e.metaKey || e.ctrlKey) && e.key === "5") {
         e.preventDefault();
-        setActiveView("portfolio");
+        setActiveView("renko");
       } else if ((e.metaKey || e.ctrlKey) && e.key === "6") {
         e.preventDefault();
-        setActiveView("search");
+        setActiveView("simulate");
       } else if ((e.metaKey || e.ctrlKey) && e.key === "7") {
         e.preventDefault();
-        setActiveView("renko");
+        setActiveView("portfolio");
       } else if ((e.metaKey || e.ctrlKey) && e.key === "8") {
         e.preventDefault();
-        setSafeActiveView("pnl");
+        setActiveView("search");
       } else if ((e.metaKey || e.ctrlKey) && e.key === "9") {
+        e.preventDefault();
+        setSafeActiveView("pnl");
+      } else if ((e.metaKey || e.ctrlKey) && e.key === "0") {
         e.preventDefault();
         setSafeActiveView("admin");
       }
@@ -153,6 +157,7 @@ export default function Home() {
                 <main className="flex-1 container mx-auto px-4 py-6 pb-20 sm:pb-6 overflow-auto">
                   <div key={activeView} className="animate-fade-in-up">
                     {activeView === "dashboard" && <Dashboard />}
+                    {activeView === "prices" && <PriceFeedPage />}
                     {activeView === "orders" && <OrdersPage />}
                     {activeView === "trade" && (
                       <RoleGate minRole="trader" showUpgrade>
