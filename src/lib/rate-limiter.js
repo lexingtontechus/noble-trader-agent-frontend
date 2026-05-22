@@ -98,6 +98,7 @@ export const PATH_TIER_MAP = [
   { pattern: /^\/api\/subscription/,              tier: "admin" },
 
   // Data reads
+  { pattern: /^\/api\/stream\/latest-price/,     tier: "public" }, // Batch price endpoint — cached Yahoo proxy, high limit
   { pattern: /^\/api\/prices/,                    tier: "data" },
   { pattern: /^\/api\/pnl/,                       tier: "data" },
   { pattern: /^\/api\/alpaca\/account/,           tier: "data" },

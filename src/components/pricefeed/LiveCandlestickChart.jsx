@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState, useCallback, useMemo } from "react";
-import { createChart, ColorType, CrosshairMode } from "lightweight-charts";
+import { createChart, ColorType, CrosshairMode, CandlestickSeries, LineSeries, AreaSeries, HistogramSeries } from "lightweight-charts";
 import { usePriceFeed } from "@/context/PriceFeedContext";
 
 /**
@@ -265,7 +265,7 @@ export default function LiveCandlestickChart() {
     });
 
     const mainSeries = createMainSeries(chart, chartType, colors);
-    const volumeSeries = chart.addHistogramSeries({
+    const volumeSeries = chart.addSeries(HistogramSeries, {
       priceFormat: { type: "volume" },
       priceScaleId: "volume",
     });
@@ -321,7 +321,7 @@ export default function LiveCandlestickChart() {
       width: container.clientWidth,
       height: container.clientHeight,
     });
-    const rsiSeries = rsiChart.addLineSeries({
+    const rsiSeries = rsiChart.addSeries(LineSeries, {
       color: INDICATORS.rsi.color, lineWidth: 1,
       priceFormat: { type: "price", precision: 1, minMove: 0.1 },
     });
@@ -379,9 +379,9 @@ export default function LiveCandlestickChart() {
       width: container.clientWidth,
       height: container.clientHeight,
     });
-    const macdLineSeries = macdChart.addLineSeries({ color: "#3b82f6", lineWidth: 1, priceFormat: { type: "price", precision: 2 } });
-    const signalSeries = macdChart.addLineSeries({ color: "#f97316", lineWidth: 1, priceFormat: { type: "price", precision: 2 } });
-    const histSeries = macdChart.addHistogramSeries({ priceFormat: { type: "price", precision: 2 } });
+    const macdLineSeries = macdChart.addSeries(LineSeries, { color: "#3b82f6", lineWidth: 1, priceFormat: { type: "price", precision: 2 } });
+    const signalSeries = macdChart.addSeries(LineSeries, { color: "#f97316", lineWidth: 1, priceFormat: { type: "price", precision: 2 } });
+    const histSeries = macdChart.addSeries(HistogramSeries, { priceFormat: { type: "price", precision: 2 } });
 
     macdChartRef.current = macdChart;
     macdSeriesRef.current = { macd: macdLineSeries, signal: signalSeries, histogram: histSeries };
@@ -483,7 +483,7 @@ export default function LiveCandlestickChart() {
 
     // Add SMA
     if (activeIndicators.includes("sma") && indicatorData.sma) {
-      const series = chartRef.current.addLineSeries({
+      const series = chartRef.current.addSeries(LineSeries, {
         color: INDICATORS.sma.color, lineWidth: 1, priceLineVisible: false,
         lastValueVisible: false, crosshairMarkerVisible: false,
       });
@@ -493,7 +493,7 @@ export default function LiveCandlestickChart() {
 
     // Add EMA
     if (activeIndicators.includes("ema") && indicatorData.ema) {
-      const series = chartRef.current.addLineSeries({
+      const series = chartRef.current.addSeries(LineSeries, {
         color: INDICATORS.ema.color, lineWidth: 1, priceLineVisible: false,
         lastValueVisible: false, crosshairMarkerVisible: false,
       });
@@ -503,14 +503,14 @@ export default function LiveCandlestickChart() {
 
     // Add Bollinger Bands
     if (activeIndicators.includes("bb") && indicatorData.bb_upper) {
-      const upperSeries = chartRef.current.addLineSeries({
+      const upperSeries = chartRef.current.addSeries(LineSeries, {
         color: INDICATORS.bb.color, lineWidth: 1, lineStyle: 2,
         priceLineVisible: false, lastValueVisible: false, crosshairMarkerVisible: false,
       });
       upperSeries.setData(indicatorData.bb_upper);
       indicatorSeriesRef.current.bb_upper = upperSeries;
 
-      const lowerSeries = chartRef.current.addLineSeries({
+      const lowerSeries = chartRef.current.addSeries(LineSeries, {
         color: INDICATORS.bb.color, lineWidth: 1, lineStyle: 2,
         priceLineVisible: false, lastValueVisible: false, crosshairMarkerVisible: false,
       });
@@ -747,14 +747,14 @@ export default function LiveCandlestickChart() {
 function createMainSeries(chart, type, colors) {
   switch (type) {
     case "line":
-      return chart.addLineSeries({
+      return chart.addSeries(LineSeries, {
         color: colors.upColor,
         lineWidth: 2,
         crosshairMarkerVisible: true,
         crosshairMarkerRadius: 4,
       });
     case "area":
-      return chart.addAreaSeries({
+      return chart.addSeries(AreaSeries, {
         lineColor: colors.upColor,
         topColor: `${colors.upColor}40`,
         bottomColor: `${colors.upColor}05`,
@@ -763,7 +763,7 @@ function createMainSeries(chart, type, colors) {
         crosshairMarkerRadius: 4,
       });
     default: // candles
-      return chart.addCandlestickSeries({
+      return chart.addSeries(CandlestickSeries, {
         upColor: colors.upColor,
         downColor: colors.downColor,
         borderUpColor: colors.borderUpColor,

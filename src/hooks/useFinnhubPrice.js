@@ -247,6 +247,12 @@ export default function useFinnhubPrice(symbols = [], options = {}) {
         reconnectAttemptsRef.current = 0;
         setReconnectAttempt(0);
 
+        // Stop polling — WS is now active
+        if (pollIntervalRef.current) {
+          clearInterval(pollIntervalRef.current);
+          pollIntervalRef.current = null;
+        }
+
         // Subscribe to all current symbols (converted to Finnhub format)
         for (const yahooSym of symbolsRef.current) {
           const finnhubSym = yahooToFinnhubSymbol(yahooSym);
@@ -312,7 +318,31 @@ export default function useFinnhubPrice(symbols = [], options = {}) {
     const poll = async () => {
       if (!mountedRef.current || !enabledRef.current) return;
 
-      for (const sym of symbolsRef.current) {
+      // Try batch endpoint first (single request for all symbols)
+      const symbols = [...symbolsRef.current];
+      if (symbols.length > 0) {
+        try {
+          const batchRes = await fetch(
+            `/api/stream/latest-price?symbols=${encodeURIComponent(symbols.join(","))}`
+          );
+          if (batchRes.ok) {
+            const batchData = await batchRes.json();
+            if (batchData.prices && typeof batchData.prices === "object") {
+              for (const [sym, info] of Object.entries(batchData.prices)) {
+                if (info.price) {
+                  processTrade(sym, info.price, info.timestamp || Date.now(), 0);
+                }
+              }
+              return; // Batch succeeded, skip individual fetches
+            }
+          }
+        } catch {
+          // Batch failed — fall through to individual fetches
+        }
+      }
+
+      // Fallback: individual fetches (staggered to avoid rate limits)
+      for (const sym of symbols) {
         try {
           const res = await fetch(
             `/api/stream/latest-price?symbol=${encodeURIComponent(sym)}`
@@ -323,6 +353,8 @@ export default function useFinnhubPrice(symbols = [], options = {}) {
               processTrade(sym, data.price, data.timestamp || Date.now(), 0);
             }
           }
+          // Small delay between individual requests to avoid burst
+          await new Promise((r) => setTimeout(r, 200));
         } catch {
           // Silently ignore per-symbol polling errors
         }
@@ -330,7 +362,8 @@ export default function useFinnhubPrice(symbols = [], options = {}) {
     };
 
     poll();
-    pollIntervalRef.current = setInterval(poll, 3000);
+    // 10s interval: 10 symbols × 6 req/min = 60 req/min (within data tier limit)
+    pollIntervalRef.current = setInterval(poll, 10_000);
   }, [processTrade]);
 
   const stopPolling = useCallback(() => {

@@ -500,10 +500,18 @@ export function PortfolioProvider({ children }) {
               // Transient backend error (rate limit, 5xx, cold start, etc.)
               // These are NOT permanent failures — the client should retry later.
               console.warn(
-                `[PortfolioProvider] Backend error from SSE: ${data.code || "unknown"} — ${data.message || "No details"}`
+                `[PortfolioProvider] Backend error from SSE: ${data.code || "unknown"} — ${data.message || data.reason || "No details"}`
               );
               setSseConnected(false);
-              // Don't set sseCredentialsFailedRef — these are transient errors
+
+              // ENDPOINT_NOT_IMPLEMENTED: FastAPI /sse/pnl doesn't exist yet.
+              // Stop SSE reconnects but keep REST polling as the data source.
+              if (data.code === "ENDPOINT_NOT_IMPLEMENTED") {
+                console.log("[PortfolioProvider] SSE PnL not implemented — using REST polling only");
+                sseCredentialsFailedRef.current = true; // Prevent SSE reconnects
+              }
+
+              // Don't set sseCredentialsFailedRef for other transient errors
               // that warrant reconnect attempts (unlike credentials_error).
               if (sseRef.current) {
                 sseRef.current.close();
