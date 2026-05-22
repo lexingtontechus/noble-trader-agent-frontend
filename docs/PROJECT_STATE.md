@@ -2,7 +2,7 @@
 
 **Last Updated:** 2026-05-22
 **Version:** v7.0.0 (Production-Grade Institutional Trading Platform)
-**Current Phase:** P5 — MCP Integration + API Key System
+**Current Phase:** P6 — Real-Time Price Feed + Advanced Charting
 
 ---
 
@@ -18,7 +18,7 @@
 | **Cache L1** | Upstash Redis (REST API, sliding window rate limits) | Upstash |
 | **Cache L2** | In-memory LRU (process-local, 100 max) | — |
 | **Notifications** | Discord Webhooks (3 channels) + Telegram Bot (legacy) + Supabase persistence | Discord / Telegram |
-| **Live Prices** | Finnhub WebSocket | Finnhub |
+| **Live Prices** | Finnhub WebSocket + TradingView Lightweight Charts | Finnhub |
 | **Historical Prices** | Yahoo Finance (`yahoo-finance2`) | Yahoo |
 | **Encryption** | AES-256-GCM + PBKDF2 (100k iterations) + key versioning | App-layer |
 | **MCP Server** | fastapi-mcp at `/mcp` (HTTP+SSE transport, 40-45 tools, 19 excluded) | Render |
@@ -31,7 +31,7 @@
 - **GitHub (Backend):** `https://github.com/lexingtontechus/noble-trader-fastapi-backend`
 
 ### Stats
-- **34 lib modules** (11,973 lines) | **85 UI components** across 18 dirs | **96+ BFF API routes** | **29 DB migrations** | **9 pg_cron jobs** | **~70+ tables**
+- **35 lib modules** (12,800 lines) | **89 UI components** across 19 dirs | **97+ BFF API routes** | **29 DB migrations** | **9 pg_cron jobs** | **~70+ tables**
 
 ---
 
@@ -368,6 +368,7 @@ Redis L1 (fastest, 4h TTL) → Supabase L2 (persistent, 4h TTL) → Yahoo Financ
 | `/api/onboarding` | GET/POST/PUT | Onboarding status |
 | `/api/optimise/full` | POST | Full optimization |
 | `/api/prices` | POST | Yahoo Finance prices |
+| `/api/prices/ohlc` | GET | OHLCV candlestick data (period, interval) |
 | `/api/risk/dashboard` | GET | Risk dashboard data |
 | `/api/simulate` | POST | Monte Carlo simulation |
 | `/api/stream/sse` | GET | SSE price ticks |
@@ -518,3 +519,4 @@ PORT=8000
 | **P3** | Institutional Hardening | ✅ Complete | Circuit Breakers, Audit Trail, Reconciliation, System Health, Smoke Test |
 | **P4** | Production Readiness | ✅ Complete | Rate Limiting, Encryption, Retention, Multi-Tenant, Deployment Runbook |
 | **P5** | MCP Integration + API Keys | ✅ Complete | MCP BFF proxy, tool discovery, McpIntegrationPanel, API key system, auto-expire cron, pg_cron migration |
+| **P6** | Price Feed + Advanced Charting | ✅ Complete | Finnhub WS hook, OHLCV BFF, TickerTape, WatchlistPanel, LiveCandlestickChart, technical indicators (SMA/EMA/BB/RSI/MACD), PriceFeedPage |
