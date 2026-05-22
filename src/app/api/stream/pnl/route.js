@@ -55,12 +55,36 @@ export const GET = withAuth(async (request, context, authContext) => {
       const errorText = await upstream.text();
       console.error(`[SSE PnL Proxy] FastAPI returned ${upstream.status}:`, errorText);
 
-      // Return structured error for frontend to handle
+      // For 403 (no Alpaca keys), return an SSE stream with a credentials_error
+      // event instead of a JSON 403. EventSource cannot read HTTP status codes,
+      // so a JSON 403 would just trigger onerror with an opaque reconnect loop.
+      // Sending a proper SSE event lets the client handle it gracefully.
       if (upstream.status === 403) {
-        return Response.json(
-          { error: "No Alpaca API keys configured", code: "NO_KEYS" },
-          { status: 403 },
-        );
+        const { readable, writable } = new TransformStream();
+        const writer = writable.getWriter();
+        const encoder = new TextEncoder();
+
+        // Send credentials_error event, then close
+        (async () => {
+          try {
+            await writer.write(encoder.encode(
+              `data: ${JSON.stringify({
+                event: "credentials_error",
+                data: { code: "NO_KEYS", message: "No Alpaca API keys configured. Connect keys in settings." },
+                timestamp: Date.now() / 1000,
+              })}\n\n`
+            ));
+          } catch { /* ignore */ }
+          try { await writer.close(); } catch { /* ignore */ }
+        })();
+
+        return new Response(readable, {
+          headers: {
+            "Content-Type": "text/event-stream",
+            "Cache-Control": "no-cache",
+            "X-Accel-Buffering": "no",
+          },
+        });
       }
 
       return Response.json(

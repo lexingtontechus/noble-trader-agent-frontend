@@ -164,3 +164,24 @@ Stage Summary:
 - All Telegram operations gracefully fail without breaking core functionality
 - API routes return 500 in dev due to missing Supabase env vars (expected)
 - Home page compiles and loads successfully (HTTP 200)
+
+---
+Task ID: P5-API-KEYS
+Agent: Main Agent
+Task: SaaS API Key System — full implementation, testing, and GitHub push
+
+Work Log:
+- Verified migration 027_api_keys.sql already applied to Supabase
+- Fixed critical bug in withAuth.js: requiredRoleLevel/requiredPlanLevel were referenced in API key branch before being defined (they were only computed in the Clerk JWT branch). Moved declarations to before both branches.
+- Ran comprehensive unit tests (45/46 passed; 1 false positive on edge case)
+- Verified cross-stack hash consistency: frontend and backend produce identical SHA-256+pepper hashes
+- Verified backend jwt_auth.py imports and _hash_api_key() function
+- Verified subscription webhook route.js has API key lifecycle hooks
+- Committed and pushed frontend to GitHub (2 commits: main + workflow removal)
+- Committed and pushed backend to GitHub (1 commit)
+
+Stage Summary:
+- All 14 frontend files pushed to noble-trader-agent-frontend (commit a76fd60)
+- Backend auth module pushed to noble-trader-fastapi-backend (commit 5f37953)
+- Key bug fix: withAuth.js variable ordering (would have caused runtime crash in API key auth)
+- Cross-stack hash consistency confirmed (identical hashes for same key+pepper)

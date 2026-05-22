@@ -72,6 +72,7 @@ export function PortfolioProvider({ children }) {
   const tradesFetchedRef = useRef(false);
   const staleTimerRef = useRef(null);
   const sseRef = useRef(null);
+  const sseCredentialsFailedRef = useRef(false); // Flag to stop reconnect on credentials error
   const SSE_ACTIVE_INTERVAL = 30000; // 30s polling when SSE is connected (safety net)
   const SSE_DOWN_INTERVAL = 10000;  // 10s polling when SSE is disconnected (primary)
 
@@ -358,6 +359,9 @@ export function PortfolioProvider({ children }) {
         sseRef.current.close();
       }
 
+      // Reset credentials failure flag on new connection attempt
+      sseCredentialsFailedRef.current = false;
+
       const es = new EventSource("/api/stream/pnl");
       sseRef.current = es;
 
@@ -459,17 +463,24 @@ export function PortfolioProvider({ children }) {
             }
 
             case "credentials_error": {
-              // Alpaca credentials failed (expired, revoked, or invalid)
-              console.error(
-                `[PortfolioProvider] Credentials error: ${data.reason} (stream: ${data.stream_type})`
+              // Alpaca credentials failed (expired, revoked, invalid, or not configured)
+              console.warn(
+                `[PortfolioProvider] Credentials error from SSE: ${data.code || "unknown"} — ${data.message || data.reason || "No details"}`
               );
               setSseConnected(false);
-              // Close SSE — no point reconnecting with bad credentials
+              sseCredentialsFailedRef.current = true;
+              // Close SSE — no point reconnecting with bad/missing credentials
               if (sseRef.current) {
                 sseRef.current.close();
                 sseRef.current = null;
               }
-              setError("Alpaca credentials are invalid or expired. Please re-authenticate in Admin settings.");
+              // Mark hasKeys=false so SSE won't keep trying to reconnect
+              setHasKeys(false);
+              if (data.code === "NO_KEYS") {
+                setError(null); // Not an error — user just hasn't connected keys yet
+              } else {
+                setError("Alpaca credentials are invalid or expired. Please re-authenticate in Admin settings.");
+              }
               break;
             }
 
@@ -494,6 +505,13 @@ export function PortfolioProvider({ children }) {
         setSseConnected(false);
         es.close();
         sseRef.current = null;
+
+        // Don't reconnect if credentials are missing/invalid — the credentials_error
+        // SSE event handler already set sseCredentialsFailedRef and hasKeys=false.
+        if (sseCredentialsFailedRef.current) {
+          console.log("[PortfolioProvider] SSE not reconnecting — credentials error");
+          return;
+        }
 
         // Auto-reconnect with exponential backoff
         reconnectAttempts++;

@@ -204,12 +204,15 @@ export async function createApiKey(clerkUserId, plan, role, options = {}) {
   const client = getServiceClient();
   const maxKeys = PLAN_KEY_LIMITS[plan] ?? 1;
 
-  // Count existing active keys
+  // Count existing active keys (exclude keys being rotated out — they have rotation_grace_until set)
+  // When rotating, the old key stays active during grace period but shouldn't count against the limit
+  // since the new key is its replacement.
   const { count, error: countErr } = await client
     .from("api_keys")
     .select("id", { count: "exact", head: true })
     .eq("clerk_user_id", clerkUserId)
-    .eq("is_active", true);
+    .eq("is_active", true)
+    .is("rotation_grace_until", null);
 
   if (countErr) throw new Error(`Failed to count API keys: ${countErr.message}`);
   if ((count || 0) >= maxKeys) {
@@ -230,15 +233,8 @@ export async function createApiKey(clerkUserId, plan, role, options = {}) {
   const expiryMs = PLAN_KEY_EXPIRY[plan];
   const expiresAt = expiryMs ? new Date(Date.now() + expiryMs).toISOString() : null;
 
-  // If this is a rotation, set grace period on the old key
-  if (options.rotatedFrom) {
-    const graceUntil = new Date(Date.now() + ROTATION_GRACE_MS).toISOString();
-    await client
-      .from("api_keys")
-      .update({ rotation_grace_until: graceUntil })
-      .eq("id", options.rotatedFrom)
-      .eq("clerk_user_id", clerkUserId);
-  }
+  // Note: If this is a rotation (options.rotatedFrom), the grace period on the old key
+  // is already set by rotateApiKey() BEFORE calling this function. No need to set it here.
 
   // Insert the new key
   const { data, error } = await client
@@ -349,22 +345,29 @@ export async function rotateApiKey(clerkUserId, keyId, plan, role, options = {})
     throw new Error("Key rotation requires a Premium or Institutional plan. Revoke and create a new key instead.");
   }
 
+  // Set grace period on the old key BEFORE creating the new one.
+  // This ensures the old key is excluded from the key count limit check
+  // in createApiKey() (keys with rotation_grace_until set don't count against the limit).
+  const graceUntil = new Date(Date.now() + ROTATION_GRACE_MS).toISOString();
+  const { error: graceErr } = await client
+    .from("api_keys")
+    .update({ rotation_grace_until: graceUntil })
+    .eq("id", keyId)
+    .eq("clerk_user_id", clerkUserId);
+
+  if (graceErr) {
+    throw new Error(`Failed to set rotation grace period: ${graceErr.message}`);
+  }
+
   // Create the new key (with rotation chain)
   const result = await createApiKey(clerkUserId, plan, role, {
     name: options.name || "Rotated Key",
     rotatedFrom: keyId,
   });
 
-  // Get the grace period end time from the old key
-  const { data: updatedOldKey } = await client
-    .from("api_keys")
-    .select("rotation_grace_until")
-    .eq("id", keyId)
-    .single();
-
   return {
     ...result,
-    oldKeyGraceUntil: updatedOldKey?.rotation_grace_until || new Date(Date.now() + ROTATION_GRACE_MS).toISOString(),
+    oldKeyGraceUntil: graceUntil,
   };
 }
 
