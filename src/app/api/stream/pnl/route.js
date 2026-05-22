@@ -9,6 +9,13 @@
  * 2. CORS — the browser can't connect directly to the FastAPI SSE endpoint
  *    → This route proxies the SSE stream through the Next.js server
  *
+ * IMPORTANT: EventSource cannot read HTTP status codes — any non-200 response
+ * triggers onerror with no status info, causing an infinite reconnect loop.
+ * Therefore, ALL errors from the upstream FastAPI backend are converted to
+ * SSE events (credentials_error, backend_error) and returned as HTTP 200
+ * with Content-Type: text/event-stream. The client handles these events
+ * gracefully instead of reconnecting blindly.
+ *
  * Flow:
  * 1. Client creates EventSource('/api/stream/pnl')
  * 2. This route resolves a Clerk JWT, then opens SSE to FastAPI /sse/pnl
@@ -55,42 +62,70 @@ export const GET = withAuth(async (request, context, authContext) => {
       const errorText = await upstream.text();
       console.error(`[SSE PnL Proxy] FastAPI returned ${upstream.status}:`, errorText);
 
-      // For 403 (no Alpaca keys), return an SSE stream with a credentials_error
-      // event instead of a JSON 403. EventSource cannot read HTTP status codes,
-      // so a JSON 403 would just trigger onerror with an opaque reconnect loop.
-      // Sending a proper SSE event lets the client handle it gracefully.
+      // CRITICAL: EventSource cannot read HTTP status codes. Any non-200
+      // response triggers onerror → reconnect loop forever. We MUST return
+      // SSE events for ALL error types so the client can handle gracefully.
+      let sseEvent;
       if (upstream.status === 403) {
-        const { readable, writable } = new TransformStream();
-        const writer = writable.getWriter();
-        const encoder = new TextEncoder();
-
-        // Send credentials_error event, then close
-        (async () => {
-          try {
-            await writer.write(encoder.encode(
-              `data: ${JSON.stringify({
-                event: "credentials_error",
-                data: { code: "NO_KEYS", message: "No Alpaca API keys configured. Connect keys in settings." },
-                timestamp: Date.now() / 1000,
-              })}\n\n`
-            ));
-          } catch { /* ignore */ }
-          try { await writer.close(); } catch { /* ignore */ }
-        })();
-
-        return new Response(readable, {
-          headers: {
-            "Content-Type": "text/event-stream",
-            "Cache-Control": "no-cache",
-            "X-Accel-Buffering": "no",
-          },
-        });
+        // No Alpaca API keys configured (or other authz failure)
+        let code = "NO_KEYS";
+        let message = "No Alpaca API keys configured. Connect keys in settings.";
+        try {
+          const detail = JSON.parse(errorText);
+          if (detail?.detail?.includes?.("Alpaca")) code = "NO_KEYS";
+          if (detail?.detail) message = detail.detail;
+        } catch { /* not JSON, use defaults */ }
+        sseEvent = { event: "credentials_error", data: { code, message } };
+      } else if (upstream.status === 401) {
+        // JWT rejected by backend (expired, invalid, or missing)
+        sseEvent = {
+          event: "credentials_error",
+          data: { code: "AUTH_EXPIRED", message: "Authentication expired. Please refresh the page." },
+        };
+      } else if (upstream.status === 429) {
+        // Rate limited by backend
+        sseEvent = {
+          event: "backend_error",
+          data: { code: "RATE_LIMITED", message: "Too many requests. Retrying shortly..." },
+        };
+      } else if (upstream.status >= 500) {
+        // Backend error (likely cold start)
+        sseEvent = {
+          event: "backend_error",
+          data: { code: "UPSTREAM_ERROR", message: `Backend returned ${upstream.status}. Retrying...` },
+        };
+      } else {
+        // Other client errors
+        sseEvent = {
+          event: "backend_error",
+          data: { code: `HTTP_${upstream.status}`, message: `Unexpected error (${upstream.status}).` },
+        };
       }
 
-      return Response.json(
-        { error: `FastAPI SSE returned ${upstream.status}` },
-        { status: upstream.status },
-      );
+      const { readable, writable } = new TransformStream();
+      const writer = writable.getWriter();
+      const encoder = new TextEncoder();
+
+      // Send the error event as SSE, then close the stream
+      (async () => {
+        try {
+          await writer.write(encoder.encode(
+            `data: ${JSON.stringify({
+              ...sseEvent,
+              timestamp: Date.now() / 1000,
+            })}\n\n`
+          ));
+        } catch { /* ignore */ }
+        try { await writer.close(); } catch { /* ignore */ }
+      })();
+
+      return new Response(readable, {
+        headers: {
+          "Content-Type": "text/event-stream",
+          "Cache-Control": "no-cache",
+          "X-Accel-Buffering": "no",
+        },
+      });
     }
 
     // Create a TransformStream to proxy the SSE data

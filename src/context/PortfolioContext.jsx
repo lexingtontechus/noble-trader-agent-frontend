@@ -468,6 +468,18 @@ export function PortfolioProvider({ children }) {
                 `[PortfolioProvider] Credentials error from SSE: ${data.code || "unknown"} — ${data.message || data.reason || "No details"}`
               );
               setSseConnected(false);
+
+              // AUTH_EXPIRED is a transient Clerk JWT issue — don't permanently
+              // mark credentials as failed, just let the normal reconnect handle it.
+              if (data.code === "AUTH_EXPIRED") {
+                console.log("[PortfolioProvider] JWT expired — SSE will retry on next reconnect");
+                if (sseRef.current) {
+                  sseRef.current.close();
+                  sseRef.current = null;
+                }
+                break;
+              }
+
               sseCredentialsFailedRef.current = true;
               // Close SSE — no point reconnecting with bad/missing credentials
               if (sseRef.current) {
@@ -480,6 +492,22 @@ export function PortfolioProvider({ children }) {
                 setError(null); // Not an error — user just hasn't connected keys yet
               } else {
                 setError("Alpaca credentials are invalid or expired. Please re-authenticate in Admin settings.");
+              }
+              break;
+            }
+
+            case "backend_error": {
+              // Transient backend error (rate limit, 5xx, cold start, etc.)
+              // These are NOT permanent failures — the client should retry later.
+              console.warn(
+                `[PortfolioProvider] Backend error from SSE: ${data.code || "unknown"} — ${data.message || "No details"}`
+              );
+              setSseConnected(false);
+              // Don't set sseCredentialsFailedRef — these are transient errors
+              // that warrant reconnect attempts (unlike credentials_error).
+              if (sseRef.current) {
+                sseRef.current.close();
+                sseRef.current = null;
               }
               break;
             }

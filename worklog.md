@@ -185,3 +185,31 @@ Stage Summary:
 - Backend auth module pushed to noble-trader-fastapi-backend (commit 5f37953)
 - Key bug fix: withAuth.js variable ordering (would have caused runtime crash in API key auth)
 - Cross-stack hash consistency confirmed (identical hashes for same key+pepper)
+
+---
+Task ID: SSE-403-FIX
+Agent: Main Agent
+Task: Fix SSE 403 reconnect loop + API key rotation limit bug
+
+Work Log:
+- Updated .env.local with Supabase service role key
+- Ran full Supabase integration tests (34/35 passed, 1 test logic issue only)
+- Discovered API key rotation bug: premium users (limit=1) couldn't rotate keys
+  because createApiKey's limit check counted the old key (still active) before
+  the grace period was set on it
+- Fixed rotation: rotateApiKey now sets grace period on old key BEFORE calling
+  createApiKey, and createApiKey excludes keys with rotation_grace_until from
+  the count check
+- Investigated /api/stream/pnl 403 error: FastAPI returns 403 when Alpaca keys
+  aren't configured, but EventSource API can't read HTTP status codes, so the
+  BFF JSON 403 just triggered onerror → reconnect loop forever
+- Fixed BFF: returns credentials_error as an SSE event (not JSON 403) so
+  EventSource can receive and process it
+- Fixed PortfolioProvider: credentials_error handler sets hasKeys=false and
+  sseCredentialsFailedRef to stop reconnecting; onerror checks the ref
+- Pushed to GitHub: commit b98a907
+
+Stage Summary:
+- API key rotation now works for premium users (verified via Supabase test)
+- SSE reconnect loop fixed — credentials_error stops reconnection gracefully
+- Distinguishes NO_KEYS (no error banner) from invalid credentials (shows error)
