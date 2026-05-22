@@ -120,6 +120,9 @@ export const PATH_TIER_MAP = [
   { pattern: /^\/api\/clerk\//,                   tier: "auth" },
   { pattern: /^\/api\/telegram\//,                tier: "auth" },
 
+  // API key management
+  { pattern: /^\/api\/api-keys/,                  tier: "auth" },
+
   // Public routes
   { pattern: /^\/api\/health\/cron/,              tier: "public" },
   { pattern: /^\/api\/health$/,                   tier: "public" },

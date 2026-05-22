@@ -24,7 +24,8 @@ export const PLANS = {
       portfolioOptimization: false,
       realTimePL: false,
       priorityExecution: false,
-      apiAccess: false,
+      apiAccess: true,        // API keys available (30-day expiry, 1 key)
+      apiKeyRotation: false,  // No rotation — must revoke & recreate
       customStrategies: false,
       multiTenant: false,
       dedicatedSupport: false,
@@ -34,6 +35,8 @@ export const PLANS = {
       symbolsWatchlist: 10,
       alertsPerDay: 20,
       apiCallsPerMinute: 10,
+      apiKeysPerUser: 1,
+      apiKeyExpiryDays: 30,
     },
   },
   premium: {
@@ -51,7 +54,8 @@ export const PLANS = {
       portfolioOptimization: true,
       realTimePL: true,
       priorityExecution: true,
-      apiAccess: false,
+      apiAccess: true,        // API keys available (permanent, 1 key)
+      apiKeyRotation: true,   // Key rotation with 24hr grace period
       customStrategies: false,
       multiTenant: false,
       dedicatedSupport: false,
@@ -61,6 +65,8 @@ export const PLANS = {
       symbolsWatchlist: 100,
       alertsPerDay: 200,
       apiCallsPerMinute: 60,
+      apiKeysPerUser: 1,
+      apiKeyExpiryDays: null,  // Permanent
     },
   },
   institutional: {
@@ -78,7 +84,8 @@ export const PLANS = {
       portfolioOptimization: true,
       realTimePL: true,
       priorityExecution: true,
-      apiAccess: true,
+      apiAccess: true,        // API keys available (permanent, up to 5 keys)
+      apiKeyRotation: true,   // Key rotation with 24hr grace period
       customStrategies: true,
       multiTenant: true,
       dedicatedSupport: true,
@@ -88,6 +95,8 @@ export const PLANS = {
       symbolsWatchlist: Infinity,
       alertsPerDay: Infinity,
       apiCallsPerMinute: 300,
+      apiKeysPerUser: 5,
+      apiKeyExpiryDays: null,  // Permanent
     },
   },
 };

@@ -21,7 +21,7 @@ const NAV_ITEMS = [
   { key: "simulate", label: "Simulate", icon: "🎲", shortLabel: "Sim" },
   { key: "portfolio", label: "Portfolio", icon: "📈", shortLabel: "Port" },
   { key: "search", label: "Search", icon: "🔍", shortLabel: "Search" },
-  { key: "ops", label: "P&L", icon: "🛡️", shortLabel: "P&L", minRole: "admin" },
+  { key: "pnl", label: "P&L", icon: "🛡️", shortLabel: "P&L", minRole: "admin" },
   // Admin is role-gated — only shown for admin users via useRole()
   // Also accessible via UserButton custom menu item
   { key: "admin", label: "Admin", icon: "⚙️", shortLabel: "Admin", minRole: "admin" },
@@ -43,9 +43,9 @@ export default function Navbar({ activeView, setActiveView }) {
     return true;
   });
 
-  // Navigate to Ops when clicking mode badge
+  // Navigate to P&L when clicking mode badge
   const handleModeClick = useCallback(() => {
-    setActiveView("ops");
+    setActiveView("pnl");
   }, [setActiveView]);
 
   useEffect(() => {
@@ -194,7 +194,7 @@ export default function Navbar({ activeView, setActiveView }) {
             <TradingModeToggle />
           </div>
 
-          {/* Backend health indicator — clickable, navigates to Ops/Health page */}
+          {/* Backend health indicator — clickable, navigates to P&L/Health page */}
           <div className="hidden sm:flex items-center gap-1">
             <button
               className={`badge badge-sm cursor-pointer transition-colors ${
@@ -206,7 +206,7 @@ export default function Navbar({ activeView, setActiveView }) {
                       ? "badge-warning hover:badge-warning/80"
                       : "badge-error hover:badge-error/80"
               }`}
-              onClick={() => setActiveView("ops")}
+              onClick={() => setActiveView("pnl")}
               title={
                 backendHealthy === null
                   ? "Checking system status..."
@@ -235,7 +235,7 @@ export default function Navbar({ activeView, setActiveView }) {
                       ? "badge-warning"
                       : "badge-success"
                 }`}
-                onClick={() => setActiveView("ops")}
+                onClick={() => setActiveView("pnl")}
                 title={
                   circuitBreakerStatus === "halted"
                     ? "Trading HALTED — Click to view"
@@ -259,7 +259,7 @@ export default function Navbar({ activeView, setActiveView }) {
                       ? "badge-warning"
                       : "badge-error"
               }`}
-              onClick={() => setActiveView("ops")}
+              onClick={() => setActiveView("pnl")}
               title={
                 backendHealthy === null
                   ? "Checking..."
@@ -306,7 +306,7 @@ export default function Navbar({ activeView, setActiveView }) {
                   <UserButton.Action
                     label="P&L Controls"
                     labelIcon={<span style={{ fontSize: 14 }}>🛡️</span>}
-                    onClick={() => setActiveView("ops")}
+                    onClick={() => setActiveView("pnl")}
                   />
                 </>
               )}

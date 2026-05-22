@@ -8,7 +8,7 @@ import { usePlan } from "@/hooks/usePlan";
  *
  * - Reads current mode from backend /operational/mode (source of truth)
  * - Falls back to localStorage if backend unavailable
- * - Clicking navigates to Ops page for full mode management
+ * - Clicking navigates to P&L page for full mode management
  * - Live mode pulses red as a visual warning
  * - Dispatches `noble:trading-mode` event when mode changes
  */
@@ -54,10 +54,10 @@ export default function TradingModeToggle() {
     );
   }, [mode]);
 
-  // Click navigates to Ops page for full mode management
+  // Click navigates to P&L page for full mode management
   const handleClick = () => {
     window.dispatchEvent(
-      new CustomEvent("noble:navigate", { detail: { view: "ops" } })
+      new CustomEvent("noble:navigate", { detail: { view: "pnl" } })
     );
   };
 

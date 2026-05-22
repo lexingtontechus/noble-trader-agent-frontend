@@ -9,6 +9,7 @@ import PlanGate from "@/components/shared/PlanGate";
 import CredentialCard from "./CredentialCard";
 import PlanCard from "./PlanCard";
 import NotificationPreferences from "./NotificationPreferences";
+import ApiKeyManager from "./ApiKeyManager";
 
 /**
  * SettingsPage — Centralized account management.
@@ -20,6 +21,7 @@ const TABS = [
   { key: "profile", label: "Profile", icon: "👤" },
   { key: "paper", label: "Paper Account", icon: "📝" },
   { key: "live", label: "Live Account", icon: "🔴" },
+  { key: "apikeys", label: "API Keys", icon: "🔑" },
   { key: "notifications", label: "Notifications", icon: "🔔" },
   { key: "plan", label: "Plan & Billing", icon: "💎" },
 ];
@@ -257,6 +259,11 @@ export default function SettingsPage({ initialTab = "profile" }) {
               dangerZone
             />
           </PlanGate>
+        )}
+
+        {/* API Keys Tab */}
+        {activeTab === "apikeys" && (
+          <ApiKeyManager />
         )}
 
         {/* Notifications Tab */}

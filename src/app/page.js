@@ -66,14 +66,14 @@ export default function Home() {
     if (!roleLoaded) return;
     if (activeView === "admin" && !isAdmin) setActiveView("dashboard");
     if (activeView === "trade" && !isTrader) setActiveView("dashboard");
-    if (activeView === "ops" && !isAdmin) setActiveView("dashboard");
+    if (activeView === "pnl" && !isAdmin) setActiveView("dashboard");
   }, [activeView, isAdmin, isTrader, roleLoaded]);
 
   // Safe view setter that enforces role gating
   const setSafeActiveView = useCallback((view) => {
     if (view === "admin" && !isAdmin) return;
     if (view === "trade" && !isTrader) return;
-    if (view === "ops" && !isAdmin) return;
+    if (view === "pnl" && !isAdmin) return;
     setActiveView(view);
   }, [isAdmin, isTrader]);
 
@@ -129,7 +129,7 @@ export default function Home() {
         setActiveView("renko");
       } else if ((e.metaKey || e.ctrlKey) && e.key === "8") {
         e.preventDefault();
-        setSafeActiveView("ops");
+        setSafeActiveView("pnl");
       } else if ((e.metaKey || e.ctrlKey) && e.key === "9") {
         e.preventDefault();
         setSafeActiveView("admin");
@@ -163,7 +163,7 @@ export default function Home() {
                     {activeView === "simulate" && <SimulatePage />}
                     {activeView === "portfolio" && <PortfolioPage />}
                     {activeView === "renko" && <RenkoPage />}
-                    {activeView === "ops" && (
+                    {activeView === "pnl" && (
                       <RoleGate minRole="admin" showUpgrade>
                         <OperationalPage />
                       </RoleGate>

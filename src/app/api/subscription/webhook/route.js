@@ -15,6 +15,7 @@
  */
 
 import { setUserPlan } from "@/lib/credentials";
+import { updateKeysForPlanChange } from "@/lib/api-keys";
 
 // Helio webhook secret (set in Vercel env vars)
 const HELIO_WEBHOOK_SECRET = process.env.HELIO_WEBHOOK_SECRET;
@@ -97,6 +98,13 @@ export async function POST(request) {
           currentPeriodStart: data?.currentPeriodStart,
           currentPeriodEnd: data?.currentPeriodEnd,
         });
+        // Upgrade API keys: remove expiry, update plan_at_creation
+        try {
+          await updateKeysForPlanChange(clerkUserId, plan);
+          console.log(`[helio-webhook] Upgraded API keys to ${plan} for user ${clerkUserId}`);
+        } catch (keyErr) {
+          console.error(`[helio-webhook] Failed to update API keys on upgrade:`, keyErr.message);
+        }
         console.log(`[helio-webhook] Activated ${plan} for user ${clerkUserId}`);
         break;
 
@@ -112,6 +120,13 @@ export async function POST(request) {
         await setUserPlan(clerkUserId, "free", {
           planStatus: "cancelled",
         });
+        // Downgrade API keys: set 30-day expiry, revoke excess keys
+        try {
+          await updateKeysForPlanChange(clerkUserId, "free");
+          console.log(`[helio-webhook] Downgraded API keys to free for user ${clerkUserId}`);
+        } catch (keyErr) {
+          console.error(`[helio-webhook] Failed to update API keys on downgrade:`, keyErr.message);
+        }
         console.log(`[helio-webhook] Expired subscription for user ${clerkUserId}, downgraded to free`);
         break;
 
