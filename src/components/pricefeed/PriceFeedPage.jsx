@@ -6,6 +6,7 @@ import TickerTape from "./TickerTape";
 import WatchlistPanel from "./WatchlistPanel";
 import LiveCandlestickChart from "./LiveCandlestickChart";
 import TradingViewAdvancedChart from "./TradingViewAdvancedChart";
+import SectorHeatmap from "./SectorHeatmap";
 import PriceAlertPanel from "./PriceAlertPanel";
 
 /**
@@ -86,7 +87,7 @@ function PriceFeedContent() {
 
           {/* Chart content — conditional rendering */}
           <div className="flex-1 min-h-0 overflow-hidden">
-            {chartMode === "live" ? <LiveCandlestickChart /> : <TradingViewAdvancedChart />}
+            {chartMode === "live" ? <LiveCandlestickChart /> : chartMode === "heatmap" ? <SectorHeatmap /> : <TradingViewAdvancedChart />}
           </div>
 
           {/* Mobile: Watchlist toggle button */}
@@ -286,8 +287,8 @@ function ChartModeToggle({ chartMode, setChartMode, connected }) {
             chartMode === "live" ? "btn-primary" : "btn-ghost"
           }`}
           onClick={() => setChartMode("live")}
+          title="WebSocket live chart"
         >
-          {/* Live icon */}
           <span className="flex items-center gap-1.5">
             {connected && chartMode === "live" && (
               <span className="w-1.5 h-1.5 rounded-full bg-success animate-pulse" />
@@ -303,6 +304,7 @@ function ChartModeToggle({ chartMode, setChartMode, connected }) {
             chartMode === "advanced" ? "btn-secondary" : "btn-ghost"
           }`}
           onClick={() => setChartMode("advanced")}
+          title="TradingView Advanced Chart"
         >
           <span className="flex items-center gap-1.5">
             <svg xmlns="http://www.w3.org/2000/svg" className="h-3.5 w-3.5 hidden sm:inline" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -311,11 +313,25 @@ function ChartModeToggle({ chartMode, setChartMode, connected }) {
             <span>Advanced</span>
           </span>
         </button>
+        <button
+          className={`btn join-item btn-xs sm:btn-xs min-h-[36px] sm:min-h-0 ${
+            chartMode === "heatmap" ? "btn-accent" : "btn-ghost"
+          }`}
+          onClick={() => setChartMode("heatmap")}
+          title="Market Heatmap"
+        >
+          <span className="flex items-center gap-1.5">
+            <svg xmlns="http://www.w3.org/2000/svg" className="h-3.5 w-3.5 hidden sm:inline" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 5a1 1 0 011-1h4a1 1 0 011 1v5a1 1 0 01-1 1H5a1 1 0 01-1-1V5zm10 0a1 1 0 011-1h4a1 1 0 011 1v2a1 1 0 01-1 1h-4a1 1 0 01-1-1V5zm0 6a1 1 0 011-1h4a1 1 0 011 1v5a1 1 0 01-1 1h-4a1 1 0 01-1-1v-5zM4 13a1 1 0 011-1h4a1 1 0 011 1v2a1 1 0 01-1 1H5a1 1 0 01-1-1v-2z" />
+            </svg>
+            <span>Heatmap</span>
+          </span>
+        </button>
       </div>
 
       {/* Mode description */}
       <span className="hidden lg:inline text-[10px] text-base-content/30 ml-2">
-        {chartMode === "live" ? "WebSocket feed" : "TradingView Pro"}
+        {chartMode === "live" ? "WebSocket feed" : chartMode === "heatmap" ? "Market pulse" : "TradingView Pro"}
       </span>
     </div>
   );
@@ -381,6 +397,11 @@ function StatusBar({
             <>
               <span className={`w-1.5 h-1.5 rounded-full ${connected ? "bg-success" : "bg-base-content/20"}`} />
               Live Chart
+            </>
+          ) : chartMode === "heatmap" ? (
+            <>
+              <span className="w-1.5 h-1.5 rounded-full bg-accent" />
+              Heatmap
             </>
           ) : (
             <>
