@@ -139,6 +139,17 @@ function assignTimes(indicatorData, candles, startOffset) {
   })).filter((d) => d.time);
 }
 
+const COMPARE_COLORS = [
+  "#f59e0b", // amber
+  "#3b82f6", // blue
+  "#ec4899", // pink
+  "#8b5cf6", // violet
+  "#14b8a6", // teal
+  "#f97316", // orange
+  "#06b6d4", // cyan
+  "#84cc16", // lime
+];
+
 export default function LiveCandlestickChart() {
   const {
     selectedSymbol,
@@ -146,6 +157,11 @@ export default function LiveCandlestickChart() {
     connected,
     chartPeriod,
     setChartPeriod,
+    watchlist,
+    compareSymbols,
+    addCompareSymbol,
+    removeCompareSymbol,
+    clearCompareSymbols,
   } = usePriceFeed();
 
   // ── State ─────────────────────────────────────────────────────────────────
@@ -155,6 +171,8 @@ export default function LiveCandlestickChart() {
   const [error, setError] = useState(null);
   const [chartData, setChartData] = useState([]);
   const [showIndicatorMenu, setShowIndicatorMenu] = useState(false);
+  const [showCompareMenu, setShowCompareMenu] = useState(false);
+  const [compareData, setCompareData] = useState({});
 
   // ── Refs ──────────────────────────────────────────────────────────────────
   const chartContainerRef = useRef(null);
@@ -168,6 +186,9 @@ export default function LiveCandlestickChart() {
 
   // Overlay indicator series refs (SMA, EMA, Bollinger)
   const indicatorSeriesRef = useRef({}); // { sma: series, ema: series, bb_upper: series, bb_lower: series }
+
+  // Compare overlay series refs
+  const compareSeriesRef = useRef({}); // { symbol: series }
 
   // RSI sub-chart refs
   const rsiChartRef = useRef(null);
@@ -533,6 +554,86 @@ export default function LiveCandlestickChart() {
     }
   }, [activeIndicators, indicatorData, chartData]);
 
+  // ── Effect 5: Fetch and render comparison overlays ─────────────────────────
+  useEffect(() => {
+    if (!chartRef.current || chartData.length === 0) return;
+
+    // Remove all existing compare series
+    for (const [sym, series] of Object.entries(compareSeriesRef.current)) {
+      try { chartRef.current.removeSeries(series); } catch { /* ignore */ }
+    }
+    compareSeriesRef.current = {};
+
+    if (compareSymbols.length === 0) return;
+
+    // Fetch and render each compare symbol
+    const fetchAndRender = async () => {
+      const newCompareData = {};
+
+      for (let i = 0; i < compareSymbols.length; i++) {
+        const sym = compareSymbols[i];
+        const color = COMPARE_COLORS[i % COMPARE_COLORS.length];
+
+        try {
+          const res = await fetch(
+            `/api/prices/ohlc?symbol=${encodeURIComponent(sym)}&period=${chartPeriod}&interval=${currentPeriodConfig.interval}`
+          );
+          if (!res.ok) continue;
+          const data = await res.json();
+          const candles = data.candles || [];
+          if (candles.length === 0) continue;
+
+          // Normalize to percentage change from first candle
+          const baseClose = candles[0].close;
+          const normalizedData = candles.map((c) => ({
+            time: c.time,
+            value: ((c.close - baseClose) / baseClose) * 100,
+          }));
+
+          // Also normalize main chart data for comparison
+          const mainBaseClose = chartData[0]?.close;
+          if (!mainBaseClose) continue;
+
+          // Only add the series if the chart still exists
+          if (!chartRef.current) continue;
+
+          const series = chartRef.current.addSeries(LineSeries, {
+            color,
+            lineWidth: 1,
+            lineStyle: 2, // dashed
+            priceLineVisible: false,
+            lastValueVisible: true,
+            crosshairMarkerVisible: false,
+            title: `${sym} %`,
+            priceScaleId: "compare",
+          });
+
+          // Configure the compare price scale
+          chartRef.current.priceScale("compare").applyOptions({
+            scaleMargins: { top: 0.1, bottom: 0.2 },
+            drawTicks: false,
+            drawBorder: false,
+            visible: false,
+          });
+
+          series.setData(normalizedData);
+          compareSeriesRef.current[sym] = series;
+          newCompareData[sym] = normalizedData;
+        } catch (err) {
+          console.error(`[LiveCandlestickChart] Compare fetch error for ${sym}:`, err);
+        }
+      }
+
+      setCompareData(newCompareData);
+    };
+
+    fetchAndRender();
+
+    return () => {
+      // Cleanup handled at top of effect
+    };
+  }, [compareSymbols, chartData, chartPeriod, currentPeriodConfig.interval]);
+
   // ── Real-time price updates ───────────────────────────────────────────────
   useEffect(() => {
     if (!selectedSymbol || !prices[selectedSymbol]) return;
@@ -649,32 +750,101 @@ export default function LiveCandlestickChart() {
           </div>
 
           {/* Indicator menu — always visible */}
-          <div className="relative">
-            <button
-              className={`btn btn-sm sm:btn-xs min-h-[44px] sm:min-h-0 ${activeIndicators.length > 0 ? "btn-secondary" : "btn-ghost"}`}
-              onClick={() => setShowIndicatorMenu(!showIndicatorMenu)}
-            >
-              <span className="sm:hidden">Ind.</span>
-              <span className="hidden sm:inline">Indicators</span>
-              {activeIndicators.length > 0 && <span className="badge badge-xs badge-primary ml-1">{activeIndicators.length}</span>}
-            </button>
-            {showIndicatorMenu && (
-              <div className="absolute right-0 top-full mt-1 z-50 bg-base-100 border border-base-300 rounded-lg shadow-lg p-2 min-w-[180px]">
-                {Object.entries(INDICATORS).map(([key, ind]) => (
-                  <label key={key} className="flex items-center gap-2 px-2 py-2 sm:py-1.5 hover:bg-base-200 rounded cursor-pointer text-sm sm:text-xs min-h-[44px] sm:min-h-0">
-                    <input
-                      type="checkbox"
-                      className="checkbox checkbox-sm sm:checkbox-xs"
-                      checked={activeIndicators.includes(key)}
-                      onChange={() => toggleIndicator(key)}
-                    />
-                    <span className="w-3 h-0.5 rounded" style={{ backgroundColor: ind.color }} />
-                    <span>{ind.label}</span>
-                    <span className="text-base-content/40 ml-auto hidden sm:inline">{ind.params.join(", ")}</span>
-                  </label>
-                ))}
-              </div>
-            )}
+          <div className="flex items-center gap-1">
+            <div className="relative">
+              <button
+                className={`btn btn-sm sm:btn-xs min-h-[44px] sm:min-h-0 ${activeIndicators.length > 0 ? "btn-secondary" : "btn-ghost"}`}
+                onClick={() => { setShowIndicatorMenu(!showIndicatorMenu); setShowCompareMenu(false); }}
+              >
+                <span className="sm:hidden">Ind.</span>
+                <span className="hidden sm:inline">Indicators</span>
+                {activeIndicators.length > 0 && <span className="badge badge-xs badge-primary ml-1">{activeIndicators.length}</span>}
+              </button>
+              {showIndicatorMenu && (
+                <div className="absolute right-0 top-full mt-1 z-50 bg-base-100 border border-base-300 rounded-lg shadow-lg p-2 min-w-[180px]">
+                  {Object.entries(INDICATORS).map(([key, ind]) => (
+                    <label key={key} className="flex items-center gap-2 px-2 py-2 sm:py-1.5 hover:bg-base-200 rounded cursor-pointer text-sm sm:text-xs min-h-[44px] sm:min-h-0">
+                      <input
+                        type="checkbox"
+                        className="checkbox checkbox-sm sm:checkbox-xs"
+                        checked={activeIndicators.includes(key)}
+                        onChange={() => toggleIndicator(key)}
+                      />
+                      <span className="w-3 h-0.5 rounded" style={{ backgroundColor: ind.color }} />
+                      <span>{ind.label}</span>
+                      <span className="text-base-content/40 ml-auto hidden sm:inline">{ind.params.join(", ")}</span>
+                    </label>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            {/* Compare menu */}
+            <div className="relative">
+              <button
+                className={`btn btn-sm sm:btn-xs min-h-[44px] sm:min-h-0 ${compareSymbols.length > 0 ? "btn-accent" : "btn-ghost"}`}
+                onClick={() => { setShowCompareMenu(!showCompareMenu); setShowIndicatorMenu(false); }}
+              >
+                <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
+                </svg>
+                <span className="hidden sm:inline">Compare</span>
+                {compareSymbols.length > 0 && <span className="badge badge-xs badge-accent ml-1">{compareSymbols.length}</span>}
+              </button>
+              {showCompareMenu && (
+                <div className="absolute right-0 top-full mt-1 z-50 bg-base-100 border border-base-300 rounded-lg shadow-lg p-2 min-w-[220px]">
+                  <div className="text-xs text-base-content/50 px-2 pb-1.5 font-medium">Overlay Symbols</div>
+
+                  {/* Active compare symbols */}
+                  {compareSymbols.length > 0 && (
+                    <div className="border-b border-base-300 pb-1.5 mb-1.5">
+                      {compareSymbols.map((sym, i) => (
+                        <div key={sym} className="flex items-center gap-2 px-2 py-1.5 hover:bg-base-200 rounded text-xs min-h-[36px]">
+                          <span className="w-3 h-0.5 rounded" style={{ backgroundColor: COMPARE_COLORS[i % COMPARE_COLORS.length] }} />
+                          <span className="flex-1 font-medium">{sym}</span>
+                          <button
+                            className="btn btn-xs btn-ghost btn-circle min-h-[28px] min-w-[28px]"
+                            onClick={() => removeCompareSymbol(sym)}
+                          >
+                            <svg xmlns="http://www.w3.org/2000/svg" className="h-3 w-3" viewBox="0 0 20 20" fill="currentColor">
+                              <path fillRule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clipRule="evenodd" />
+                            </svg>
+                          </button>
+                        </div>
+                      ))}
+                      <button
+                        className="btn btn-xs btn-ghost w-full mt-1 min-h-[28px] text-error"
+                        onClick={clearCompareSymbols}
+                      >
+                        Clear All
+                      </button>
+                    </div>
+                  )}
+
+                  {/* Available symbols from watchlist */}
+                  <div className="text-xs text-base-content/50 px-2 pb-1">From Watchlist</div>
+                  {watchlist
+                    .filter((w) => w.symbol !== selectedSymbol && !compareSymbols.includes(w.symbol))
+                    .slice(0, 8)
+                    .map((w) => (
+                      <button
+                        key={w.symbol}
+                        className="w-full text-left flex items-center gap-2 px-2 py-1.5 hover:bg-base-200 rounded text-xs min-h-[36px]"
+                        onClick={() => addCompareSymbol(w.symbol)}
+                      >
+                        <span className="font-medium">{w.symbol}</span>
+                        <span className="text-base-content/40 flex-1 truncate">{w.name}</span>
+                        {w.change !== undefined && (
+                          <span className={`font-mono ${w.change >= 0 ? "text-success" : "text-error"}`}>
+                            {w.change >= 0 ? "+" : ""}{w.change.toFixed(1)}%
+                          </span>
+                        )}
+                      </button>
+                    ))
+                  }
+                </div>
+              )}
+            </div>
           </div>
         </div>
 
@@ -709,6 +879,27 @@ export default function LiveCandlestickChart() {
             ))}
           </div>
         </div>
+
+        {/* Compare symbol badges */}
+        {compareSymbols.length > 0 && (
+          <div className="flex items-center gap-1 overflow-x-auto scrollbar-none -mx-3 px-3 sm:mx-0 sm:px-0">
+            {compareSymbols.map((sym, i) => (
+              <span
+                key={sym}
+                className="badge badge-sm gap-1 cursor-pointer"
+                style={{ backgroundColor: `${COMPARE_COLORS[i % COMPARE_COLORS.length]}20`, borderColor: COMPARE_COLORS[i % COMPARE_COLORS.length], color: COMPARE_COLORS[i % COMPARE_COLORS.length] }}
+                onClick={() => removeCompareSymbol(sym)}
+              >
+                <span className="w-1.5 h-1.5 rounded-full" style={{ backgroundColor: COMPARE_COLORS[i % COMPARE_COLORS.length] }} />
+                {sym}
+                <svg xmlns="http://www.w3.org/2000/svg" className="h-3 w-3 opacity-50" viewBox="0 0 20 20" fill="currentColor">
+                  <path fillRule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clipRule="evenodd" />
+                </svg>
+              </span>
+            ))}
+            <button className="btn btn-xs btn-ghost text-error" onClick={clearCompareSymbols}>Clear</button>
+          </div>
+        )}
       </div>
 
       {/* Chart area — flex column with main chart and optional sub-charts */}

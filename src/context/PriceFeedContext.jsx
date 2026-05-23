@@ -129,6 +129,29 @@ export function PriceFeedProvider({ children }) {
     try { localStorage.setItem(CHART_MODE_KEY, mode); } catch { /* ignore */ }
   }, []);
 
+  // ── Compare Symbols (chart overlay) ────────────────────────────────────────
+  const [compareSymbols, setCompareSymbols] = useState([]);
+
+  const addCompareSymbol = useCallback((symbol) => {
+    setCompareSymbols((prev) => {
+      if (prev.includes(symbol) || symbol === selectedSymbol) return prev;
+      return [...prev, symbol];
+    });
+  }, [selectedSymbol]);
+
+  const removeCompareSymbol = useCallback((symbol) => {
+    setCompareSymbols((prev) => prev.filter((s) => s !== symbol));
+  }, []);
+
+  const clearCompareSymbols = useCallback(() => {
+    setCompareSymbols([]);
+  }, []);
+
+  // Reset compare when selected symbol changes
+  useEffect(() => {
+    setCompareSymbols([]);
+  }, [selectedSymbol]);
+
   // ── Market Status ─────────────────────────────────────────────────────────
   const [marketStatus, setMarketStatus] = useState("closed");
 
@@ -194,6 +217,12 @@ export function PriceFeedProvider({ children }) {
       chartMode,
       setChartMode: changeChartMode,
 
+      // Compare symbols (overlay)
+      compareSymbols,
+      addCompareSymbol,
+      removeCompareSymbol,
+      clearCompareSymbols,
+
       // Sorted lists
       gainers,
       losers,
@@ -222,6 +251,7 @@ export function PriceFeedProvider({ children }) {
       unsubscribe,
       chartPeriod,
       chartMode,
+      compareSymbols,
       gainers,
       losers,
       tickCount,
