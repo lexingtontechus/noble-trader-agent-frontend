@@ -3,11 +3,13 @@
 import { useState, useEffect } from "react";
 import { UserProfile, useUser } from "@clerk/nextjs";
 import ClerkAuthPanel from "@/components/auth/ClerkAuthPanel";
+import ConfigPanel from "@/components/admin/ConfigPanel";
 
 export default function AdminPage() {
   const { isSignedIn, isLoaded } = useUser();
   const [roleInfo, setRoleInfo] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [activeTab, setActiveTab] = useState("config");
 
   useEffect(() => {
     if (!isLoaded || !isSignedIn) {
@@ -74,7 +76,7 @@ export default function AdminPage() {
   }
 
   return (
-    <div className="space-y-8 py-8">
+    <div className="space-y-6 py-8">
       {/* Role badge */}
       {roleInfo && (
         <div className="flex items-center gap-2">
@@ -85,29 +87,51 @@ export default function AdminPage() {
         </div>
       )}
 
-      {/* Clerk ↔ FastAPI Auth Diagnostics */}
-      <ClerkAuthPanel />
-
-      {/* User Profile Management */}
-      <div className="flex flex-col items-center">
-        <div className="text-center mb-6">
-          <h2 className="text-xl font-bold text-primary">Account Settings</h2>
-          <p className="text-base-content/60 mt-1">
-            Manage your profile, security, and connected accounts
-          </p>
-        </div>
-        <div className="w-full max-w-3xl">
-          <UserProfile
-            routing="hash"
-            appearance={{
-              elements: {
-                rootBox: "w-full",
-                card: "bg-base-100 shadow-xl border border-base-300",
-              },
-            }}
-          />
-        </div>
+      {/* Tab navigation */}
+      <div role="tablist" className="tabs tabs-bordered">
+        <button
+          role="tab"
+          className={`tab ${activeTab === "config" ? "tab-active" : ""}`}
+          onClick={() => setActiveTab("config")}
+        >
+          Runtime Config
+        </button>
+        <button
+          role="tab"
+          className={`tab ${activeTab === "auth" ? "tab-active" : ""}`}
+          onClick={() => setActiveTab("auth")}
+        >
+          Auth Diagnostics
+        </button>
+        <button
+          role="tab"
+          className={`tab ${activeTab === "profile" ? "tab-active" : ""}`}
+          onClick={() => setActiveTab("profile")}
+        >
+          Account Settings
+        </button>
       </div>
+
+      {/* Tab content */}
+      {activeTab === "config" && <ConfigPanel />}
+
+      {activeTab === "auth" && <ClerkAuthPanel />}
+
+      {activeTab === "profile" && (
+        <div className="flex flex-col items-center">
+          <div className="w-full max-w-3xl">
+            <UserProfile
+              routing="hash"
+              appearance={{
+                elements: {
+                  rootBox: "w-full",
+                  card: "bg-base-100 shadow-xl border border-base-300",
+                },
+              }}
+            />
+          </div>
+        </div>
+      )}
     </div>
   );
 }
