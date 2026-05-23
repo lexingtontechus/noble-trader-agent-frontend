@@ -38,7 +38,9 @@ html {
 }
 
 body {
-  min-height: 100vh;
+  min-height: 100dvh;
+  min-height: 100vh; /* fallback */
+  overscroll-behavior-y: contain;
 }
 
 /* Custom scrollbar for analysis panels */

@@ -68,7 +68,7 @@ function PriceFeedContent() {
   const [showMobileAlerts, setShowMobileAlerts] = useState(false);
 
   return (
-    <div className="flex flex-col h-[calc(100dvh-4rem)]">
+    <div className="flex flex-col h-[calc(100dvh-4rem-56px)] sm:h-[calc(100dvh-4rem)]">
       {/* Ticker Tape — full width */}
       <TickerTape />
 
@@ -125,78 +125,30 @@ function PriceFeedContent() {
 
         {/* Mobile: Watchlist as fixed bottom sheet overlay */}
         {showMobileWatchlist && (
-          <div className="md:hidden fixed inset-0 z-30">
-            {/* Backdrop */}
-            <div
-              className="absolute inset-0 bg-black/40"
-              onClick={() => setShowMobileWatchlist(false)}
-            />
-
-            {/* Bottom sheet */}
-            <div className="absolute bottom-0 left-0 right-0 bg-base-100 border-t border-base-300 rounded-t-xl max-h-[50dvh] overflow-hidden flex flex-col shadow-2xl">
-              {/* Drag handle */}
-              <div className="flex justify-center pt-2 pb-1">
-                <div className="w-10 h-1 rounded-full bg-base-300" />
-              </div>
-
-              {/* Header */}
-              <div className="flex items-center justify-between px-4 pb-2">
-                <span className="text-sm font-bold">Watchlist</span>
-                <button
-                  className="btn btn-ghost btn-sm min-h-[44px] sm:min-h-0"
-                  onClick={() => setShowMobileWatchlist(false)}
-                >
-                  ✕
-                </button>
-              </div>
-
-              {/* Watchlist content */}
-              <div className="flex-1 overflow-y-auto">
-                <WatchlistPanel />
-              </div>
-            </div>
-          </div>
+          <SwipeableBottomSheet
+            onClose={() => setShowMobileWatchlist(false)}
+            title="Watchlist"
+            maxHeight="50dvh"
+          >
+            <WatchlistPanel />
+          </SwipeableBottomSheet>
         )}
 
         {/* Mobile: Alerts as fixed bottom sheet overlay */}
         {showMobileAlerts && (
-          <div className="md:hidden fixed inset-0 z-30">
-            {/* Backdrop */}
-            <div
-              className="absolute inset-0 bg-black/40"
-              onClick={() => setShowMobileAlerts(false)}
+          <SwipeableBottomSheet
+            onClose={() => setShowMobileAlerts(false)}
+            title="Price Alerts"
+            maxHeight="60dvh"
+          >
+            <PriceAlertPanel
+              onSymbolSelect={(sym) => {
+                setSelectedSymbol(sym);
+                setShowMobileAlerts(false);
+              }}
+              currentPrices={prices}
             />
-
-            {/* Bottom sheet */}
-            <div className="absolute bottom-0 left-0 right-0 bg-base-100 border-t border-base-300 rounded-t-xl max-h-[60dvh] overflow-hidden flex flex-col shadow-2xl">
-              {/* Drag handle */}
-              <div className="flex justify-center pt-2 pb-1">
-                <div className="w-10 h-1 rounded-full bg-base-300" />
-              </div>
-
-              {/* Header */}
-              <div className="flex items-center justify-between px-4 pb-2">
-                <span className="text-sm font-bold">Price Alerts</span>
-                <button
-                  className="btn btn-ghost btn-sm min-h-[44px] sm:min-h-0"
-                  onClick={() => setShowMobileAlerts(false)}
-                >
-                  ✕
-                </button>
-              </div>
-
-              {/* Alerts content */}
-              <div className="flex-1 overflow-y-auto">
-                <PriceAlertPanel
-                  onSymbolSelect={(sym) => {
-                    setSelectedSymbol(sym);
-                    setShowMobileAlerts(false);
-                  }}
-                  currentPrices={prices}
-                />
-              </div>
-            </div>
-          </div>
+          </SwipeableBottomSheet>
         )}
       </div>
 
@@ -561,6 +513,84 @@ function ConnectionToasts({ connected, connectionMode, reconnectAttempt }) {
           animation: slideIn 0.3s ease-out;
         }
       `}</style>
+    </div>
+  );
+}
+
+// ── Swipeable Bottom Sheet ─────────────────────────────────────────────────
+
+function SwipeableBottomSheet({ onClose, title, maxHeight = "50dvh", children }) {
+  const sheetRef = useRef(null);
+  const touchStartRef = useRef({ y: 0, time: 0 });
+  const [translateY, setTranslateY] = useState(0);
+
+  const handleTouchStart = useCallback((e) => {
+    touchStartRef.current = {
+      y: e.touches[0].clientY,
+      time: Date.now(),
+    };
+  }, []);
+
+  const handleTouchMove = useCallback((e) => {
+    const deltaY = e.touches[0].clientY - touchStartRef.current.y;
+    if (deltaY > 0) {
+      // Only allow downward drag (dismiss direction)
+      setTranslateY(deltaY);
+    }
+  }, []);
+
+  const handleTouchEnd = useCallback(() => {
+    const velocity = translateY / Math.max(Date.now() - touchStartRef.current.time, 1);
+
+    // Dismiss if dragged more than 100px or with velocity > 0.5
+    if (translateY > 100 || velocity > 0.5) {
+      onClose();
+    }
+    setTranslateY(0);
+  }, [translateY, onClose]);
+
+  return (
+    <div className="md:hidden fixed inset-0 z-40">
+      {/* Backdrop */}
+      <div
+        className="absolute inset-0 bg-black/40"
+        onClick={onClose}
+      />
+
+      {/* Bottom sheet */}
+      <div
+        ref={sheetRef}
+        className="absolute bottom-0 left-0 right-0 bg-base-100 border-t border-base-300 rounded-t-xl flex flex-col shadow-2xl transition-transform"
+        style={{
+          maxHeight,
+          transform: translateY > 0 ? `translateY(${translateY}px)` : undefined,
+          transition: translateY > 0 ? "none" : "transform 0.3s ease-out",
+        }}
+        onTouchStart={handleTouchStart}
+        onTouchMove={handleTouchMove}
+        onTouchEnd={handleTouchEnd}
+      >
+        {/* Drag handle — functional for swipe */}
+        <div className="flex justify-center pt-2 pb-1 cursor-grab active:cursor-grabbing">
+          <div className="w-10 h-1 rounded-full bg-base-300" />
+        </div>
+
+        {/* Header */}
+        <div className="flex items-center justify-between px-4 pb-2">
+          <span className="text-sm font-bold">{title}</span>
+          <button
+            className="btn btn-ghost btn-sm min-h-[44px] sm:min-h-0"
+            onClick={onClose}
+          >
+            ✕
+          </button>
+        </div>
+
+        {/* Content */}
+        <div className="flex-1 overflow-y-auto">
+          {children}
+        </div>
+      </div>
     </div>
   );
 }
