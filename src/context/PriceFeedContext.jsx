@@ -13,6 +13,88 @@ import { yahooToFinnhubSymbol } from "@/lib/symbol-utils";
 
 const PriceFeedContext = createContext(null);
 
+// ── Alpaca bid/ask enrichment ──────────────────────────────────────────────
+// Polls the Alpaca Market Data snapshot endpoint every 5s to get bid/ask
+// for all stock/ETF symbols on the watchlist. Merges into the unified
+// prices object so every component gets bid/ask for free.
+
+const ALPACA_POLL_MS = 5000;
+const ALPACA_STORAGE_KEY = "noble-trader-alpaca-keys-configured";
+
+function useAlpacaBidAsk(symbols) {
+  const [bidAskData, setBidAskData] = useState({}); // { [symbol]: { bid, ask, spread, spreadBps, timestamp } }
+  const [alpacaAvailable, setAlpacaAvailable] = useState(false);
+  const [alpacaChecked, setAlpacaChecked] = useState(false);
+
+  // Check if Alpaca keys are configured (only once)
+  useEffect(() => {
+    let cancelled = false;
+    async function checkKeys() {
+      try {
+        const res = await fetch("/api/clerk/alpaca-keys");
+        if (res.ok) {
+          const data = await res.json();
+          if (!cancelled) setAlpacaAvailable(!!data.configured);
+        }
+      } catch { /* ignore */ }
+      if (!cancelled) setAlpacaChecked(true);
+    }
+    checkKeys();
+  }, []);
+
+  // Poll Alpaca snapshots for bid/ask (only if keys are configured)
+  useEffect(() => {
+    if (!alpacaAvailable || !alpacaChecked) return;
+
+    // Filter to only stock/ETF symbols (Alpaca doesn't support crypto/forex/futures)
+    const stockSymbols = symbols.filter(s => {
+      const upper = s.toUpperCase();
+      return !upper.includes("-") && !upper.includes("=X") && !upper.includes("=F") && !upper.startsWith("^");
+    });
+
+    if (stockSymbols.length === 0) return;
+
+    let cancelled = false;
+
+    async function poll() {
+      if (cancelled) return;
+      try {
+        const res = await fetch(`/api/alpaca/market-data/snapshot?symbols=${encodeURIComponent(stockSymbols.join(","))}`);
+        if (!res.ok) return;
+        const data = await res.json();
+
+        if (data.snapshots && !cancelled) {
+          setBidAskData(prev => {
+            const next = { ...prev };
+            for (const [sym, snap] of Object.entries(data.snapshots)) {
+              const q = snap.quote || {};
+              if (q.bid != null && q.ask != null) {
+                next[sym] = {
+                  bid: q.bid,
+                  ask: q.ask,
+                  bidSize: q.bidSize,
+                  askSize: q.askSize,
+                  spread: +(q.ask - q.bid).toFixed(4),
+                  spreadBps: q.bid > 0 ? +((q.ask - q.bid) / q.bid * 10000).toFixed(1) : null,
+                  timestamp: new Date(),
+                  source: "alpaca",
+                };
+              }
+            }
+            return next;
+          });
+        }
+      } catch { /* ignore */ }
+    }
+
+    poll();
+    const interval = setInterval(poll, ALPACA_POLL_MS);
+    return () => { cancelled = true; clearInterval(interval); };
+  }, [symbols, alpacaAvailable, alpacaChecked]);
+
+  return bidAskData;
+}
+
 // Default watchlist — can be overridden by localStorage
 const DEFAULT_WATCHLIST = [
   { symbol: "SPY", name: "S&P 500 ETF" },
@@ -111,6 +193,9 @@ export function PriceFeedProvider({ children }) {
     getMarketStatus,
   } = useFinnhubPrice(watchlistSymbols, { enabled: true, throttleMs: 500 });
 
+  // ── Alpaca Bid/Ask Enrichment ──────────────────────────────────────────────
+  const alpacaBidAsk = useAlpacaBidAsk(watchlistSymbols);
+
   // ── Chart State ───────────────────────────────────────────────────────────
   const [chartPeriod, setChartPeriod] = useState("6mo");
   const [chartMode, setChartMode] = useState("advanced"); // "live" | "advanced" | "heatmap" | "calendar"
@@ -119,7 +204,7 @@ export function PriceFeedProvider({ children }) {
   useEffect(() => {
     try {
       const saved = localStorage.getItem(CHART_MODE_KEY);
-      if (["live", "advanced", "heatmap", "calendar"].includes(saved)) setChartMode(saved);
+      if (["live", "advanced", "heatmap", "calendar", "flow"].includes(saved)) setChartMode(saved);
     } catch { /* ignore */ }
   }, []);
 
@@ -168,10 +253,12 @@ export function PriceFeedProvider({ children }) {
       watchlist.map((w) => ({
         ...w,
         ...prices[w.symbol],
+        // Merge Alpaca bid/ask into each symbol's price data
+        ...(alpacaBidAsk[w.symbol] || {}),
         connected: !!prices[w.symbol],
         history: priceHistory[w.symbol] || [],
       })),
-    [watchlist, prices, priceHistory],
+    [watchlist, prices, priceHistory, alpacaBidAsk],
   );
 
   const gainers = useMemo(
@@ -190,6 +277,17 @@ export function PriceFeedProvider({ children }) {
     [watchlistWithPrices],
   );
 
+  // Merge Alpaca bid/ask into the prices object for all consumers
+  const enrichedPrices = useMemo(() => {
+    const result = { ...prices };
+    for (const [sym, ba] of Object.entries(alpacaBidAsk)) {
+      if (result[sym]) {
+        result[sym] = { ...result[sym], ...ba };
+      }
+    }
+    return result;
+  }, [prices, alpacaBidAsk]);
+
   const value = useMemo(
     () => ({
       // Watchlist
@@ -200,8 +298,8 @@ export function PriceFeedProvider({ children }) {
       removeFromWatchlist,
       reorderWatchlist,
 
-      // Real-time prices
-      prices,
+      // Real-time prices (enriched with Alpaca bid/ask)
+      prices: enrichedPrices,
       priceHistory,
       connected,
       connectionMode,
@@ -242,7 +340,7 @@ export function PriceFeedProvider({ children }) {
       addToWatchlist,
       removeFromWatchlist,
       reorderWatchlist,
-      prices,
+      enrichedPrices,
       priceHistory,
       connected,
       connectionMode,

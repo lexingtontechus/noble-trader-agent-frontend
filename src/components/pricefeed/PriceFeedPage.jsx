@@ -9,6 +9,7 @@ import TradingViewAdvancedChart from "./TradingViewAdvancedChart";
 import SectorHeatmap from "./SectorHeatmap";
 import EconomicCalendar from "./EconomicCalendar";
 import PriceAlertPanel from "./PriceAlertPanel";
+import OrderFlowPanel from "./OrderFlowPanel";
 
 /**
  * PriceFeedPage — Real-time market data dashboard.
@@ -66,9 +67,10 @@ function PriceFeedContent() {
   } = usePriceFeed();
   const [showMobileWatchlist, setShowMobileWatchlist] = useState(false);
   const [showMobileAlerts, setShowMobileAlerts] = useState(false);
+  const [showOrderFlow, setShowOrderFlow] = useState(false);
 
   return (
-    <div className="flex flex-col h-[calc(100dvh-4rem-56px)] sm:h-[calc(100dvh-4rem)]">
+    <div className="flex flex-col h-[calc(100dvh-4rem-48px)] sm:h-[calc(100dvh-4rem)]">
       {/* Ticker Tape — full width */}
       <TickerTape />
 
@@ -86,9 +88,19 @@ function PriceFeedContent() {
             <ChartModeToggle chartMode={chartMode} setChartMode={setChartMode} connected={connected} />
           </div>
 
-          {/* Chart content — conditional rendering */}
-          <div className="flex-1 min-h-0 overflow-hidden">
-            {chartMode === "live" ? <LiveCandlestickChart /> : chartMode === "heatmap" ? <SectorHeatmap /> : chartMode === "calendar" ? <EconomicCalendar /> : <TradingViewAdvancedChart />}
+          {/* Chart + Order Flow area */}
+          <div className="flex-1 min-h-0 flex overflow-hidden">
+            {/* Chart content — conditional rendering */}
+            <div className="flex-1 min-h-0 overflow-hidden">
+              {chartMode === "live" ? <LiveCandlestickChart /> : chartMode === "heatmap" ? <SectorHeatmap /> : chartMode === "calendar" ? <EconomicCalendar /> : chartMode === "flow" ? <OrderFlowPanel /> : <TradingViewAdvancedChart />}
+            </div>
+
+            {/* Order Flow side panel (toggleable alongside any chart mode) */}
+            {showOrderFlow && chartMode !== "flow" && (
+              <div className="hidden lg:flex w-72 shrink-0 border-l border-base-300 bg-base-100 overflow-hidden">
+                <OrderFlowPanel />
+              </div>
+            )}
           </div>
 
           {/* Mobile: Watchlist toggle button */}
@@ -104,13 +116,25 @@ function PriceFeedContent() {
 
           {/* Mobile: Alerts toggle button */}
           <button
-            className="md:hidden btn btn-sm btn-circle btn-ghost absolute bottom-2 right-2 z-20 bg-base-100/80 border border-base-300 min-w-[44px] min-h-[44px] sm:min-w-0 sm:min-h-0"
+            className="md:hidden btn btn-sm btn-circle btn-ghost absolute bottom-2 right-12 z-20 bg-base-100/80 border border-base-300 min-w-[44px] min-h-[44px] sm:min-w-0 sm:min-h-0"
             onClick={() => setShowMobileAlerts(!showMobileAlerts)}
             aria-label={showMobileAlerts ? "Hide alerts" : "Show alerts"}
           >
             <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
               <path d="M10 2a6 6 0 00-6 6v3.586l-.707.707A1 1 0 004 14h12a1 1 0 00.707-1.707L16 11.586V8a6 6 0 00-6-6z" />
               <path d="M10 18a3 3 0 01-3-3h6a3 3 0 01-3 3z" />
+            </svg>
+          </button>
+
+          {/* Order Flow toggle button (desktop + mobile) */}
+          <button
+            className={`btn btn-sm btn-circle btn-ghost absolute bottom-2 right-2 z-20 border ${showOrderFlow ? "bg-accent/20 border-accent" : "bg-base-100/80 border-base-300"} min-w-[44px] min-h-[44px] sm:min-w-0 sm:min-h-0`}
+            onClick={() => setShowOrderFlow(!showOrderFlow)}
+            aria-label={showOrderFlow ? "Hide order flow" : "Show order flow"}
+            title="Toggle Order Flow panel"
+          >
+            <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 10h16M4 14h16M4 18h16" />
             </svg>
           </button>
         </div>
@@ -294,11 +318,25 @@ function ChartModeToggle({ chartMode, setChartMode, connected }) {
             <span className="hidden sm:inline">Calendar</span>
           </span>
         </button>
+        <button
+          className={`btn join-item btn-xs sm:btn-xs min-h-[36px] sm:min-h-0 ${
+            chartMode === "flow" ? "btn-warning" : "btn-ghost"
+          }`}
+          onClick={() => setChartMode("flow")}
+          title="Order Flow & Level 2"
+        >
+          <span className="flex items-center gap-1.5">
+            <svg xmlns="http://www.w3.org/2000/svg" className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 10h16M4 14h16M4 18h16" />
+            </svg>
+            <span>Flow</span>
+          </span>
+        </button>
       </div>
 
       {/* Mode description */}
       <span className="hidden lg:inline text-[10px] text-base-content/30 ml-2">
-        {chartMode === "live" ? "WebSocket feed" : chartMode === "heatmap" ? "Market pulse" : chartMode === "calendar" ? "Econ events" : "TradingView Pro"}
+        {chartMode === "live" ? "WebSocket feed" : chartMode === "heatmap" ? "Market pulse" : chartMode === "calendar" ? "Econ events" : chartMode === "flow" ? "Order flow & depth" : "TradingView Pro"}
       </span>
     </div>
   );
@@ -374,6 +412,11 @@ function StatusBar({
             <>
               <span className="w-1.5 h-1.5 rounded-full bg-info" />
               Calendar
+            </>
+          ) : chartMode === "flow" ? (
+            <>
+              <span className="w-1.5 h-1.5 rounded-full bg-warning" />
+              Order Flow
             </>
           ) : (
             <>

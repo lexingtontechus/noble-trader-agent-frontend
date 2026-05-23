@@ -327,7 +327,7 @@ export default function Navbar({ activeView, setActiveView }) {
             <button
               key={item.key}
               onClick={() => setActiveView(item.key)}
-              className={`flex flex-col items-center justify-center py-2 px-1 min-h-[56px] min-w-[48px] transition-colors ${
+              className={`flex items-center justify-center py-2 px-3 min-h-[48px] min-w-[44px] transition-colors ${
                 activeView === item.key
                   ? "text-primary"
                   : "text-base-content/50 hover:text-base-content/80"
@@ -335,11 +335,8 @@ export default function Navbar({ activeView, setActiveView }) {
               aria-label={item.label}
               aria-current={activeView === item.key ? "page" : undefined}
             >
-              <span className="text-lg leading-none" role="img" aria-hidden="true">
+              <span className="text-xl leading-none" role="img" aria-hidden="true">
                 {item.icon}
-              </span>
-              <span className="text-[10px] mt-1 font-medium leading-none">
-                {item.shortLabel}
               </span>
             </button>
           ))}

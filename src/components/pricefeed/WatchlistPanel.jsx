@@ -265,14 +265,20 @@ function WatchlistItem({ item, isSelected, onSelect, onRemove, alertCount = 0 })
         </div>
       </div>
 
-      {/* Sparkline + change bar */}
+      {/* Sparkline + change bar + bid/ask */}
       {item.price != null && (
         <div className="mt-1 flex items-center gap-2">
           {/* Mini sparkline */}
           <div className="flex-1 h-4">
             {sparkline}
           </div>
-          {/* Change direction bar (legacy, mini version) */}
+          {/* Bid/Ask spread indicator (from Alpaca multi-feed) */}
+          {item.spreadBps != null && (
+            <span className="text-[9px] text-accent/60 font-mono" title={`Bid: ${item.bid} Ask: ${item.ask} Spread: ${item.spread}`}>
+              {item.spreadBps}bps
+            </span>
+          )}
+          {/* Change direction bar */}
           <div className="w-12 h-0.5 bg-base-200 rounded-full overflow-hidden">
             <div
               className={`h-full rounded-full transition-all duration-300 ${
