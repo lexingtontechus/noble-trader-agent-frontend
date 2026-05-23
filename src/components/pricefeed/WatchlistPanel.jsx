@@ -7,15 +7,7 @@ import usePriceAlerts from "@/hooks/usePriceAlerts";
 /**
  * WatchlistPanel — Searchable symbol watchlist with add/remove,
  * real-time prices, change %, flash animations, direction arrows,
- * and mini sparkline charts.
- *
- * Features:
- *   - Price flash animation (green/red) on each tick
- *   - Direction arrow (▲▼) with animation
- *   - Mini SVG sparkline per symbol (last 50 prices)
- *   - Debounced Yahoo Finance autocomplete search
- *   - Gainers/losers count badges
- *   - Mobile-optimized touch targets
+ * mini sparkline charts, import/export, and server sync.
  */
 export default function WatchlistPanel() {
   const {
@@ -32,7 +24,11 @@ export default function WatchlistPanel() {
   const [showSearch, setShowSearch] = useState(false);
   const [searchResults, setSearchResults] = useState([]);
   const [searchLoading, setSearchLoading] = useState(false);
+  const [showMenu, setShowMenu] = useState(false);
+  const [syncStatus, setSyncStatus] = useState(null); // null | "syncing" | "synced" | "error"
   const searchTimeoutRef = useRef(null);
+  const fileInputRef = useRef(null);
+  const menuRef = useRef(null);
 
   // ── Symbol search (debounced, uses Yahoo Finance autocomplete) ─────────
   useEffect(() => {
@@ -88,6 +84,174 @@ export default function WatchlistPanel() {
   const gainersCount = gainers.length;
   const losersCount = losers.length;
 
+  // ── Close menu on outside click ─────────────────────────────────────────
+  useEffect(() => {
+    if (!showMenu) return;
+    const handler = (e) => {
+      if (menuRef.current && !menuRef.current.contains(e.target)) {
+        setShowMenu(false);
+      }
+    };
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, [showMenu]);
+
+  // ── Export watchlist as JSON ────────────────────────────────────────────
+  const handleExportJSON = () => {
+    const data = watchlist.map((w) => ({ symbol: w.symbol, name: w.name }));
+    const blob = new Blob([JSON.stringify(data, null, 2)], {
+      type: "application/json",
+    });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `noble-trader-watchlist-${new Date().toISOString().slice(0, 10)}.json`;
+    a.click();
+    URL.revokeObjectURL(url);
+    setShowMenu(false);
+  };
+
+  // ── Export watchlist as CSV ─────────────────────────────────────────────
+  const handleExportCSV = () => {
+    const header = "symbol,name";
+    const rows = watchlist.map((w) => `"${w.symbol}","${w.name || ""}"`);
+    const csv = [header, ...rows].join("\n");
+    const blob = new Blob([csv], { type: "text/csv" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `noble-trader-watchlist-${new Date().toISOString().slice(0, 10)}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+    setShowMenu(false);
+  };
+
+  // ── Import watchlist from JSON/CSV file ─────────────────────────────────
+  const handleImportFile = (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      try {
+        const content = event.target.result;
+        let items = [];
+
+        if (file.name.endsWith(".csv")) {
+          // Parse CSV: header row + data rows
+          const lines = content
+            .split("\n")
+            .map((l) => l.trim())
+            .filter(Boolean);
+          // Skip header
+          for (let i = 1; i < lines.length; i++) {
+            const match = lines[i].match(/^"([^"]+)","([^"]*)"$/);
+            if (match) {
+              items.push({ symbol: match[1], name: match[2] || match[1] });
+            } else {
+              // Fallback: split by comma
+              const parts = lines[i].split(",");
+              if (parts[0]) {
+                items.push({
+                  symbol: parts[0].replace(/"/g, "").trim(),
+                  name: (parts[1] || parts[0]).replace(/"/g, "").trim(),
+                });
+              }
+            }
+          }
+        } else {
+          // Parse JSON
+          const parsed = JSON.parse(content);
+          if (Array.isArray(parsed)) {
+            items = parsed
+              .filter(
+                (item) =>
+                  item &&
+                  typeof item.symbol === "string" &&
+                  item.symbol.trim()
+              )
+              .map((item) => ({
+                symbol: item.symbol.trim().toUpperCase(),
+                name: (item.name || item.symbol).trim(),
+              }));
+          }
+        }
+
+        // Add all items (duplicates are handled by addToWatchlist)
+        let added = 0;
+        for (const item of items.slice(0, 100)) {
+          if (!isAlreadyAdded(item.symbol)) {
+            addToWatchlist(item.symbol, item.name);
+            added++;
+          }
+        }
+
+        setShowMenu(false);
+      } catch (err) {
+        console.error("[WatchlistPanel] Import failed:", err.message);
+      }
+    };
+    reader.readAsText(file);
+    // Reset file input so the same file can be re-imported
+    e.target.value = "";
+  };
+
+  // ── Server sync: Save to Clerk metadata ─────────────────────────────────
+  const handleSyncToServer = async () => {
+    setSyncStatus("syncing");
+    try {
+      const data = watchlist.map((w) => ({ symbol: w.symbol, name: w.name }));
+      const res = await fetch("/api/watchlist", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ watchlist: data }),
+      });
+      if (res.ok) {
+        setSyncStatus("synced");
+        setTimeout(() => setSyncStatus(null), 2000);
+      } else {
+        setSyncStatus("error");
+        setTimeout(() => setSyncStatus(null), 3000);
+      }
+    } catch {
+      setSyncStatus("error");
+      setTimeout(() => setSyncStatus(null), 3000);
+    }
+    setShowMenu(false);
+  };
+
+  // ── Server sync: Load from Clerk metadata ───────────────────────────────
+  const handleLoadFromServer = async () => {
+    setSyncStatus("syncing");
+    try {
+      const res = await fetch("/api/watchlist");
+      if (res.ok) {
+        const data = await res.json();
+        if (Array.isArray(data.watchlist) && data.watchlist.length > 0) {
+          // Merge: add server items that aren't already local
+          let added = 0;
+          for (const item of data.watchlist) {
+            if (!isAlreadyAdded(item.symbol)) {
+              addToWatchlist(item.symbol, item.name);
+              added++;
+            }
+          }
+          setSyncStatus("synced");
+        } else {
+          setSyncStatus("synced");
+        }
+        setTimeout(() => setSyncStatus(null), 2000);
+      } else {
+        setSyncStatus("error");
+        setTimeout(() => setSyncStatus(null), 3000);
+      }
+    } catch {
+      setSyncStatus("error");
+      setTimeout(() => setSyncStatus(null), 3000);
+    }
+    setShowMenu(false);
+  };
+
   return (
     <div className="flex flex-col h-full">
       {/* Header */}
@@ -102,13 +266,113 @@ export default function WatchlistPanel() {
               <span className="badge badge-xs badge-error">{losersCount} down</span>
             )}
           </div>
+          {/* Sync status indicator */}
+          {syncStatus && (
+            <span
+              className={`badge badge-xs ${
+                syncStatus === "syncing"
+                  ? "badge-info loading loading-spinner"
+                  : syncStatus === "synced"
+                    ? "badge-success"
+                    : "badge-error"
+              }`}
+            >
+              {syncStatus === "syncing"
+                ? "Syncing"
+                : syncStatus === "synced"
+                  ? "Synced"
+                  : "Error"}
+            </span>
+          )}
         </div>
-        <button
-          className="btn btn-ghost min-h-[44px] sm:min-h-0 sm:btn-xs"
-          onClick={() => setShowSearch(!showSearch)}
-        >
-          {showSearch ? "✕" : "+ Add"}
-        </button>
+        <div className="flex items-center gap-1">
+          {/* Menu button for import/export/sync */}
+          <div className="relative" ref={menuRef}>
+            <button
+              className="btn btn-ghost min-h-[44px] sm:min-h-0 sm:btn-xs btn-square"
+              onClick={() => setShowMenu(!showMenu)}
+              aria-label="Watchlist options"
+            >
+              <svg
+                xmlns="http://www.w3.org/2000/svg"
+                className="h-4 w-4"
+                fill="none"
+                viewBox="0 0 24 24"
+                stroke="currentColor"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={2}
+                  d="M12 5v.01M12 12v.01M12 19v.01"
+                />
+              </svg>
+            </button>
+
+            {showMenu && (
+              <div className="absolute right-0 top-full mt-1 w-52 bg-base-100 border border-base-300 rounded-lg shadow-xl z-50 overflow-hidden">
+                <div className="py-1">
+                  <button
+                    className="w-full text-left px-3 py-2 text-xs hover:bg-base-200/60 flex items-center gap-2"
+                    onClick={handleExportJSON}
+                  >
+                    <svg xmlns="http://www.w3.org/2000/svg" className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" /></svg>
+                    Export as JSON
+                  </button>
+                  <button
+                    className="w-full text-left px-3 py-2 text-xs hover:bg-base-200/60 flex items-center gap-2"
+                    onClick={handleExportCSV}
+                  >
+                    <svg xmlns="http://www.w3.org/2000/svg" className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" /></svg>
+                    Export as CSV
+                  </button>
+                  <div className="border-t border-base-300 my-1" />
+                  <button
+                    className="w-full text-left px-3 py-2 text-xs hover:bg-base-200/60 flex items-center gap-2"
+                    onClick={() => {
+                      fileInputRef.current?.click();
+                    }}
+                  >
+                    <svg xmlns="http://www.w3.org/2000/svg" className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" /></svg>
+                    Import JSON / CSV
+                  </button>
+                  <div className="border-t border-base-300 my-1" />
+                  <button
+                    className="w-full text-left px-3 py-2 text-xs hover:bg-base-200/60 flex items-center gap-2"
+                    onClick={handleSyncToServer}
+                  >
+                    <svg xmlns="http://www.w3.org/2000/svg" className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M5 12l2 2m0 0l2-2m-2 2V9" /></svg>
+                    Sync to Cloud
+                  </button>
+                  <button
+                    className="w-full text-left px-3 py-2 text-xs hover:bg-base-200/60 flex items-center gap-2"
+                    onClick={handleLoadFromServer}
+                  >
+                    <svg xmlns="http://www.w3.org/2000/svg" className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M9 19l3 3m0 0l3-3m-3 3V10" /></svg>
+                    Load from Cloud
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* Add symbol button */}
+          <button
+            className="btn btn-ghost min-h-[44px] sm:min-h-0 sm:btn-xs"
+            onClick={() => setShowSearch(!showSearch)}
+          >
+            {showSearch ? "✕" : "+ Add"}
+          </button>
+        </div>
+
+        {/* Hidden file input for import */}
+        <input
+          ref={fileInputRef}
+          type="file"
+          accept=".json,.csv"
+          className="hidden"
+          onChange={handleImportFile}
+        />
       </div>
 
       {/* Search bar */}
@@ -182,7 +446,7 @@ export default function WatchlistPanel() {
 // ── Individual Watchlist Item with flash + sparkline ──────────────────────
 
 function WatchlistItem({ item, isSelected, onSelect, onRemove, alertCount = 0 }) {
-  const [flashDirection, setFlashDirection] = useState(null); // "up" | "down" | null
+  const [flashDirection, setFlashDirection] = useState(null);
   const prevPriceRef = useRef(null);
 
   // Detect price direction changes for flash animation

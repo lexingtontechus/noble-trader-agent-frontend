@@ -16,6 +16,8 @@ const VALID_TIF = {
   crypto: ["gtc", "ioc"],
 };
 
+const VALID_ORDER_CLASSES = ["simple", "bracket", "oco", "oto"];
+
 function getCategory(assetClass) {
   if (assetClass === "crypto") return "crypto";
   return "equity";
@@ -36,7 +38,8 @@ export const POST = withAuth(async (request, context, authContext) => {
     }
 
     const body = await request.json();
-    let { symbol, qty, side, type, time_in_force, limit_price, stop_price, trail_price, trail_percent } = body;
+    let { symbol, qty, side, type, time_in_force, limit_price, stop_price, trail_price, trail_percent,
+           order_class, take_profit, stop_loss } = body;
 
     if (!symbol) {
       return Response.json({ error: "symbol required" }, { status: 400 });
@@ -82,6 +85,76 @@ export const POST = withAuth(async (request, context, authContext) => {
     }
     if (orderType === "trailing_stop" && !trail_price && !trail_percent) {
       return Response.json({ error: "trail_price or trail_percent required for trailing_stop orders" }, { status: 400 });
+    }
+
+    // ── Advanced order class validation (bracket / OCO / OTO) ─────────
+    const effectiveClass = order_class || "simple";
+
+    if (!VALID_ORDER_CLASSES.includes(effectiveClass)) {
+      return Response.json({ error: `order_class "${effectiveClass}" not supported. Allowed: ${VALID_ORDER_CLASSES.join(", ")}` }, { status: 400 });
+    }
+
+    // Bracket orders: require both take_profit.limit_price and stop_loss.stop_price
+    if (effectiveClass === "bracket") {
+      if (!take_profit?.limit_price) {
+        return Response.json({ error: "Bracket orders require take_profit.limit_price (take-profit target)" }, { status: 400 });
+      }
+      if (!stop_loss?.stop_price) {
+        return Response.json({ error: "Bracket orders require stop_loss.stop_price (stop-loss trigger)" }, { status: 400 });
+      }
+      // Validate SL is below entry for buy, above for sell
+      const entryPx = parseFloat(limit_price) || 0;
+      const slPx = parseFloat(stop_loss.stop_price);
+      const tpPx = parseFloat(take_profit.limit_price);
+      if (side === "buy") {
+        if (entryPx > 0 && slPx >= entryPx) {
+          return Response.json({ error: "For buy bracket orders, stop_loss.stop_price must be below entry price" }, { status: 400 });
+        }
+        if (entryPx > 0 && tpPx <= entryPx) {
+          return Response.json({ error: "For buy bracket orders, take_profit.limit_price must be above entry price" }, { status: 400 });
+        }
+      } else {
+        if (entryPx > 0 && slPx <= entryPx) {
+          return Response.json({ error: "For sell bracket orders, stop_loss.stop_price must be above entry price" }, { status: 400 });
+        }
+        if (entryPx > 0 && tpPx >= entryPx) {
+          return Response.json({ error: "For sell bracket orders, take_profit.limit_price must be below entry price" }, { status: 400 });
+        }
+      }
+      // Bracket entry order must be limit or market with limit_price (Alpaca requires limit for bracket)
+      if (orderType !== "limit" && orderType !== "market") {
+        return Response.json({ error: "Bracket orders require entry type 'limit' or 'market'" }, { status: 400 });
+      }
+    }
+
+    // OCO orders: require both legs (stop + limit) — typically used for exit strategies
+    if (effectiveClass === "oco") {
+      if (!take_profit?.limit_price && !stop_loss?.stop_price) {
+        return Response.json({ error: "OCO orders require at least take_profit.limit_price or stop_loss.stop_price" }, { status: 400 });
+      }
+      // OCO typically uses limit for TP and stop for SL
+      if (!take_profit?.limit_price) {
+        return Response.json({ error: "OCO orders require take_profit.limit_price (limit take-profit leg)" }, { status: 400 });
+      }
+      if (!stop_loss?.stop_price) {
+        return Response.json({ error: "OCO orders require stop_loss.stop_price (stop-loss leg)" }, { status: 400 });
+      }
+    }
+
+    // OTO orders: require exactly one triggered leg (TP or SL, not both — use bracket for both)
+    if (effectiveClass === "oto") {
+      const hasTP = !!take_profit?.limit_price;
+      const hasSL = !!stop_loss?.stop_price;
+      if (!hasTP && !hasSL) {
+        return Response.json({ error: "OTO orders require either take_profit.limit_price or stop_loss.stop_price (exactly one triggered leg)" }, { status: 400 });
+      }
+      if (hasTP && hasSL) {
+        return Response.json({ error: "OTO orders support only one triggered leg — use 'bracket' order class if you need both TP and SL" }, { status: 400 });
+      }
+      // OTO entry order must be limit or market (same as bracket)
+      if (orderType !== "limit" && orderType !== "market") {
+        return Response.json({ error: "OTO orders require entry type 'limit' or 'market'" }, { status: 400 });
+      }
     }
 
     // ── Circuit Breaker: Pre-flight check ──────────────────────────────────
@@ -161,6 +234,9 @@ export const POST = withAuth(async (request, context, authContext) => {
       stop_price,
       trail_price,
       trail_percent,
+      order_class: effectiveClass !== "simple" ? effectiveClass : undefined,
+      take_profit: take_profit || undefined,
+      stop_loss: stop_loss || undefined,
     }, credentialType);
 
     // Audit: order submitted successfully

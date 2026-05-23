@@ -2,6 +2,7 @@
 
 import { useState, useCallback } from "react";
 import { useStream } from "@/context/StreamContext";
+import InfoTip from "@/components/shared/InfoTip";
 
 const REGIME_COLORS = {
   low_corr: "badge-success",
@@ -15,6 +16,13 @@ const REGIME_LABELS = {
   mid_corr: "Mid Correlation",
   high_corr: "High Correlation",
   crisis: "Crisis Mode",
+};
+
+const REGIME_TIPS = {
+  low_corr: "Assets move independently; diversification is effective",
+  mid_corr: "Moderate co-movement; some diversification benefit remains",
+  high_corr: "Assets move together; diversification is limited",
+  crisis: "Extreme co-movement during market stress; risk of simultaneous losses",
 };
 
 function getHeatColor(value) {
@@ -105,12 +113,14 @@ export default function CorrelationCard() {
           <h3 className="card-title text-sm">
             🔗 Correlation Detection
             {result?.correlation_regime && (
-              <span
-                className={`badge badge-sm ml-2 ${REGIME_COLORS[result.correlation_regime] || "badge-ghost"}`}
-              >
-                {REGIME_LABELS[result.correlation_regime] ||
-                  result.correlation_regime}
-              </span>
+              <InfoTip tip={REGIME_TIPS[result.correlation_regime] || ""}>
+                <span
+                  className={`badge badge-sm ml-2 ${REGIME_COLORS[result.correlation_regime] || "badge-ghost"}`}
+                >
+                  {REGIME_LABELS[result.correlation_regime] ||
+                    result.correlation_regime}
+                </span>
+              </InfoTip>
             )}
           </h3>
           <button
@@ -142,7 +152,7 @@ export default function CorrelationCard() {
           <>
             <div className="grid grid-cols-2 gap-4 mb-4">
               <div className="stat bg-base-300 rounded-box">
-                <div className="stat-title text-xs">Mean |ρ|</div>
+                <div className="stat-title text-xs">Mean |ρ|<InfoTip tip="Average absolute correlation across all asset pairs (0=independent, 1=perfect correlation)" /></div>
                 <div
                   className={`stat-value text-lg ${getRhoColor(result.mean_abs_rho || 0)}`}
                 >
@@ -150,7 +160,7 @@ export default function CorrelationCard() {
                 </div>
               </div>
               <div className="stat bg-base-300 rounded-box">
-                <div className="stat-title text-xs">Blended Risk Mult</div>
+                <div className="stat-title text-xs">Blended Risk Mult<InfoTip tip="Multiplier applied to position sizes based on correlation regime (<1=reduced size, >1=increased size allowed)" /></div>
                 <div className="stat-value text-lg">
                   {(result.blended_risk_multiplier || 1).toFixed(2)}x
                 </div>

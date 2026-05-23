@@ -1,17 +1,18 @@
 "use client";
 import { useState, useEffect, useCallback } from "react";
 import { useRole } from "@/hooks/useRole";
+import InfoTip from "@/components/shared/InfoTip";
 
 const BREAKER_TYPES = [
-  { value: "max_position_size", label: "Max Position Size", description: "Max $ value per position" },
-  { value: "max_portfolio_heat", label: "Max Portfolio Heat", description: "Max total portfolio risk %" },
-  { value: "daily_loss_limit", label: "Daily Loss Limit", description: "Max daily loss $ or %" },
-  { value: "max_drawdown", label: "Max Drawdown", description: "Max drawdown % from peak" },
-  { value: "consecutive_loss_stop", label: "Consecutive Loss Stop", description: "Halt after N consecutive losses" },
-  { value: "max_open_positions", label: "Max Open Positions", description: "Max concurrent open positions" },
-  { value: "order_rate_limit", label: "Order Rate Limit", description: "Max orders per minute" },
-  { value: "sector_concentration", label: "Sector Concentration", description: "Max % in single sector" },
-  { value: "single_stock_concentration", label: "Single Stock Concentration", description: "Max % in single stock" },
+  { value: "max_position_size", label: "Max Position Size", description: "Max $ value per position", tip: "Maximum dollar value allowed per single position" },
+  { value: "max_portfolio_heat", label: "Max Portfolio Heat", description: "Max total portfolio risk %", tip: "Maximum total portfolio risk exposure as a percentage" },
+  { value: "daily_loss_limit", label: "Daily Loss Limit", description: "Max daily loss $ or %", tip: "Maximum allowed daily loss (dollar or percentage)" },
+  { value: "max_drawdown", label: "Max Drawdown", description: "Max drawdown % from peak", tip: "Maximum drawdown from equity peak" },
+  { value: "consecutive_loss_stop", label: "Consecutive Loss Stop", description: "Halt after N consecutive losses", tip: "Halt after N consecutive losing trades" },
+  { value: "max_open_positions", label: "Max Open Positions", description: "Max concurrent open positions", tip: "Maximum number of concurrent open positions" },
+  { value: "order_rate_limit", label: "Order Rate Limit", description: "Max orders per minute", tip: "Maximum number of orders per minute" },
+  { value: "sector_concentration", label: "Sector Concentration", description: "Max % in single sector", tip: "Maximum portfolio percentage in a single market sector" },
+  { value: "single_stock_concentration", label: "Single Stock Concentration", description: "Max % in single stock", tip: "Maximum portfolio percentage in a single stock" },
 ];
 
 const UNITS = [
@@ -275,6 +276,7 @@ export default function CircuitBreakerPanel() {
 
   const getBreakerLabel = (type) => BREAKER_TYPES.find(b => b.value === type)?.label || type;
   const getBreakerDescription = (type) => BREAKER_TYPES.find(b => b.value === type)?.description || "";
+  const getBreakerTip = (type) => BREAKER_TYPES.find(b => b.value === type)?.tip || "";
   const getUnitLabel = (unit) => UNITS.find(u => u.value === unit)?.label || unit;
   const getActionInfo = (action) => ACTIONS.find(a => a.value === action) || { label: action, color: "badge-ghost" };
 
@@ -309,9 +311,13 @@ export default function CircuitBreakerPanel() {
           <h2 className="card-title">
             Circuit Breakers
             {isHalted ? (
-              <span className="badge badge-error badge-lg animate-pulse ml-2">HALTED</span>
+              <InfoTip tip="Circuit breaker has triggered — trading is suspended">
+                <span className="badge badge-error badge-lg animate-pulse ml-2">HALTED</span>
+              </InfoTip>
             ) : (
-              <span className="badge badge-success badge-lg ml-2">Active</span>
+              <InfoTip tip="Circuit breaker system is active and monitoring">
+                <span className="badge badge-success badge-lg ml-2">Active</span>
+              </InfoTip>
             )}
           </h2>
           <div className="flex gap-2">
@@ -445,7 +451,7 @@ export default function CircuitBreakerPanel() {
                 return (
                   <tr key={breaker.breaker_type} className={!breaker.is_active ? "opacity-50" : ""}>
                     <td>
-                      <div className="font-medium text-sm">{getBreakerLabel(breaker.breaker_type)}</div>
+                      <div className="font-medium text-sm">{getBreakerLabel(breaker.breaker_type)}<InfoTip tip={getBreakerTip(breaker.breaker_type)} /></div>
                       <div className="text-xs opacity-50">{getBreakerDescription(breaker.breaker_type)}</div>
                     </td>
                     <td className="font-mono text-sm">
@@ -510,7 +516,7 @@ export default function CircuitBreakerPanel() {
               <div key={breaker.breaker_type} className={`card bg-base-200 p-3 ${!breaker.is_active ? "opacity-50" : ""}`}>
                 <div className="flex justify-between items-start mb-2">
                   <div>
-                    <div className="font-bold text-sm">{getBreakerLabel(breaker.breaker_type)}</div>
+                    <div className="font-bold text-sm">{getBreakerLabel(breaker.breaker_type)}<InfoTip tip={getBreakerTip(breaker.breaker_type)} /></div>
                     <div className="text-xs text-base-content/50">{getBreakerDescription(breaker.breaker_type)}</div>
                   </div>
                   <input

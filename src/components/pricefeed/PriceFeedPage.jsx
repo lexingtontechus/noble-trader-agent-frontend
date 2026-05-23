@@ -10,6 +10,7 @@ import SectorHeatmap from "./SectorHeatmap";
 import EconomicCalendar from "./EconomicCalendar";
 import PriceAlertPanel from "./PriceAlertPanel";
 import OrderFlowPanel from "./OrderFlowPanel";
+import MultiFeedDashboard from "./MultiFeedDashboard";
 
 /**
  * PriceFeedPage — Real-time market data dashboard.
@@ -92,7 +93,7 @@ function PriceFeedContent() {
           <div className="flex-1 min-h-0 flex overflow-hidden">
             {/* Chart content — conditional rendering */}
             <div className="flex-1 min-h-0 overflow-hidden">
-              {chartMode === "live" ? <LiveCandlestickChart /> : chartMode === "heatmap" ? <SectorHeatmap /> : chartMode === "calendar" ? <EconomicCalendar /> : chartMode === "flow" ? <OrderFlowPanel /> : <TradingViewAdvancedChart />}
+              {chartMode === "live" ? <LiveCandlestickChart /> : chartMode === "heatmap" ? <SectorHeatmap /> : chartMode === "calendar" ? <EconomicCalendar /> : chartMode === "flow" ? <OrderFlowPanel /> : chartMode === "feeds" ? <MultiFeedDashboard /> : <TradingViewAdvancedChart />}
             </div>
 
             {/* Order Flow side panel (toggleable alongside any chart mode) */}
@@ -332,11 +333,25 @@ function ChartModeToggle({ chartMode, setChartMode, connected }) {
             <span>Flow</span>
           </span>
         </button>
+        <button
+          className={`btn join-item btn-xs sm:btn-xs min-h-[36px] sm:min-h-0 ${
+            chartMode === "feeds" ? "btn-info" : "btn-ghost"
+          }`}
+          onClick={() => setChartMode("feeds")}
+          title="Multi-Feed Aggregation"
+        >
+          <span className="flex items-center gap-1.5">
+            <svg xmlns="http://www.w3.org/2000/svg" className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1" />
+            </svg>
+            <span className="hidden sm:inline">Feeds</span>
+          </span>
+        </button>
       </div>
 
       {/* Mode description */}
       <span className="hidden lg:inline text-[10px] text-base-content/30 ml-2">
-        {chartMode === "live" ? "WebSocket feed" : chartMode === "heatmap" ? "Market pulse" : chartMode === "calendar" ? "Econ events" : chartMode === "flow" ? "Order flow & depth" : "TradingView Pro"}
+        {chartMode === "live" ? "WebSocket feed" : chartMode === "heatmap" ? "Market pulse" : chartMode === "calendar" ? "Econ events" : chartMode === "flow" ? "Order flow & depth" : chartMode === "feeds" ? "Source aggregation" : "TradingView Pro"}
       </span>
     </div>
   );
@@ -417,6 +432,11 @@ function StatusBar({
             <>
               <span className="w-1.5 h-1.5 rounded-full bg-warning" />
               Order Flow
+            </>
+          ) : chartMode === "feeds" ? (
+            <>
+              <span className="w-1.5 h-1.5 rounded-full bg-info" />
+              Feeds
             </>
           ) : (
             <>

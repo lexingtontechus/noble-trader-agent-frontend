@@ -1,5 +1,7 @@
 'use client'
 
+import InfoTip from '@/components/shared/InfoTip'
+
 export default function AccountSummary({ account }) {
   if (!account) return null;
 
@@ -26,7 +28,9 @@ export default function AccountSummary({ account }) {
               </span>
             )}
             {account.pattern_day_trader && (
-              <span className="badge badge-sm badge-error">PDT</span>
+              <InfoTip tip="Pattern Day Trader — 4+ day trades in 5 business days; $25K minimum equity required">
+                <span className="badge badge-sm badge-error">PDT</span>
+              </InfoTip>
             )}
             {account.trade_suspended_by_user && (
               <span className="badge badge-sm badge-warning">Suspended</span>
@@ -44,11 +48,11 @@ export default function AccountSummary({ account }) {
             <div className="stat-value text-lg">{fmt(account.cash)}</div>
           </div>
           <div className="stat">
-            <div className="stat-title text-xs">Buying Power</div>
+            <div className="stat-title text-xs">Buying Power<InfoTip tip="Total capital available for opening new positions (includes margin if applicable)" /></div>
             <div className="stat-value text-lg">{fmt(account.buying_power)}</div>
           </div>
           <div className="stat">
-            <div className="stat-title text-xs">Long Market Value</div>
+            <div className="stat-title text-xs">Long Market Value<InfoTip tip="Total market value of all long (buy) positions" /></div>
             <div className="stat-value text-lg">{fmt(account.long_market_value)}</div>
           </div>
         </div>
@@ -60,7 +64,7 @@ export default function AccountSummary({ account }) {
               <span>Account: {account.account_number}</span>
             )}
             {account.short_market_value != null && parseFloat(account.short_market_value) > 0 && (
-              <span>Short MV: {fmt(account.short_market_value)}</span>
+              <span>Short MV<InfoTip tip="Short Market Value — total value of all short (sell) positions" />: {fmt(account.short_market_value)}</span>
             )}
           </div>
         )}

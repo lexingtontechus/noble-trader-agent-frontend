@@ -186,7 +186,7 @@ export default function HistoricalEquityCurve() {
     setLoading(true);
     fetchSnapshots();
 
-    // Poll every 60s during market hours (9:30 AM – 4:00 PM ET, Mon–Fri)
+    // Poll every 60s during market hours (Mon-Fri ET)
     const startPoll = () => {
       if (pollRef.current) clearInterval(pollRef.current);
       pollRef.current = setInterval(fetchSnapshots, 60000);

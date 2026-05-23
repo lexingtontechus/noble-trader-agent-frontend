@@ -62,6 +62,7 @@ export default function useFinnhubPrice(symbols = [], options = {}) {
   const [ticksPerSecond, setTicksPerSecond] = useState(0);
   const [connectedSince, setConnectedSince] = useState(null);
   const [reconnectAttempt, setReconnectAttempt] = useState(0);
+  const [quotes, setQuotes] = useState({}); // { [symbol]: { bid, ask, bidSize, askSize, timestamp } }
 
   // ── Refs ──────────────────────────────────────────────────────────────────
   const wsRef = useRef(null);
@@ -136,7 +137,7 @@ export default function useFinnhubPrice(symbols = [], options = {}) {
       const minute = parseInt(timeParts[1], 10);
       const totalMinutes = hour * 60 + minute;
       const isWeekday = !["Sat", "Sun"].includes(day);
-      const isOpen = totalMinutes >= 570 && totalMinutes <= 960; // 9:30–16:00
+      const isOpen = totalMinutes >= 570 && totalMinutes <= 960;
       return isWeekday && isOpen;
     } catch {
       return true; // If timezone check fails, assume open
@@ -166,9 +167,9 @@ export default function useFinnhubPrice(symbols = [], options = {}) {
       const isWeekday = !["Sat", "Sun"].includes(day);
 
       if (!isWeekday) return "closed";
-      if (totalMinutes >= 570 && totalMinutes <= 960) return "open"; // 9:30–16:00
-      if (totalMinutes >= 240 && totalMinutes < 570) return "pre-market"; // 4:00–9:30
-      if (totalMinutes > 960 && totalMinutes <= 1200) return "after-hours"; // 16:00–20:00
+      if (totalMinutes >= 570 && totalMinutes <= 960) return "open";
+      if (totalMinutes >= 240 && totalMinutes < 570) return "pre-market";
+      if (totalMinutes > 960 && totalMinutes <= 1200) return "after-hours";
       return "closed";
     } catch {
       return "open"; // Fallback
@@ -274,6 +275,29 @@ export default function useFinnhubPrice(symbols = [], options = {}) {
               const yahooSym = finnhubToYahooRef.current.get(finnhubSym) || finnhubSym;
               if (!symbolsRef.current.has(yahooSym)) continue;
               processTrade(yahooSym, trade.p, trade.t * 1000, trade.v);
+            }
+          }
+
+          // Process quote messages — real-time bid/ask from Finnhub WS
+          if (msg.type === "quote" && Array.isArray(msg.data)) {
+            for (const q of msg.data) {
+              const finnhubSym = q.s;
+              const yahooSym = finnhubToYahooRef.current.get(finnhubSym) || finnhubSym;
+              if (!symbolsRef.current.has(yahooSym)) continue;
+
+              if (mountedRef.current) {
+                setQuotes(prev => ({
+                  ...prev,
+                  [yahooSym]: {
+                    bid: q.bp,
+                    ask: q.ap,
+                    bidSize: q.bs,
+                    askSize: q.as,
+                    timestamp: new Date(q.t * 1000),
+                    source: "finnhub",
+                  },
+                }));
+              }
             }
           }
         } catch {
@@ -540,6 +564,7 @@ export default function useFinnhubPrice(symbols = [], options = {}) {
     connected,
     prices,
     priceHistory,
+    quotes,
     connectionMode,
     subscribe,
     unsubscribe,

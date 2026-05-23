@@ -7,7 +7,7 @@ import RegimeSummaryBanner from "@/components/dashboard/RegimeSummaryBanner";
 import { useStream } from "@/context/StreamContext";
 import StreamStatusPanel from "@/components/streaming/StreamStatusPanel";
 import AlertHistory from "@/components/streaming/AlertHistory";
-import { notifySuccess, notifyError } from "@/lib/notifications";
+import { notifyError } from "@/lib/notifications";
 import LiveBadge from "@/components/streaming/LiveBadge";
 import dynamic from 'next/dynamic'
 const EvolutionPanel = dynamic(() => import('@/components/evolution/EvolutionPanel'), { ssr: false })
@@ -115,7 +115,7 @@ export default function Dashboard() {
     const anySucceeded = DEFAULT_TICKERS.some((t) => tickerData[t.symbol]);
     if (allDone && anySucceeded && !initialLoadDone.current) {
       initialLoadDone.current = true;
-      notifySuccess("Dashboard loaded", 3000);
+      // Dashboard loaded — skip toast (system status, not actionable)
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [loading, tickerData, errors]);

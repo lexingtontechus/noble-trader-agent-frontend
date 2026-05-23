@@ -3,6 +3,7 @@
 import { useState, useCallback } from 'react'
 import PriceFanChart from './PriceFanChart'
 import { notifySuccess, notifyError } from '@/lib/notifications'
+import InfoTip from '@/components/shared/InfoTip'
 
 export default function SimulationPanel({ symbol, prices = [], currentPrice = null }) {
   const [horizon, setHorizon] = useState(20)
@@ -106,19 +107,19 @@ export default function SimulationPanel({ symbol, prices = [], currentPrice = nu
           {/* Key Metrics Grid */}
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
             <MetricCard label="Return Mean" value={`${((simulation.return_mean ?? 0) * 100).toFixed(2)}%`} color={(simulation.return_mean ?? 0) >= 0 ? 'text-success' : 'text-error'} />
-            <MetricCard label="Return VaR 95" value={`${((simulation.return_var95 ?? 0) * 100).toFixed(2)}%`} color="text-error" />
-            <MetricCard label="Paths Positive" value={`${((simulation.pct_paths_positive ?? 0) * 100).toFixed(1)}%`} color={(simulation.pct_paths_positive ?? 0) > 0.5 ? 'text-success' : 'text-error'} />
-            <MetricCard label="Max DD (mean)" value={`${((simulation.max_drawdown_mean ?? 0) * 100).toFixed(2)}%`} color="text-error" />
+            <MetricCard label={<>Return VaR 95<InfoTip tip="Simulated VaR at 95% — 5th percentile of simulated returns" /></>} value={`${((simulation.return_var95 ?? 0) * 100).toFixed(2)}%`} color="text-error" />
+            <MetricCard label={<>Paths Positive<InfoTip tip="Percentage of Monte Carlo paths that ended with positive returns" /></>} value={`${((simulation.pct_paths_positive ?? 0) * 100).toFixed(1)}%`} color={(simulation.pct_paths_positive ?? 0) > 0.5 ? 'text-success' : 'text-error'} />
+            <MetricCard label={<>Max DD (mean)<InfoTip tip="Average maximum drawdown across all simulation paths" /></>} value={`${((simulation.max_drawdown_mean ?? 0) * 100).toFixed(2)}%`} color="text-error" />
           </div>
           {/* Regime Transition */}
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div className="card bg-base-300 rounded-lg">
               <div className="card-body p-3">
-                <h4 className="text-xs font-mono opacity-50 mb-2">REGIME TRANSITION</h4>
+                <h4 className="text-xs font-mono opacity-50 mb-2">REGIME TRANSITION<InfoTip tip="How the market regime is projected to change over the simulation horizon" /></h4>
                 <div className="flex items-center gap-3">
                   <span className="badge badge-outline">{simulation.current_regime || '—'}</span>
                   <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="opacity-30"><line x1="5" y1="12" x2="19" y2="12" /><polyline points="12 5 19 12 12 19" /></svg>
-                  <span className="badge badge-primary">{simulation.terminal_regime_mode || '—'}</span>
+                  <InfoTip tip="Most frequent regime at the end of the simulation paths"><span className="badge badge-primary">{simulation.terminal_regime_mode || '—'}</span></InfoTip>
                 </div>
                 {simulation.step_dominant_regime?.length > 0 && (
                   <div className="mt-3">
@@ -138,8 +139,8 @@ export default function SimulationPanel({ symbol, prices = [], currentPrice = nu
                 <div className="space-y-1.5">
                   <StatRow label="Mean" value={simulation.return_mean} fmt="pct" />
                   <StatRow label="Std Dev" value={simulation.return_std} fmt="pct" />
-                  <StatRow label="VaR 95" value={simulation.return_var95} fmt="pct" />
-                  <StatRow label="CVaR 95" value={simulation.return_cvar95} fmt="pct" />
+                  <StatRow label={<>VaR 95<InfoTip tip="Value at Risk at 95% confidence — 5th percentile of simulated returns" /></>} value={simulation.return_var95} fmt="pct" />
+                  <StatRow label={<>CVaR 95<InfoTip tip="Conditional VaR at 95% — expected loss given returns are below VaR" /></>} value={simulation.return_cvar95} fmt="pct" />
                 </div>
               </div>
             </div>

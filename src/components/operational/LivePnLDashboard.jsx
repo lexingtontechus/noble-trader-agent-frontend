@@ -14,6 +14,7 @@ import {
   ReferenceLine,
 } from "recharts";
 import { usePortfolio } from "@/context/PortfolioContext";
+import InfoTip from "@/components/shared/InfoTip";
 
 const EQUITY_PERIODS = [
   { value: "1W", label: "1W" },
@@ -409,84 +410,84 @@ export default function LivePnLDashboard({ compact = false }) {
               <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-2">
                 {/* Sharpe */}
                 <div className="bg-base-100 rounded p-2 text-center">
-                  <div className="text-xs sm:text-[10px] text-base-content/50 uppercase tracking-wider">Sharpe</div>
+                  <div className="text-xs sm:text-[10px] text-base-content/50 uppercase tracking-wider">Sharpe<InfoTip tip="Risk-adjusted return: excess return per unit of total volatility" /></div>
                   <div className={`font-mono font-bold text-sm ${riskMetrics.sharpe_ratio > 1 ? "text-success" : riskMetrics.sharpe_ratio < 0 ? "text-error" : ""}`}>
                     {riskMetrics.sharpe_ratio.toFixed(2)}
                   </div>
                 </div>
                 {/* Sortino */}
                 <div className="bg-base-100 rounded p-2 text-center">
-                  <div className="text-xs sm:text-[10px] text-base-content/50 uppercase tracking-wider">Sortino</div>
+                  <div className="text-xs sm:text-[10px] text-base-content/50 uppercase tracking-wider">Sortino<InfoTip tip="Downside risk-adjusted return: excess return per unit of downside deviation" /></div>
                   <div className={`font-mono font-bold text-sm ${riskMetrics.sortino_ratio > 1.5 ? "text-success" : riskMetrics.sortino_ratio < 0 ? "text-error" : ""}`}>
                     {riskMetrics.sortino_ratio.toFixed(2)}
                   </div>
                 </div>
                 {/* Max Drawdown */}
                 <div className="bg-base-100 rounded p-2 text-center">
-                  <div className="text-xs sm:text-[10px] text-base-content/50 uppercase tracking-wider">Max DD</div>
+                  <div className="text-xs sm:text-[10px] text-base-content/50 uppercase tracking-wider">Max DD<InfoTip tip="Maximum drawdown — largest peak-to-trough decline in equity" /></div>
                   <div className={`font-mono font-bold text-sm ${riskMetrics.max_drawdown_pct < -10 ? "text-error" : riskMetrics.max_drawdown_pct < -5 ? "text-warning" : ""}`}>
                     {riskMetrics.max_drawdown_pct.toFixed(2)}%
                   </div>
                 </div>
                 {/* Current DD */}
                 <div className="bg-base-100 rounded p-2 text-center">
-                  <div className="text-xs sm:text-[10px] text-base-content/50 uppercase tracking-wider">Current DD</div>
+                  <div className="text-xs sm:text-[10px] text-base-content/50 uppercase tracking-wider">Current DD<InfoTip tip="Current decline from most recent equity peak" /></div>
                   <div className={`font-mono font-bold text-sm ${riskMetrics.current_drawdown_pct < -5 ? "text-error" : riskMetrics.current_drawdown_pct < -2 ? "text-warning" : ""}`}>
                     {riskMetrics.current_drawdown_pct.toFixed(2)}%
                   </div>
                 </div>
                 {/* VaR 95% */}
                 <div className="bg-base-100 rounded p-2 text-center">
-                  <div className="text-xs sm:text-[10px] text-base-content/50 uppercase tracking-wider">VaR 95%</div>
+                  <div className="text-xs sm:text-[10px] text-base-content/50 uppercase tracking-wider">VaR 95%<InfoTip tip="Value at Risk at 95% — dollar amount of maximum expected daily loss" /></div>
                   <div className="font-mono font-bold text-sm">
                     ${riskMetrics.var_95.toLocaleString("en-US", { maximumFractionDigits: 0 })}
                   </div>
                 </div>
                 {/* Win Rate */}
                 <div className="bg-base-100 rounded p-2 text-center">
-                  <div className="text-xs sm:text-[10px] text-base-content/50 uppercase tracking-wider">Win Rate</div>
+                  <div className="text-xs sm:text-[10px] text-base-content/50 uppercase tracking-wider">Win Rate<InfoTip tip="Percentage of trades that were profitable" /></div>
                   <div className={`font-mono font-bold text-sm ${(riskMetrics.win_rate || 0) > 0.5 ? "text-success" : "text-error"}`}>
                     {((riskMetrics.win_rate || 0) * 100).toFixed(1)}%
                   </div>
                 </div>
                 {/* Calmar */}
                 <div className="bg-base-100 rounded p-2 text-center">
-                  <div className="text-xs sm:text-[10px] text-base-content/50 uppercase tracking-wider">Calmar</div>
+                  <div className="text-xs sm:text-[10px] text-base-content/50 uppercase tracking-wider">Calmar<InfoTip tip="Annual return divided by max drawdown" /></div>
                   <div className="font-mono font-bold text-sm">
                     {riskMetrics.calmar_ratio.toFixed(2)}
                   </div>
                 </div>
                 {/* Annual Vol */}
                 <div className="bg-base-100 rounded p-2 text-center">
-                  <div className="text-xs sm:text-[10px] text-base-content/50 uppercase tracking-wider">Ann Vol</div>
+                  <div className="text-xs sm:text-[10px] text-base-content/50 uppercase tracking-wider">Ann Vol<InfoTip tip="Annualized volatility — yearly standard deviation of returns" /></div>
                   <div className="font-mono font-bold text-sm">
                     {(riskMetrics.annual_vol * 100).toFixed(1)}%
                   </div>
                 </div>
                 {/* Profit Factor */}
                 <div className="bg-base-100 rounded p-2 text-center">
-                  <div className="text-xs sm:text-[10px] text-base-content/50 uppercase tracking-wider">Profit Factor</div>
+                  <div className="text-xs sm:text-[10px] text-base-content/50 uppercase tracking-wider">Profit Factor<InfoTip tip="Gross profits divided by gross losses (>1.0 = profitable system)" /></div>
                   <div className={`font-mono font-bold text-sm ${riskMetrics.profit_factor > 1 ? "text-success" : "text-error"}`}>
                     {riskMetrics.profit_factor.toFixed(2)}
                   </div>
                 </div>
                 {/* Annual Return */}
                 <div className="bg-base-100 rounded p-2 text-center">
-                  <div className="text-xs sm:text-[10px] text-base-content/50 uppercase tracking-wider">Ann Return</div>
+                  <div className="text-xs sm:text-[10px] text-base-content/50 uppercase tracking-wider">Ann Return<InfoTip tip="Annualized return percentage" /></div>
                   <div className={`font-mono font-bold text-sm ${riskMetrics.annual_return_pct > 0 ? "text-success" : "text-error"}`}>
                     {riskMetrics.annual_return_pct.toFixed(2)}%
                   </div>
                 </div>
                 {/* CVaR 95% */}
                 <div className="bg-base-100 rounded p-2 text-center">
-                  <div className="text-xs sm:text-[10px] text-base-content/50 uppercase tracking-wider">CVaR 95%</div>
+                  <div className="text-xs sm:text-[10px] text-base-content/50 uppercase tracking-wider">CVaR 95%<InfoTip tip="Conditional VaR — average loss in the worst 5% of scenarios" /></div>
                   <div className="font-mono font-bold text-sm">
                     ${riskMetrics.cvar_95.toLocaleString("en-US", { maximumFractionDigits: 0 })}
                   </div>
                 </div>
                 {/* Max Consec Losses */}
                 <div className="bg-base-100 rounded p-2 text-center">
-                  <div className="text-xs sm:text-[10px] text-base-content/50 uppercase tracking-wider">Max Loss Streak</div>
+                  <div className="text-xs sm:text-[10px] text-base-content/50 uppercase tracking-wider">Max Loss Streak<InfoTip tip="Maximum number of consecutive losing trades" /></div>
                   <div className="font-mono font-bold text-sm">
                     {riskMetrics.max_consecutive_losses}
                   </div>

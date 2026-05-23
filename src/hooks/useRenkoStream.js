@@ -58,7 +58,7 @@ export default function useRenkoStream(symbol, options = {}) {
   useEffect(() => { streamingRef.current = streaming; }, [streaming]);
 
   // ── Market Hours Check ────────────────────────────────────────────────────
-  // Mon-Fri 9:30-16:00 ET (America/New_York)
+  // Market hours check (ET timezone)
   const isMarketOpen = useCallback(() => {
     try {
       const now = new Date();
@@ -79,7 +79,7 @@ export default function useRenkoStream(symbol, options = {}) {
       const totalMinutes = hour * 60 + minute;
 
       const isWeekday = !["Sat", "Sun"].includes(day);
-      const isOpen = totalMinutes >= 570 && totalMinutes <= 960; // 9:30–16:00
+      const isOpen = totalMinutes >= 570 && totalMinutes <= 960;
 
       return isWeekday && isOpen;
     } catch {

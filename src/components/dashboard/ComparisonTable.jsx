@@ -1,5 +1,7 @@
 'use client'
 
+import InfoTip from '@/components/shared/InfoTip'
+
 function formatPct(value) {
   if (value == null) return 'N/A'
   return `${(value * 100).toFixed(2)}%`
@@ -67,29 +69,34 @@ export default function ComparisonTable({ tickers }) {
   const rows = [
     {
       label: 'Regime',
+      tip: 'HMM-detected market regime for each asset',
       values: tickerMetrics.map((t) => ({ symbol: t.symbol, value: t.regime, isText: true })),
       higherIsBetter: true,
     },
     {
       label: 'Risk Mult',
+      tip: 'Risk multiplier — scales position size based on regime confidence',
       values: tickerMetrics.map((t) => ({ symbol: t.symbol, value: t.riskMultiplier })),
       higherIsBetter: true,
       format: (v) => formatNum(v),
     },
     {
       label: 'VaR 95%',
+      tip: 'Value at Risk at 95% confidence — max expected daily loss',
       values: tickerMetrics.map((t) => ({ symbol: t.symbol, value: t.var95 })),
       higherIsBetter: false,
       format: (v) => formatPct(v),
     },
     {
       label: 'CVaR 95%',
+      tip: 'Conditional VaR — average loss in worst 5% of scenarios',
       values: tickerMetrics.map((t) => ({ symbol: t.symbol, value: t.cvar95 })),
       higherIsBetter: false,
       format: (v) => formatPct(v),
     },
     {
       label: 'Max DD',
+      tip: 'Maximum drawdown — worst peak-to-trough decline',
       values: tickerMetrics.map((t) => ({ symbol: t.symbol, value: t.maxDrawdown })),
       higherIsBetter: false,
       format: (v) => formatPct(v),
@@ -102,30 +109,35 @@ export default function ComparisonTable({ tickers }) {
     },
     {
       label: 'Ann Vol',
+      tip: 'Annualized volatility — yearly standard deviation of returns',
       values: tickerMetrics.map((t) => ({ symbol: t.symbol, value: t.annualVol })),
       higherIsBetter: false,
       format: (v) => formatPct(v),
     },
     {
       label: 'Sharpe',
+      tip: 'Sharpe ratio — risk-adjusted return (>1.0=strong)',
       values: tickerMetrics.map((t) => ({ symbol: t.symbol, value: t.sharpe })),
       higherIsBetter: true,
       format: (v) => formatNum(v),
     },
     {
       label: 'Sortino',
+      tip: 'Sortino ratio — downside risk-adjusted return',
       values: tickerMetrics.map((t) => ({ symbol: t.symbol, value: t.sortino })),
       higherIsBetter: true,
       format: (v) => formatNum(v),
     },
     {
       label: 'Calmar',
+      tip: 'Calmar ratio — return per unit of max drawdown',
       values: tickerMetrics.map((t) => ({ symbol: t.symbol, value: t.calmar })),
       higherIsBetter: true,
       format: (v) => formatNum(v),
     },
     {
       label: 'Rec. Position',
+      tip: 'Recommended position size as a fraction of portfolio',
       values: tickerMetrics.map((t) => ({ symbol: t.symbol, value: t.recommendedPosition })),
       higherIsBetter: true,
       format: (v) => formatPct(v),
@@ -154,7 +166,7 @@ export default function ComparisonTable({ tickers }) {
 
               return (
                 <tr key={row.label}>
-                  <td className="text-sm font-semibold text-base-content/70">{row.label}</td>
+                  <td className="text-sm font-semibold text-base-content/70">{row.label}{row.tip && <InfoTip tip={row.tip} />}</td>
                   {colored.map((v) => (
                     <td key={v.symbol} className={`text-sm ${v.className}`}>
                       {v.isText
@@ -188,7 +200,7 @@ export default function ComparisonTable({ tickers }) {
 
                   return (
                     <div key={row.label} className="flex justify-between items-baseline">
-                      <span className="text-xs text-base-content/50">{row.label}</span>
+                      <span className="text-xs text-base-content/50">{row.label}{row.tip && <InfoTip tip={row.tip} />}</span>
                       <span className={`text-sm font-mono ${colored.className}`}>
                         {val == null || val.value == null
                           ? 'N/A'

@@ -7,6 +7,7 @@ import OrderHistory from '@/components/orders/OrderHistory';
 import OpenPositions from '@/components/orders/OpenPositions';
 import OrderModal from '@/components/orders/OrderModal';
 import PortfolioAnalysis from '@/components/orders/PortfolioAnalysis';
+import PerformanceReport from '@/components/orders/PerformanceReport';
 import GracefulError from '@/components/shared/GracefulError';
 import { notifySuccess, notifyWarning } from '@/lib/notifications';
 
@@ -27,6 +28,8 @@ export default function OrdersPage() {
   const [loadingAccount, setLoadingAccount] = useState(false);
   const [loadingOrders, setLoadingOrders] = useState(false);
   const [loadingPositions, setLoadingPositions] = useState(false);
+  const [activities, setActivities] = useState([]);
+  const [equityCurve, setEquityCurve] = useState([]);
   const [orderModal, setOrderModal] = useState(null);
   const [accountError, setAccountError] = useState(null);   // { message, code } | null
   const [ordersError, setOrdersError] = useState(null);      // { message, code } | null
@@ -127,14 +130,52 @@ export default function OrdersPage() {
     }
   }, []);
 
+  // Fetch trade activities (fills)
+  const fetchActivities = useCallback(async () => {
+    try {
+      const res = await fetch('/api/alpaca/activities?period=3m&page_size=100');
+      if (res.ok) {
+        const data = await res.json();
+        setActivities(Array.isArray(data) ? data : []);
+      }
+    } catch {
+      // Silently skip — non-critical for main page
+    }
+  }, []);
+
+  // Fetch equity curve
+  const fetchEquityCurve = useCallback(async () => {
+    try {
+      const res = await fetch('/api/alpaca/portfolio/history?period=1M&timeframe=1D');
+      if (res.ok) {
+        const data = await res.json();
+        if (data?.timestamp && data?.equity) {
+          const startEquity = data.equity[0] || 1;
+          const curve = data.timestamp.map((ts, i) => ({
+            timestamp: ts * 1000,
+            date: new Date(ts * 1000).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
+            equity: parseFloat(data.equity[i]) || 0,
+            pnl: parseFloat(data.profit_loss?.[i]) || 0,
+            pnlPc: startEquity > 0 ? ((parseFloat(data.equity[i]) - startEquity) / startEquity) * 100 : 0,
+          }));
+          setEquityCurve(curve);
+        }
+      }
+    } catch {
+      // Silently skip
+    }
+  }, []);
+
   // Fetch all data when keys are configured
   useEffect(() => {
     if (keysConfigured === true) {
       fetchAccount();
       fetchOrders(period);
       fetchPositions();
+      fetchActivities();
+      fetchEquityCurve();
     }
-  }, [keysConfigured, period, fetchAccount, fetchOrders, fetchPositions]);
+  }, [keysConfigured, period, fetchAccount, fetchOrders, fetchPositions, fetchActivities, fetchEquityCurve]);
 
   // Handle key configuration success
   const handleKeysConfigured = () => {
@@ -292,6 +333,14 @@ export default function OrdersPage() {
 
       {/* Portfolio Analysis (from order history symbols) */}
       <PortfolioAnalysis orders={orders} period={period} />
+
+      {/* Performance Report (PDF Download) */}
+      <PerformanceReport
+        account={account}
+        positions={positions}
+        equityCurve={equityCurve}
+        activities={activities}
+      />
 
       {/* Order Modal */}
       {orderModal && (

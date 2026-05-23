@@ -1,5 +1,7 @@
 'use client'
 
+import InfoTip from "@/components/shared/InfoTip";
+
 export default function RegimeCard({ data }) {
   if (!data) return null
 
@@ -26,17 +28,25 @@ export default function RegimeCard({ data }) {
       ? 'Moderate exposure'
       : 'Reduced exposure'
 
+  const regimeTip = label.includes('bull')
+    ? 'HMM-detected rising market — strategy may increase exposure'
+    : label.includes('bear')
+      ? 'HMM-detected falling market — strategy reduces exposure'
+      : 'HMM-detected sideways market — strategy maintains neutral positioning'
+
   return (
     <div className="space-y-3">
       {/* Header row: Regime label + Risk Multiplier */}
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2">
-          <span className={`badge ${badgeClass} badge-lg`}>
-            {data.regime_label || 'Unknown'}
-          </span>
+          <InfoTip tip={regimeTip}>
+            <span className={`badge ${badgeClass} badge-lg`}>
+              {data.regime_label || 'Unknown'}
+            </span>
+          </InfoTip>
         </div>
         <div className="text-right">
-          <div className="text-xs text-base-content/60">Risk Mult</div>
+          <div className="text-xs text-base-content/60">Risk Mult<InfoTip tip="Risk multiplier — scales position sizes based on regime confidence (≥1.0=elevated risk, <0.5=reduced)" /></div>
           <div className={`text-xl font-bold font-mono ${riskMultColor}`}>
             {riskMult.toFixed(2)}×
           </div>
@@ -54,9 +64,9 @@ export default function RegimeCard({ data }) {
           {confidencePct}%
         </div>
         <div className="flex-1 min-w-0">
-          <div className="text-xs text-base-content/60 mb-1">Confidence</div>
+          <div className="text-xs text-base-content/60 mb-1">Confidence<InfoTip tip="How certain the HMM model is about the current regime (0–100%)" /></div>
           <div className="text-xs text-base-content/40">
-            Fitted on {data.n_bars_fitted ?? '—'} bars
+            Fitted on {data.n_bars_fitted ?? '—'} bars<InfoTip tip="Number of data points used to fit the Hidden Markov Model" />
           </div>
         </div>
       </div>
@@ -64,7 +74,7 @@ export default function RegimeCard({ data }) {
       {/* Volatility State */}
       <div>
         <div className="flex justify-between items-center mb-1">
-          <span className="text-xs font-medium">Volatility State</span>
+          <span className="text-xs font-medium">Volatility State<InfoTip tip="HMM-detected volatility regime (low/medium/high)" /></span>
           <span className="badge badge-outline badge-xs">{data.vol_state || 'N/A'}</span>
         </div>
         {Object.entries(data.vol_probs || {}).map(([key, prob]) => (
@@ -85,7 +95,7 @@ export default function RegimeCard({ data }) {
       {/* Trend State */}
       <div>
         <div className="flex justify-between items-center mb-1">
-          <span className="text-xs font-medium">Trend State</span>
+          <span className="text-xs font-medium">Trend State<InfoTip tip="HMM-detected trend direction with probabilities" /></span>
           <span className="badge badge-outline badge-xs">{data.trend_state || 'N/A'}</span>
         </div>
         {Object.entries(data.trend_probs || {}).map(([key, prob]) => (

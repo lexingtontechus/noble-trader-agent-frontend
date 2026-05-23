@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect, useCallback } from 'react'
+import InfoTip from '@/components/shared/InfoTip'
 
 /* ─── Inline SVG Icon Components ─── */
 
@@ -257,10 +258,10 @@ export default function EvolutionPanel() {
               <IconDNA size={16} className="text-primary" />
             </div>
             <h3 className="font-semibold text-sm">Active Variant</h3>
-            <span className="badge badge-success badge-sm ml-auto gap-1">
+            <InfoTip tip="This strategy variant is currently active in production"><span className="badge badge-success badge-sm ml-auto gap-1">
               <span className="w-1.5 h-1.5 rounded-full bg-success animate-pulse"></span>
               LIVE
-            </span>
+            </span></InfoTip>
           </div>
 
           <div className="flex flex-col sm:flex-row sm:items-start gap-4">
@@ -269,14 +270,14 @@ export default function EvolutionPanel() {
               <div className="flex items-center gap-2">
                 <span className="font-mono font-bold text-lg">{active?.name || 'Unknown'}</span>
                 {active?.generation != null && (
-                  <span className="badge badge-outline badge-sm">Gen {active.generation}</span>
+                  <InfoTip tip="Generation number — how many optimization cycles this variant has undergone"><span className="badge badge-outline badge-sm">Gen {active.generation}</span></InfoTip>
                 )}
               </div>
 
               {/* Composite Score */}
               <div className="space-y-1">
                 <div className="flex items-center justify-between">
-                  <span className="text-xs text-base-content/50 uppercase tracking-wide">Composite Score</span>
+                  <span className="text-xs text-base-content/50 uppercase tracking-wide">Composite Score<InfoTip tip="Weighted composite of Sharpe, win rate, and max drawdown scores" /></span>
                   <span className={`font-mono font-bold text-xl ${scoreColorClass(compositeScore)}`}>
                     {scoreDisplay(compositeScore)}
                   </span>
@@ -291,19 +292,19 @@ export default function EvolutionPanel() {
               {/* Key Params */}
               <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
                 <div className="bg-base-300/30 rounded-lg p-2.5">
-                  <div className="text-xs text-base-content/40">Kelly Fraction</div>
+                  <div className="text-xs text-base-content/40">Kelly Fraction<InfoTip tip="Kelly criterion fraction used by this variant for position sizing" /></div>
                   <div className="font-mono font-bold text-sm">
                     {active?.kellyFraction != null ? (active.kellyFraction * 100).toFixed(0) + '%' : '---'}
                   </div>
                 </div>
                 <div className="bg-base-300/30 rounded-lg p-2.5">
-                  <div className="text-xs text-base-content/40">Target Vol</div>
+                  <div className="text-xs text-base-content/40">Target Vol<InfoTip tip="Target annualized volatility for the strategy" /></div>
                   <div className="font-mono font-bold text-sm">
                     {active?.targetVol != null ? (active.targetVol * 100).toFixed(0) + '%' : '---'}
                   </div>
                 </div>
                 <div className="bg-base-300/30 rounded-lg p-2.5">
-                  <div className="text-xs text-base-content/40">HMM States</div>
+                  <div className="text-xs text-base-content/40">HMM States<InfoTip tip="Number of hidden states in the Hidden Markov Model configuration" /></div>
                   <div className="font-mono font-bold text-sm">
                     {active?.nHmmStates ?? '---'}
                   </div>
@@ -579,7 +580,7 @@ export default function EvolutionPanel() {
                 <div className="bg-base-300/30 rounded-lg p-3 border border-info/20">
                   <div className="flex items-center gap-1.5 mb-2">
                     <span className="badge badge-xs badge-info">A</span>
-                    <span className="text-xs text-base-content/50">Control</span>
+                    <span className="text-xs text-base-content/50">Control<InfoTip tip="Current champion variant — the one in production" /></span>
                   </div>
                   <div className="font-mono text-sm font-medium truncate" title={abTest.variantAId}>
                     {abTest.variantAId ? abTest.variantAId.slice(0, 12) + '...' : '---'}
@@ -588,7 +589,7 @@ export default function EvolutionPanel() {
                 <div className="bg-base-300/30 rounded-lg p-3 border border-secondary/20">
                   <div className="flex items-center gap-1.5 mb-2">
                     <span className="badge badge-xs badge-secondary">B</span>
-                    <span className="text-xs text-base-content/50">Challenger</span>
+                    <span className="text-xs text-base-content/50">Challenger<InfoTip tip="New variant being tested against the control" /></span>
                   </div>
                   <div className="font-mono text-sm font-medium truncate" title={abTest.variantBId}>
                     {abTest.variantBId ? abTest.variantBId.slice(0, 12) + '...' : '---'}

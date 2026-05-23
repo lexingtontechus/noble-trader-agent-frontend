@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback, useRef } from "react";
+import InfoTip from "@/components/shared/InfoTip";
 
 /**
  * Regime colour & label maps (shared across correlation components)
@@ -17,6 +18,13 @@ const REGIME_LABELS = {
   mid_corr: "Mid Correlation",
   high_corr: "High Correlation",
   crisis: "Crisis Mode",
+};
+
+const REGIME_TIPS = {
+  low_corr: "Assets move independently; diversification is effective",
+  mid_corr: "Moderate co-movement; some diversification benefit remains",
+  high_corr: "Assets move together; diversification is limited",
+  crisis: "Extreme co-movement during market stress; risk of simultaneous losses",
 };
 
 function regimeBadgeClass(regime) {
@@ -409,9 +417,11 @@ function CorrelationDetection({ symbols, positions, onCorrelationData }) {
             {data.regime_label && (
               <div className="flex items-center gap-2 mb-2">
                 <span className="text-xs text-base-content/50">Regime:</span>
-                <span className={`badge badge-sm ${regimeBadgeClass(data.regime_label)}`}>
-                  {regimeDisplayLabel(data.regime_label)}
-                </span>
+                <InfoTip tip={REGIME_TIPS[data.regime_label] || ""}>
+                  <span className={`badge badge-sm ${regimeBadgeClass(data.regime_label)}`}>
+                    {regimeDisplayLabel(data.regime_label)}
+                  </span>
+                </InfoTip>
                 {data.confidence != null && (
                   <span className="text-xs text-base-content/40">
                     ({((data.confidence || 0) * 100).toFixed(0)}% confidence)
@@ -982,7 +992,7 @@ export default function PortfolioOverview({ positions = [], account = null, last
       {/* Summary Metrics Row */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
         <MetricCard
-          label="Portfolio VaR 95"
+          label={<>Portfolio VaR 95<InfoTip tip="Value at Risk at 95% confidence — the maximum expected daily loss with 95% probability" /></>}
           value={`${estimatedVaR}%`}
           subtext={
             positions.length > 0
@@ -1003,13 +1013,13 @@ export default function PortfolioOverview({ positions = [], account = null, last
           icon="📈"
         />
         <MetricCard
-          label="Corr Regime"
+          label={<>Corr Regime<InfoTip tip="Correlation regime — how assets move together. Crisis Mode = extreme co-movement, risk of simultaneous losses" /></>}
           value={corrRegimeValue}
           subtext={corrRegimeSubtext}
           icon="🔗"
         />
         <MetricCard
-          label="Exposure"
+          label={<>Exposure<InfoTip tip="Total market value as a percentage of account equity — how much capital is deployed" /></>}
           value={`${Math.min(totalExposure, 100).toFixed(0)}%`}
           subtext={
             totalValue > 0

@@ -60,6 +60,7 @@ export async function getOrders(apiKey, secretKey, { status = "all", after = nul
 /**
  * Create an order on Alpaca.
  * Supports: market, limit, stop, stop_limit, trailing_stop
+ * Also supports advanced order classes: bracket, oco, oto
  * Ref: https://docs.alpaca.markets/reference/postorder
  */
 export async function createOrder(apiKey, secretKey, order, mode = "paper") {
@@ -87,6 +88,30 @@ export async function createOrder(apiKey, secretKey, order, mode = "paper") {
   }
   if (order.trail_percent) {
     body.trail_percent = String(order.trail_percent);
+  }
+
+  // Advanced order classes: bracket, oco, oto
+  // Ref: https://docs.alpaca.markets/docs/orders-about#order-classes
+  if (order.order_class) {
+    body.order_class = order.order_class;
+  }
+
+  // Bracket order: take_profit + stop_loss legs
+  if (order.take_profit) {
+    body.take_profit = {};
+    if (order.take_profit.limit_price) {
+      body.take_profit.limit_price = String(order.take_profit.limit_price);
+    }
+  }
+
+  if (order.stop_loss) {
+    body.stop_loss = {};
+    if (order.stop_loss.stop_price) {
+      body.stop_loss.stop_price = String(order.stop_loss.stop_price);
+    }
+    if (order.stop_loss.limit_price) {
+      body.stop_loss.limit_price = String(order.stop_loss.limit_price);
+    }
   }
 
   return alpacaFetch("/orders", {

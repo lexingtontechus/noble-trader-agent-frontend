@@ -2,6 +2,7 @@
 
 import { useState, useCallback } from "react";
 import { useStream } from "@/context/StreamContext";
+import InfoTip from "@/components/shared/InfoTip";
 import {
   BarChart,
   Bar,
@@ -106,11 +107,13 @@ export default function OptimizerCard() {
                 <span className="badge badge-sm badge-info ml-2">
                   {((result.exposure_scalar || 1) * 100).toFixed(0)}% exposure
                 </span>
-                <span
-                  className={`badge badge-sm ml-1 ${result.drawdown_constraint?.breached ? "badge-error" : "badge-success"}`}
-                >
-                  DD {result.drawdown_constraint?.breached ? "BREACH" : "OK"}
-                </span>
+                <InfoTip tip={result.drawdown_constraint?.breached ? "Drawdown exceeds allowed limits — position sizing is restricted" : "Drawdown is within allowed limits"}>
+                  <span
+                    className={`badge badge-sm ml-1 ${result.drawdown_constraint?.breached ? "badge-error" : "badge-success"}`}
+                  >
+                    DD {result.drawdown_constraint?.breached ? "BREACH" : "OK"}
+                  </span>
+                </InfoTip>
               </>
             )}
           </h3>
@@ -143,13 +146,13 @@ export default function OptimizerCard() {
             {/* Key Metrics */}
             <div className="grid grid-cols-2 lg:grid-cols-4 gap-2 mb-4">
               <div className="stat bg-base-300 rounded-box py-2">
-                <div className="stat-title text-xs">Exposure Scalar</div>
+                <div className="stat-title text-xs">Exposure Scalar<InfoTip tip="Factor controlling overall portfolio exposure (100%=fully invested, <100%=de-risked)" /></div>
                 <div className="stat-value text-sm">
                   {((result.exposure_scalar || 1) * 100).toFixed(0)}%
                 </div>
               </div>
               <div className="stat bg-base-300 rounded-box py-2">
-                <div className="stat-title text-xs">DD Constraint</div>
+                <div className="stat-title text-xs">DD Constraint<InfoTip tip="Drawdown constraint — whether current drawdown is within allowed limits" /></div>
                 <div
                   className={`stat-value text-sm ${result.drawdown_constraint?.breached ? "text-error" : "text-success"}`}
                 >
@@ -157,7 +160,7 @@ export default function OptimizerCard() {
                 </div>
               </div>
               <div className="stat bg-base-300 rounded-box py-2">
-                <div className="stat-title text-xs">Corr Regime</div>
+                <div className="stat-title text-xs">Corr Regime<InfoTip tip="Current correlation regime used to adjust optimal weights" /></div>
                 <div className="stat-value text-sm capitalize">
                   {result.correlation_regime || "—"}
                 </div>
@@ -173,6 +176,7 @@ export default function OptimizerCard() {
               <div className="mb-4">
                 <h4 className="text-xs font-semibold mb-2">
                   Current vs Optimal vs Adjusted Weights
+                  <InfoTip tip="Regime-adjusted weights — optimal weights modified by the current correlation regime" position="right" />
                 </h4>
                 <div className="h-48">
                   <ResponsiveContainer width="100%" height="100%">
@@ -211,11 +215,11 @@ export default function OptimizerCard() {
                 className={`alert ${result.drawdown_constraint.breached ? "alert-error" : "alert-success"} mb-3`}
               >
                 <span className="text-xs">
-                  Current DD:{" "}
+                  Current DD<InfoTip tip="Current decline from equity peak" />:{" "}
                   {((result.drawdown_constraint.current_dd || 0) * 100).toFixed(
                     1,
                   )}
-                  % / Max DD:{" "}
+                  % / Max DD<InfoTip tip="Maximum allowed drawdown threshold" />:{" "}
                   {((result.drawdown_constraint.max_dd || 0) * 100).toFixed(1)}%
                 </span>
               </div>

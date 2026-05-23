@@ -2,6 +2,7 @@
 
 import { useState, useCallback, useEffect, useRef, Component } from 'react'
 import dynamic from 'next/dynamic'
+import InfoTip from '@/components/shared/InfoTip'
 const EvolutionPanel = dynamic(() => import('@/components/evolution/EvolutionPanel'), { ssr: false })
 
 /* ─── Safe String Helpers ─── */
@@ -200,10 +201,10 @@ function IconXCircle({ size = 18, className = '' }) {
 
 const ANALYZE_STEPS = [
   { key: 'fetching', label: 'Fetching Positions' },
-  { key: 'regimes', label: 'HMM Regime Detection' },
-  { key: 'strategy', label: 'Strategy Signals' },
+  { key: 'regimes', label: 'HMM Regime Detection', tip: 'Hidden Markov Model identifies current market state (bull/bear/neutral)' },
+  { key: 'strategy', label: 'Strategy Signals', tip: 'Generated buy/sell/flat signals based on regime and risk analysis' },
   { key: 'risk', label: 'Risk Analysis' },
-  { key: 'tda', label: 'TDA Anomaly Detection' },
+  { key: 'tda', label: 'TDA Anomaly Detection', tip: 'Topological Data Analysis — detects structural anomalies in price data' },
   { key: 'correlations', label: 'Analyzing Correlations' },
   { key: 'optimizing', label: 'Optimizing Portfolio' },
   { key: 'generating', label: 'Generating Recommendations' },
@@ -355,7 +356,7 @@ function AnalysisLoadingIndicator({ currentStep }) {
                       : 'text-base-content/30'
                 }`}
               >
-                {step.label}
+                {step.label}{step.tip && <InfoTip tip={step.tip} />}
               </span>
             </div>
           )
@@ -451,7 +452,7 @@ function AnalysisSummary({ data }) {
               </div>
               <h3 className="font-semibold text-sm">Regime Summary</h3>
               {regimeSummary[0]?.n_states && (
-                <span className="badge badge-xs badge-ghost ml-auto">{regimeSummary[0].n_states}-state HMM</span>
+                <InfoTip tip="Number of hidden states in the Hidden Markov Model (e.g., 3-state or 4-state)"><span className="badge badge-xs badge-ghost ml-auto">{regimeSummary[0].n_states}-state HMM</span></InfoTip>
               )}
             </div>
             <div className="flex flex-wrap gap-2">
@@ -484,7 +485,7 @@ function AnalysisSummary({ data }) {
               <div className="w-8 h-8 rounded-lg bg-info/15 flex items-center justify-center">
                 <IconZap size={16} className="text-info" />
               </div>
-              <h3 className="font-semibold text-sm">Strategy Signals</h3>
+              <h3 className="font-semibold text-sm">Strategy Signals<InfoTip tip="Generated buy/sell/flat signals based on regime and risk analysis" /></h3>
             </div>
             <div className="space-y-2">
               {Object.entries(strategySignals).map(([symbol, data]) => {
@@ -520,7 +521,7 @@ function AnalysisSummary({ data }) {
               <div className="w-8 h-8 rounded-lg bg-secondary/15 flex items-center justify-center">
                 <IconChart size={16} className="text-secondary" />
               </div>
-              <h3 className="font-semibold text-sm">Kelly Position Sizing</h3>
+              <h3 className="font-semibold text-sm">Kelly Position Sizing<InfoTip tip="Kelly criterion-based position sizing — mathematically optimal bet fraction" /></h3>
             </div>
             <div className="space-y-2">
               {Object.entries(kellySizing).map(([symbol, data]) => {
@@ -554,7 +555,7 @@ function AnalysisSummary({ data }) {
               <div className="w-8 h-8 rounded-lg bg-secondary/15 flex items-center justify-center">
                 <IconChart size={16} className="text-secondary" />
               </div>
-              <h3 className="font-semibold text-sm">Kelly Position Sizing</h3>
+              <h3 className="font-semibold text-sm">Kelly Position Sizing<InfoTip tip="Kelly criterion-based position sizing — mathematically optimal bet fraction" /></h3>
             </div>
             <div className="space-y-2">
               {Object.entries(kellySizing).map(([symbol, data]) => {
@@ -597,8 +598,8 @@ function AnalysisSummary({ data }) {
                   <tr>
                     <th className="text-xs">Symbol</th>
                     <th className="text-xs">Risk Score</th>
-                    <th className="text-xs">Daily VaR</th>
-                    <th className="text-xs">Daily CVaR</th>
+                    <th className="text-xs">Daily VaR<InfoTip tip="One-day Value at Risk for this symbol" /></th>
+                    <th className="text-xs">Daily CVaR<InfoTip tip="One-day Conditional VaR (Expected Shortfall) for this symbol" /></th>
                     <th className="text-xs">Limit</th>
                   </tr>
                 </thead>
@@ -625,9 +626,9 @@ function AnalysisSummary({ data }) {
                         <td className="font-mono text-xs text-error">{(cvarDaily * 100).toFixed(2)}%</td>
                         <td>
                           {breach ? (
-                            <span className="badge badge-xs badge-error gap-1">
+                            <InfoTip tip="Position exceeds configured risk limits — sizing is restricted"><span className="badge badge-xs badge-error gap-1">
                               <IconAlertTriangle size={10} /> Breach
-                            </span>
+                            </span></InfoTip>
                           ) : (
                             <span className="badge badge-xs badge-success">OK</span>
                           )}
@@ -650,9 +651,9 @@ function AnalysisSummary({ data }) {
                     <div className="flex items-center justify-between mb-2">
                       <span className="font-mono font-bold">{symbol}</span>
                       {breach ? (
-                        <span className="badge badge-sm badge-error gap-1">
+                        <InfoTip tip="Position exceeds configured risk limits — sizing is restricted"><span className="badge badge-sm badge-error gap-1">
                           <IconAlertTriangle size={12} /> Breach
-                        </span>
+                        </span></InfoTip>
                       ) : (
                         <span className="badge badge-sm badge-success">OK</span>
                       )}
@@ -668,11 +669,11 @@ function AnalysisSummary({ data }) {
                     </div>
                     <div className="grid grid-cols-2 gap-2 text-xs">
                       <div>
-                        <span className="text-base-content/50">VaR: </span>
+                        <span className="text-base-content/50">VaR<InfoTip tip="One-day Value at Risk for this symbol" />: </span>
                         <span className="font-mono text-error">{(varDaily * 100).toFixed(2)}%</span>
                       </div>
                       <div>
-                        <span className="text-base-content/50">CVaR: </span>
+                        <span className="text-base-content/50">CVaR<InfoTip tip="One-day Conditional VaR (Expected Shortfall) for this symbol" />: </span>
                         <span className="font-mono text-error">{(cvarDaily * 100).toFixed(2)}%</span>
                       </div>
                     </div>
@@ -692,8 +693,8 @@ function AnalysisSummary({ data }) {
               <div className="w-8 h-8 rounded-lg bg-warning/15 flex items-center justify-center">
                 <IconFlask size={16} className="text-warning" />
               </div>
-              <h3 className="font-semibold text-sm">TDA Anomaly Detection</h3>
-              <span className="badge badge-xs badge-ghost ml-auto">Topological Analysis</span>
+              <h3 className="font-semibold text-sm">TDA Anomaly Detection<InfoTip tip="Topological Data Analysis — detects structural anomalies in price data" /></h3>
+              <InfoTip tip="Mathematical analysis of shape/structure in price data using algebraic topology"><span className="badge badge-xs badge-ghost ml-auto">Topological Analysis</span></InfoTip>
             </div>
             {/* Desktop Table */}
             <div className="hidden sm:block overflow-x-auto">
@@ -701,11 +702,11 @@ function AnalysisSummary({ data }) {
                 <thead>
                   <tr>
                     <th className="text-xs">Symbol</th>
-                    <th className="text-xs">Anomaly</th>
-                    <th className="text-xs">Regime Change</th>
-                    <th className="text-xs">Betti-0</th>
-                    <th className="text-xs">Betti-1</th>
-                    <th className="text-xs">Entropy</th>
+                    <th className="text-xs">Anomaly<InfoTip tip="TDA anomaly score (≥1.5=anomalous, ≥2.25=critical)" /></th>
+                    <th className="text-xs">Regime Change<InfoTip tip="Probability of a market regime shift (≥60%=high alert)" /></th>
+                    <th className="text-xs">Betti-0<InfoTip tip="Connected components in topological analysis — tracks structural complexity" /></th>
+                    <th className="text-xs">Betti-1<InfoTip tip="Loops/holes in topological analysis — indicates cyclic market patterns" /></th>
+                    <th className="text-xs">Entropy<InfoTip tip="Total topological entropy — measures structural disorder in price patterns" /></th>
                     <th className="text-xs">Alert</th>
                   </tr>
                 </thead>
@@ -792,7 +793,7 @@ function AnalysisSummary({ data }) {
                     </div>
                     <div className="grid grid-cols-2 gap-x-4 gap-y-1.5 text-xs">
                       <div className="flex justify-between">
-                        <span className="text-base-content/50">Anomaly</span>
+                        <span className="text-base-content/50">Anomaly<InfoTip tip="TDA anomaly score (≥1.5=anomalous, ≥2.25=critical)" /></span>
                         {anomaly != null ? (
                           <span className={`font-mono font-bold ${anomaly >= 2.25 ? 'text-error' : anomaly >= 1.5 ? 'text-warning' : 'text-success'}`}>
                             {anomaly.toFixed(2)}
@@ -808,15 +809,15 @@ function AnalysisSummary({ data }) {
                         ) : <span className="text-base-content/30">N/A</span>}
                       </div>
                       <div className="flex justify-between">
-                        <span className="text-base-content/50">Betti-0</span>
+                        <span className="text-base-content/50">Betti-0<InfoTip tip="Connected components in topological analysis — tracks structural complexity" /></span>
                         <span className="font-mono">{betti0}</span>
                       </div>
                       <div className="flex justify-between">
-                        <span className="text-base-content/50">Betti-1</span>
+                        <span className="text-base-content/50">Betti-1<InfoTip tip="Loops/holes in topological analysis — indicates cyclic market patterns" /></span>
                         <span className="font-mono">{betti1}</span>
                       </div>
                       <div className="flex justify-between col-span-2">
-                        <span className="text-base-content/50">Entropy</span>
+                        <span className="text-base-content/50">Entropy<InfoTip tip="Total topological entropy — measures structural disorder in price patterns" /></span>
                         {entropy != null ? (
                           <span className={`font-mono ${entropy >= 0.8 ? 'text-warning font-bold' : ''}`}>{entropy.toFixed(2)}</span>
                         ) : <span className="text-base-content/30">N/A</span>}
@@ -1086,7 +1087,7 @@ function TradeCard({ trade, onApprove, onBlock, onValidate, approved, validating
             )}
             {trade.kellyFraction != null && (
               <div className="flex items-center gap-1 text-xs bg-base-300/30 rounded px-2 py-1">
-                <span className="text-base-content/40">Kelly:</span>
+                <span className="text-base-content/40">Kelly<InfoTip tip="Kelly criterion-based position sizing — mathematically optimal bet fraction" />:</span>
                 <span className="font-mono font-medium">{(trade.kellyFraction * 100).toFixed(1)}%</span>
               </div>
             )}
@@ -1100,7 +1101,7 @@ function TradeCard({ trade, onApprove, onBlock, onValidate, approved, validating
             )}
             {trade.varDaily != null && (
               <div className="flex items-center gap-1 text-xs bg-base-300/30 rounded px-2 py-1">
-                <span className="text-base-content/40">VaR:</span>
+                <span className="text-base-content/40">VaR<InfoTip tip="One-day Value at Risk for this symbol" />:</span>
                 <span className="font-mono font-medium text-error">{(trade.varDaily * 100).toFixed(2)}%</span>
               </div>
             )}
@@ -1129,7 +1130,7 @@ function TradeCard({ trade, onApprove, onBlock, onValidate, approved, validating
                 Walk-Forward Validation: {validationPassed ? 'PASSED' : validationFailed ? 'FAILED' : 'ERROR'}
               </span>
               {validationScore != null && (
-                <span className="font-mono ml-auto">Score: {(validationScore * 100).toFixed(1)}%</span>
+                <span className="font-mono ml-auto">Score<InfoTip tip="Cross-validated performance score of the trade recommendation" />: {(validationScore * 100).toFixed(1)}%</span>
               )}
             </div>
             {validationDetails.raw && (

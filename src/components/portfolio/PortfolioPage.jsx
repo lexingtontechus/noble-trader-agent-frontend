@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback } from 'react'
 import PortfolioOverview from './PortfolioOverview'
 import LivePnLDashboard from '@/components/operational/LivePnLDashboard'
 import TradingWorkflow from '@/components/trading/TradingWorkflow'
+import PerformanceReport from '@/components/orders/PerformanceReport'
 import { usePortfolio } from '@/context/PortfolioContext'
 
 export default function PortfolioPage() {
@@ -14,6 +15,7 @@ export default function PortfolioPage() {
   const {
     account,
     positions,
+    equityCurve,
     lastUpdated,
   } = usePortfolio()
 
@@ -92,6 +94,14 @@ export default function PortfolioPage() {
         positions={positions}
         account={account}
         lastUpdated={lastUpdated}
+      />
+
+      {/* Performance Report (PDF Download) */}
+      <PerformanceReport
+        account={account}
+        positions={positions}
+        equityCurve={equityCurve}
+        activities={[]}
       />
 
       {/* Trading Workflow */}

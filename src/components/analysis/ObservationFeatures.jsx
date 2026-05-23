@@ -1,15 +1,16 @@
 'use client'
 
 import { useState, useEffect, useCallback } from 'react'
+import InfoTip from "@/components/shared/InfoTip";
 
-function FeatureBar({ index, label, value, max = 1, color = 'progress-primary' }) {
+function FeatureBar({ index, label, value, max = 1, color = 'progress-primary', tip }) {
   const pct = Math.min(Math.abs(value) / max * 100, 100)
   return (
     <div className="mb-2">
       <div className="flex justify-between text-xs mb-0.5">
         <span>
           <span className="badge badge-ghost badge-xs font-mono mr-1">[{index}]</span>
-          {label}
+          {label}{tip && <InfoTip tip={tip} />}
         </span>
         <span className="font-mono opacity-70">{typeof value === 'number' ? value.toFixed(4) : '—'}</span>
       </div>
@@ -18,11 +19,11 @@ function FeatureBar({ index, label, value, max = 1, color = 'progress-primary' }
   )
 }
 
-function Section({ title, defaultOpen, children }) {
+function Section({ title, defaultOpen, children, tip }) {
   return (
     <div className="collapse collapse-arrow bg-base-200 mb-2">
       <input type="checkbox" defaultChecked={defaultOpen} />
-      <div className="collapse-title text-sm font-medium">{title}</div>
+      <div className="collapse-title text-sm font-medium">{title}{tip && <InfoTip tip={tip} />}</div>
       <div className="collapse-content">{children}</div>
     </div>
   )
@@ -35,9 +36,16 @@ const FEATURE_SECTIONS = [
   { title: 'Volatility [3–5]', range: [3, 5], defaultOpen: true, color: 'progress-warning',
     labels: ['Normalized ATR', 'Rolling Volatility', 'EMA Distance'] },
   { title: 'Derived [6–9]', range: [6, 9], defaultOpen: false, color: 'progress-secondary',
-    labels: ['HHLL Score', 'Vol Percentile', 'ATR Ratio', 'Vol Slope'] },
+    labels: ['HHLL Score', 'Vol Percentile', 'ATR Ratio', 'Vol Slope'],
+    labelTips: [
+      'Higher-High/Lower-Low score — measures trend strength via recent price extremes',
+      'Current volatility ranked as a percentile of its historical range',
+      'Short-term vs long-term Average True Range — detects volatility expansion/contraction',
+      'Rate of change of volatility — tightening or loosening conditions'
+    ] },
   { title: 'HMM Raw Posteriors [10–13]', range: [10, 13], defaultOpen: false, color: 'progress-accent',
-    labels: ['Vol Posterior 0', 'Vol Posterior 1', 'Vol Posterior 2', 'Vol Posterior 3'] },
+    labels: ['Vol Posterior 0', 'Vol Posterior 1', 'Vol Posterior 2', 'Vol Posterior 3'],
+    sectionTip: "Posterior probabilities from the Hidden Markov Model's states" },
 ]
 
 export default function ObservationFeatures({ data, symbol, period }) {
@@ -108,7 +116,9 @@ export default function ObservationFeatures({ data, symbol, period }) {
     <div className="space-y-2">
       <div className="flex items-center gap-2">
         <h3 className="font-semibold text-sm">Observation Features</h3>
-        <span className="badge badge-ghost badge-xs">24-dim</span>
+        <InfoTip tip="24-dimensional observation feature vector used by the strategy model">
+          <span className="badge badge-ghost badge-xs">24-dim</span>
+        </InfoTip>
         {displayFullVector && (
           <span className="badge badge-success badge-xs">Live</span>
         )}
@@ -157,7 +167,7 @@ export default function ObservationFeatures({ data, symbol, period }) {
 
         {/* Render sections from the observation vector */}
         {FEATURE_SECTIONS.map((section) => (
-          <Section key={section.title} title={section.title} defaultOpen={section.defaultOpen}>
+          <Section key={section.title} title={section.title} defaultOpen={section.defaultOpen} tip={section.sectionTip}>
             {section.labels.map((label, i) => {
               const idx = section.range[0] + i
               const val = getFeatureValue(idx)
@@ -168,6 +178,7 @@ export default function ObservationFeatures({ data, symbol, period }) {
                   label={featureLabels?.[idx] || label}
                   value={val ?? 0}
                   color={section.color}
+                  tip={section.labelTips?.[i]}
                 />
               )
             })}
@@ -178,7 +189,7 @@ export default function ObservationFeatures({ data, symbol, period }) {
         ))}
 
         {/* Markov (14-19) — from regime or observation vector */}
-        <Section title="Markov Probabilities [14–19]" defaultOpen={true}>
+        <Section title="Markov Probabilities [14–19]" defaultOpen={true} tip="Transition probabilities for volatility and trend state changes">
           {displayFullVector ? (
             <>
               <div className="text-xs font-medium opacity-60 mb-1 mt-1">Vol Probabilities</div>
@@ -280,6 +291,7 @@ export default function ObservationFeatures({ data, symbol, period }) {
               : (data?.sizing ? data.sizing.recommended_f * (1 - (data.sizing.recommended_f || 0)) : 0)
             }
             color="progress-warning"
+            tip="Position sizing pressure f×(1−f): peaks at half-Kelly, measures allocation tension"
           />
           <FeatureBar
             index={23}
@@ -289,6 +301,7 @@ export default function ObservationFeatures({ data, symbol, period }) {
               : (1 - (data?.risk?.max_drawdown ?? 0))
             }
             color="progress-error"
+            tip="1 minus max drawdown — remaining capital fraction after worst loss"
           />
           {displayFullVector && (
             <p className="text-xs opacity-40 mt-1">

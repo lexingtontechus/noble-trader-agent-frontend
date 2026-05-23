@@ -1,5 +1,7 @@
 "use client";
 
+import InfoTip from "@/components/shared/InfoTip";
+
 function getRegimeBadgeClass(regimeLabel) {
   if (!regimeLabel || typeof regimeLabel !== 'string') return "badge-ghost";
   const lower = String(regimeLabel).toLowerCase();
@@ -25,7 +27,7 @@ export default function RegimeSummaryBanner({ tickers }) {
     <div className="w-full">
       <div className="flex flex-wrap gap-3 mb-4 items-center">
         <div className="text-xs text-base-content/50 font-semibold uppercase tracking-wider">
-          Regime Overview
+          Regime Overview<InfoTip tip="At-a-glance regime status for all tracked tickers via HMM detection" />
         </div>
         {tickers.map(({ symbol, displayName, data }) => {
           const regimeLabel = data?.analysis?.regime?.regime_label;
@@ -36,11 +38,23 @@ export default function RegimeSummaryBanner({ tickers }) {
               <span className="text-xs text-base-content/60 font-semibold">
                 {name}:
               </span>
-              <span
-                className={`badge badge-lg ${getRegimeBadgeClass(regimeLabel)}`}
+              <InfoTip
+                tip={
+                  !regimeLabel
+                    ? "Awaiting regime detection data"
+                    : regimeLabel.toLowerCase().includes("bull")
+                      ? "HMM-detected rising market"
+                      : regimeLabel.toLowerCase().includes("bear")
+                        ? "HMM-detected falling market"
+                        : "HMM-detected sideways market"
+                }
               >
-                {regimeLabel || "Loading..."}
-              </span>
+                <span
+                  className={`badge badge-lg ${getRegimeBadgeClass(regimeLabel)}`}
+                >
+                  {regimeLabel || "Loading..."}
+                </span>
+              </InfoTip>
             </div>
           );
         })}

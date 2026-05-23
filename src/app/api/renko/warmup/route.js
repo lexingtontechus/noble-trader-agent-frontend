@@ -15,7 +15,7 @@ import { getFastAPIAuthHeaders } from "@/lib/fastapi-auth";
 import { FASTAPI_BASE } from "@/lib/config";
 import { db } from "@/lib/supabase/db";
 import { redis } from "@/lib/redis";
-import { sendAlert, ALERT_TYPES } from "@/lib/alerting";
+
 import { withAuth } from "@/lib/withAuth";
 
 const RENKO_BASE = `${FASTAPI_BASE}/renko`;
@@ -359,18 +359,7 @@ export const POST = withAuth(async (request, context, authContext) => {
       // Non-critical — still return the data
     }
 
-    // Step 7: Send alert notification (non-critical — never let alerting break warmup)
-    try {
-      await sendAlert({
-        type: ALERT_TYPES.SYSTEM,
-        symbol,
-        message: `${symbol} warm-up complete: ${totalBricks} bricks, ${totalTrades} trades`,
-        severity: "info",
-        data: { bricks: totalBricks, trades: totalTrades, prices_fed: prices.length, period },
-      });
-    } catch (alertErr) {
-      console.warn("[warmup] Alert failed (non-critical):", alertErr.message);
-    }
+    // Step 7: Skip SYSTEM warmup notification — too noisy, UI shows inline state
 
     return Response.json({
       success: true,

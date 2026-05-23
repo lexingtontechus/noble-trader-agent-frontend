@@ -182,6 +182,7 @@ export function PriceFeedProvider({ children }) {
     connected,
     prices,
     priceHistory,
+    quotes: finnhubQuotes,
     connectionMode,
     subscribe,
     unsubscribe,
@@ -204,7 +205,7 @@ export function PriceFeedProvider({ children }) {
   useEffect(() => {
     try {
       const saved = localStorage.getItem(CHART_MODE_KEY);
-      if (["live", "advanced", "heatmap", "calendar", "flow"].includes(saved)) setChartMode(saved);
+      if (["live", "advanced", "heatmap", "calendar", "flow", "feeds"].includes(saved)) setChartMode(saved);
     } catch { /* ignore */ }
   }, []);
 
@@ -277,16 +278,59 @@ export function PriceFeedProvider({ children }) {
     [watchlistWithPrices],
   );
 
-  // Merge Alpaca bid/ask into the prices object for all consumers
+  // Merge bid/ask from Finnhub WS quotes + Alpaca snapshots into the prices object
+  // Priority: Finnhub WS quotes (real-time) > Alpaca snapshots (5s poll)
   const enrichedPrices = useMemo(() => {
     const result = { ...prices };
+    // Merge Finnhub WS quotes first (higher priority — real-time)
+    for (const [sym, q] of Object.entries(finnhubQuotes)) {
+      if (result[sym]) {
+        result[sym] = {
+          ...result[sym],
+          wsBid: q.bid,
+          wsAsk: q.ask,
+          wsBidSize: q.bidSize,
+          wsAskSize: q.askSize,
+          wsQuoteTime: q.timestamp,
+          // Use Finnhub WS bid/ask if no Alpaca data yet, or as preferred source
+          bid: q.bid ?? result[sym].bid,
+          ask: q.ask ?? result[sym].ask,
+          bidSize: q.bidSize ?? result[sym].bidSize,
+          askSize: q.askSize ?? result[sym].askSize,
+          quoteSource: "finnhub",
+        };
+      }
+    }
+    // Then merge Alpaca snapshots (fills gaps where Finnhub quotes are absent)
     for (const [sym, ba] of Object.entries(alpacaBidAsk)) {
       if (result[sym]) {
-        result[sym] = { ...result[sym], ...ba };
+        // Only use Alpaca bid/ask if Finnhub WS hasn't provided quote data
+        const hasFinnhubQuote = !!finnhubQuotes[sym];
+        result[sym] = {
+          ...result[sym],
+          // Always merge Alpaca data as backup
+          alpacaBid: ba.bid,
+          alpacaAsk: ba.ask,
+          alpacaBidSize: ba.bidSize,
+          alpacaAskSize: ba.askSize,
+          alpacaSpread: ba.spread,
+          alpacaSpreadBps: ba.spreadBps,
+          alpacaTime: ba.timestamp,
+          // Use Alpaca bid/ask only if Finnhub WS quote isn't available
+          ...(hasFinnhubQuote ? {} : {
+            bid: ba.bid,
+            ask: ba.ask,
+            bidSize: ba.bidSize,
+            askSize: ba.askSize,
+            spread: ba.spread,
+            spreadBps: ba.spreadBps,
+            quoteSource: "alpaca",
+          }),
+        };
       }
     }
     return result;
-  }, [prices, alpacaBidAsk]);
+  }, [prices, finnhubQuotes, alpacaBidAsk]);
 
   const value = useMemo(
     () => ({
@@ -298,9 +342,10 @@ export function PriceFeedProvider({ children }) {
       removeFromWatchlist,
       reorderWatchlist,
 
-      // Real-time prices (enriched with Alpaca bid/ask)
+      // Real-time prices (enriched with Finnhub WS quotes + Alpaca bid/ask)
       prices: enrichedPrices,
       priceHistory,
+      finnhubQuotes,
       connected,
       connectionMode,
       lastUpdate,
@@ -342,6 +387,7 @@ export function PriceFeedProvider({ children }) {
       reorderWatchlist,
       enrichedPrices,
       priceHistory,
+      finnhubQuotes,
       connected,
       connectionMode,
       lastUpdate,

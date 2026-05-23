@@ -7,6 +7,7 @@ import ObservationFeatures from '@/components/analysis/ObservationFeatures'
 import RiskCard from '@/components/analysis/RiskCard'
 import RecommendationsCard from '@/components/analysis/RecommendationsCard'
 import CommentaryCard from '@/components/analysis/CommentaryCard'
+import InfoTip from '@/components/shared/InfoTip'
 
 /**
  * CommentaryCardWrapper — fetches AI commentary for a symbol's regime/risk data
@@ -148,9 +149,11 @@ export default function PortfolioAnalysisCard({ symbol, data, loading, error, on
           <div className="flex items-center gap-2">
             <h3 className="card-title text-lg">{symbol}</h3>
             {positionInfo && (
-              <span className={`badge badge-sm ${positionInfo.netSide === 'long' ? 'badge-success' : positionInfo.netSide === 'short' ? 'badge-error' : 'badge-ghost'}`}>
-                {positionInfo.netSide === 'long' ? 'LONG' : positionInfo.netSide === 'short' ? 'SHORT' : '—'}
-              </span>
+              <InfoTip tip={positionInfo.netSide === 'long' ? 'Net position direction based on order history: more buys than sells' : positionInfo.netSide === 'short' ? 'Net position direction: more sells than buys' : ''}>
+                <span className={`badge badge-sm ${positionInfo.netSide === 'long' ? 'badge-success' : positionInfo.netSide === 'short' ? 'badge-error' : 'badge-ghost'}`}>
+                  {positionInfo.netSide === 'long' ? 'LONG' : positionInfo.netSide === 'short' ? 'SHORT' : '—'}
+                </span>
+              </InfoTip>
             )}
           </div>
           <div className="flex items-center gap-2">
@@ -197,7 +200,7 @@ export default function PortfolioAnalysisCard({ symbol, data, loading, error, on
             onChange={() => toggleSection('regime')}
           />
           <div className="collapse-title text-sm font-semibold">
-            🏛️ Regime State
+            🏛️ Regime State<InfoTip tip="Hidden Markov Model regime detection — identifies market state (bull/bear/neutral)" />
           </div>
           <div className="collapse-content">
             <RegimeCard data={regime} />
@@ -212,7 +215,7 @@ export default function PortfolioAnalysisCard({ symbol, data, loading, error, on
             onChange={() => toggleSection('hmm')}
           />
           <div className="collapse-title text-sm font-semibold">
-            🔬 HMM Features
+            🔬 HMM Features<InfoTip tip="Hidden Markov Model observation features used for regime classification" />
           </div>
           <div className="collapse-content">
             <ObservationFeatures data={analysis} />
@@ -227,7 +230,7 @@ export default function PortfolioAnalysisCard({ symbol, data, loading, error, on
             onChange={() => toggleSection('risk')}
           />
           <div className="collapse-title text-sm font-semibold">
-            ⚠️ Risk Metrics
+            ⚠️ Risk Metrics<InfoTip tip="Value at Risk, CVaR, drawdown, and volatility analysis" />
           </div>
           <div className="collapse-content">
             <RiskCard data={risk} />
@@ -242,7 +245,7 @@ export default function PortfolioAnalysisCard({ symbol, data, loading, error, on
             onChange={() => toggleSection('recommendations')}
           />
           <div className="collapse-title text-sm font-semibold">
-            💡 Recommendations
+            💡 Recommendations<InfoTip tip="Strategy-driven position sizing and trade recommendations" />
           </div>
           <div className="collapse-content">
             <RecommendationsCard data={analysis} />
@@ -257,7 +260,7 @@ export default function PortfolioAnalysisCard({ symbol, data, loading, error, on
             onChange={() => toggleSection('commentary')}
           />
           <div className="collapse-title text-sm font-semibold">
-            🤖 AI Commentary
+            🤖 AI Commentary<InfoTip tip="LLM-generated market analysis and interpretation" />
           </div>
           <div className="collapse-content">
             <CommentaryCardWrapper symbol={symbol} regime={regime} sizing={sizing} risk={risk} />

@@ -1,5 +1,7 @@
 'use client'
 
+import InfoTip from "@/components/shared/InfoTip";
+
 export default function RiskCard({ data }) {
   if (!data) return null
 
@@ -24,31 +26,31 @@ export default function RiskCard({ data }) {
       {/* Key Metrics — compact grid */}
       <div className="grid grid-cols-2 gap-2">
         <div className="bg-base-200 rounded-lg px-3 py-2">
-          <div className="text-xs text-base-content/60">VaR 95%</div>
+          <div className="text-xs text-base-content/60">VaR 95%<InfoTip tip="Value at Risk at 95% — max expected loss on 95% of days" /></div>
           <div className="text-error font-bold font-mono">{var95}%</div>
         </div>
         <div className="bg-base-200 rounded-lg px-3 py-2">
-          <div className="text-xs text-base-content/60">VaR 99%</div>
+          <div className="text-xs text-base-content/60">VaR 99%<InfoTip tip="Value at Risk at 99% — max expected loss on 99% of days (more conservative)" /></div>
           <div className="text-error font-bold font-mono">{var99}%</div>
         </div>
         <div className="bg-base-200 rounded-lg px-3 py-2">
-          <div className="text-xs text-base-content/60">CVaR 95%</div>
+          <div className="text-xs text-base-content/60">CVaR 95%<InfoTip tip="Conditional VaR — average loss when VaR is exceeded (worse than VaR)" /></div>
           <div className="text-error font-bold font-mono">{cvar95}%</div>
         </div>
         <div className="bg-base-200 rounded-lg px-3 py-2">
-          <div className="text-xs text-base-content/60">CVaR 99%</div>
+          <div className="text-xs text-base-content/60">CVaR 99%<InfoTip tip="Conditional VaR at 99% — average loss in the worst 1% of scenarios" /></div>
           <div className="text-error font-bold font-mono">{cvar99}%</div>
         </div>
         <div className="bg-base-200 rounded-lg px-3 py-2">
-          <div className="text-xs text-base-content/60">Max Drawdown</div>
+          <div className="text-xs text-base-content/60">Max Drawdown<InfoTip tip="Largest peak-to-trough decline in portfolio value" /></div>
           <div className="text-warning font-bold font-mono">{maxDD}%</div>
         </div>
         <div className="bg-base-200 rounded-lg px-3 py-2">
-          <div className="text-xs text-base-content/60">Annual Vol</div>
+          <div className="text-xs text-base-content/60">Annual Vol<InfoTip tip="Annualized volatility — standard deviation of returns scaled to yearly basis" /></div>
           <div className="font-bold font-mono">{annVol}%</div>
         </div>
         <div className="bg-base-200 rounded-lg px-3 py-2">
-          <div className="text-xs text-base-content/60">Annual Return</div>
+          <div className="text-xs text-base-content/60">Annual Return<InfoTip tip="Annualized return — expected yearly return based on historical performance" /></div>
           <div className="text-success font-bold font-mono">{annRet}%</div>
         </div>
       </div>
@@ -56,11 +58,11 @@ export default function RiskCard({ data }) {
       {/* Sortino & Calmar — inline */}
       <div className="grid grid-cols-2 gap-2">
         <div className="bg-base-200 rounded-lg px-3 py-2">
-          <div className="text-xs text-base-content/60">Sortino Ratio</div>
+          <div className="text-xs text-base-content/60">Sortino Ratio<InfoTip tip="Risk-adjusted return penalizing only downside volatility (unlike Sharpe)" /></div>
           <div className="text-accent font-bold font-mono">{sortino}</div>
         </div>
         <div className="bg-base-200 rounded-lg px-3 py-2">
-          <div className="text-xs text-base-content/60">Calmar Ratio</div>
+          <div className="text-xs text-base-content/60">Calmar Ratio<InfoTip tip="Annual return divided by max drawdown — return per unit of worst-case risk" /></div>
           <div className="text-accent font-bold font-mono">{calmar}</div>
         </div>
       </div>
@@ -88,7 +90,7 @@ export default function RiskCard({ data }) {
       {/* Risk Budget Used */}
       <div>
         <div className="flex justify-between text-xs mb-1">
-          <span className="font-medium">Risk Budget Used</span>
+          <span className="font-medium">Risk Budget Used<InfoTip tip="Percentage of allocated risk budget consumed by current positions" /></span>
           <span className="opacity-70">{riskBudget.toFixed(1)}%</span>
         </div>
         <progress

@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback, useRef, Component } from "react";
 import dynamic from "next/dynamic";
-import { notifySuccess, notifyError, notifyWarning } from "@/lib/notifications";
+import { notifyError, notifyWarning } from "@/lib/notifications";
 import useRenkoStream from "@/hooks/useRenkoStream";
 
 // Lazy-load heavy sub-components
@@ -164,9 +164,7 @@ export default function RenkoPage() {
   const renkoStream = useRenkoStream(symbol, {
     enabled: streaming,
     onBrick: (brick) => {
-      notifySuccess(
-        `New ${brick.direction || ""} brick at ${brick.close_price ?? brick.close ?? "?"}`
-      );
+      // Silently refresh data — no toast per-brick (too noisy)
       fetchAllData(false);
     },
     onSignal: (signal) => {
@@ -393,9 +391,7 @@ export default function RenkoPage() {
         }
 
         const cachedLabel = data.cached ? " (from cache)" : "";
-        notifySuccess(
-          `${sym} warm-up complete!${cachedLabel} ${data.prices_fed} prices → ${data.total_bricks} bricks, ${data.total_trades} trades`
-        );
+        // Warm-up complete — UI already shows warmingUp state inline; skip toast to reduce noise
       } else {
         notifyError(`${sym} warm-up failed: ${data.error || "Unknown error"}`);
       }
@@ -455,7 +451,7 @@ export default function RenkoPage() {
         method: "POST",
         body: newConfig,
       });
-      notifySuccess("Configuration saved. Pipeline has been reset.");
+      // Config saved — UI already reflects the change; skip toast
       await fetchAllData(true);
     } catch (e) {
       notifyError(`Failed to save config: ${e.message}`);
@@ -472,7 +468,7 @@ export default function RenkoPage() {
         method: "POST",
         params: { symbol },
       });
-      notifySuccess("Pipeline reset successfully.");
+      // Pipeline reset — UI already reflects the change; skip toast
       await fetchAllData(true);
     } catch (e) {
       notifyError(`Failed to reset pipeline: ${e.message}`);
@@ -501,13 +497,7 @@ export default function RenkoPage() {
         body: { price: Math.round(tickPrice * 100) / 100, symbol },
       });
 
-      if (result?.bricks_created?.length > 0) {
-        notifySuccess(
-          `Brick created! ${result.bricks_created.length} new, signal: ${result.signal?.pattern_type || "none"}`
-        );
-      } else {
-        notifySuccess("Tick processed: no new bricks (price didn't move enough)");
-      }
+      // Tick processed — data refreshed silently below; skip per-tick toast
 
       // Refresh data
       await fetchAllData(false);

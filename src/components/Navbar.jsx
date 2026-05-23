@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback } from "react";
 import dynamic from "next/dynamic";
-import { UserButton, OrganizationSwitcher } from "@clerk/nextjs";
+import { UserButton, OrganizationSwitcher, Show } from "@clerk/nextjs";
 import { useRole } from "@/hooks/useRole";
 import ThemeSwitcher from "@/components/shared/ThemeSwitcher";
 import TradingModeToggle from "@/components/shared/TradingModeToggle";
@@ -275,44 +275,47 @@ export default function Navbar({ activeView, setActiveView }) {
             </button>
           </div>
 
-          {/* Clerk Organization Switcher — org-scoped multi-tenancy */}
-          <div className="hidden sm:flex items-center">
-            <OrganizationSwitcher
-              afterCreateOrganizationUrl="/"
-              afterSelectOrganizationUrl="/"
-              appearance={{
-                elements: {
-                  rootBox: "w-auto",
-                  organizationSwitcherTrigger: "btn btn-ghost btn-xs gap-1 text-xs",
-                },
-              }}
-            />
-          </div>
-
-          {/* Clerk UserButton with Settings + Admin custom menu items */}
-          <UserButton afterSignOutUrl="/">
-            <UserButton.MenuItems>
-              <UserButton.Action
-                label="Settings"
-                labelIcon={<span style={{ fontSize: 14 }}>🔧</span>}
-                onClick={() => setActiveView("settings")}
+          {/* Authenticated-only controls — hidden when signed out */}
+          <Show when="signed-in">
+            {/* Clerk Organization Switcher — org-scoped multi-tenancy */}
+            <div className="hidden sm:flex items-center">
+              <OrganizationSwitcher
+                afterCreateOrganizationUrl="/"
+                afterSelectOrganizationUrl="/"
+                appearance={{
+                  elements: {
+                    rootBox: "w-auto",
+                    organizationSwitcherTrigger: "btn btn-ghost btn-xs gap-1 text-xs",
+                  },
+                }}
               />
-              {isAdmin && (
-                <>
-                  <UserButton.Action
-                    label="Admin Panel"
-                    labelIcon={<span style={{ fontSize: 14 }}>⚙️</span>}
-                    onClick={() => setActiveView("admin")}
-                  />
-                  <UserButton.Action
-                    label="P&L Controls"
-                    labelIcon={<span style={{ fontSize: 14 }}>🛡️</span>}
-                    onClick={() => setActiveView("pnl")}
-                  />
-                </>
-              )}
-            </UserButton.MenuItems>
-          </UserButton>
+            </div>
+
+            {/* Clerk UserButton with Settings + Admin custom menu items */}
+            <UserButton afterSignOutUrl="/">
+              <UserButton.MenuItems>
+                <UserButton.Action
+                  label="Settings"
+                  labelIcon={<span style={{ fontSize: 14 }}>🔧</span>}
+                  onClick={() => setActiveView("settings")}
+                />
+                {isAdmin && (
+                  <>
+                    <UserButton.Action
+                      label="Admin Panel"
+                      labelIcon={<span style={{ fontSize: 14 }}>⚙️</span>}
+                      onClick={() => setActiveView("admin")}
+                    />
+                    <UserButton.Action
+                      label="P&L Controls"
+                      labelIcon={<span style={{ fontSize: 14 }}>🛡️</span>}
+                      onClick={() => setActiveView("pnl")}
+                    />
+                  </>
+                )}
+              </UserButton.MenuItems>
+            </UserButton>
+          </Show>
         </div>
       </div>
 

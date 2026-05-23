@@ -21,6 +21,8 @@ import { StreamProvider } from "@/context/StreamContext";
 import { PortfolioProvider } from "@/context/PortfolioContext";
 import NotificationToast from "@/components/shared/NotificationToast";
 import RoleGate from "@/components/shared/RoleGate";
+import SpeedDialTrade from "@/components/shared/SpeedDialTrade";
+import KeyboardShortcutsOverlay from "@/components/shared/KeyboardShortcutsOverlay";
 
 function FeatureCard({ icon, title, description, badge, badgeVariant = "outline" }) {
   return (
@@ -43,6 +45,7 @@ export default function Home() {
   const [settingsTab, setSettingsTab] = useState("profile");
   const [showOnboarding, setShowOnboarding] = useState(false);
   const [onboardingChecked, setOnboardingChecked] = useState(false);
+  const [showShortcuts, setShowShortcuts] = useState(false);
 
   // Check onboarding status on mount
   useEffect(() => {
@@ -117,46 +120,101 @@ export default function Home() {
     };
   }, []);
 
-  // Keyboard shortcuts
+  // Keyboard shortcuts — global hotkey system
   useEffect(() => {
     const handleKeyDown = (e) => {
-      if (e.target.tagName === "INPUT" || e.target.tagName === "TEXTAREA")
+      // Skip if typing in an input/textarea (unless Escape)
+      const inInput = e.target.tagName === "INPUT" || e.target.tagName === "TEXTAREA" || e.target.isContentEditable;
+
+      // Escape always works — close overlays/modals
+      if (e.key === "Escape") {
+        if (showShortcuts) {
+          e.preventDefault();
+          setShowShortcuts(false);
+          return;
+        }
+        // Dispatch close event for any open modal
+        window.dispatchEvent(new CustomEvent("noble:escape"));
         return;
+      }
+
+      // Don't process other shortcuts when typing
+      if (inInput) return;
+
+      // ── Help overlay: `?` or `Cmd/Ctrl + /` ────────────────────────────
+      if (e.key === "?" || ((e.metaKey || e.ctrlKey) && e.key === "/")) {
+        e.preventDefault();
+        setShowShortcuts((prev) => !prev);
+        return;
+      }
+
+      // ── Navigation: Cmd/Ctrl + 1-0 ────────────────────────────────────
       if ((e.metaKey || e.ctrlKey) && e.key === "1") {
-        e.preventDefault();
-        setActiveView("dashboard");
+        e.preventDefault(); setActiveView("dashboard");
       } else if ((e.metaKey || e.ctrlKey) && e.key === "2") {
-        e.preventDefault();
-        setActiveView("prices");
+        e.preventDefault(); setActiveView("prices");
       } else if ((e.metaKey || e.ctrlKey) && e.key === "3") {
-        e.preventDefault();
-        setActiveView("orders");
+        e.preventDefault(); setActiveView("orders");
       } else if ((e.metaKey || e.ctrlKey) && e.key === "4") {
-        e.preventDefault();
-        setSafeActiveView("trade");
+        e.preventDefault(); setSafeActiveView("trade");
       } else if ((e.metaKey || e.ctrlKey) && e.key === "5") {
-        e.preventDefault();
-        setActiveView("renko");
+        e.preventDefault(); setActiveView("renko");
       } else if ((e.metaKey || e.ctrlKey) && e.key === "6") {
-        e.preventDefault();
-        setActiveView("simulate");
+        e.preventDefault(); setActiveView("simulate");
       } else if ((e.metaKey || e.ctrlKey) && e.key === "7") {
-        e.preventDefault();
-        setActiveView("portfolio");
+        e.preventDefault(); setActiveView("portfolio");
       } else if ((e.metaKey || e.ctrlKey) && e.key === "8") {
+        e.preventDefault(); setActiveView("search");
+      } else if ((e.metaKey || e.ctrlKey) && e.key === "9") {
+        e.preventDefault(); setSafeActiveView("pnl");
+      } else if ((e.metaKey || e.ctrlKey) && e.key === "0") {
+        e.preventDefault(); setSafeActiveView("admin");
+      }
+      // ── Quick Trade: T key ─────────────────────────────────────────────
+      else if (e.key === "t" && !e.metaKey && !e.ctrlKey && !e.altKey) {
+        e.preventDefault();
+        window.dispatchEvent(new CustomEvent("noble:quick-trade"));
+      }
+      // ── Quick Buy: B key ──────────────────────────────────────────────
+      else if (e.key === "b" && !e.metaKey && !e.ctrlKey && !e.altKey) {
+        e.preventDefault();
+        window.dispatchEvent(new CustomEvent("noble:quick-trade", { detail: { side: "buy" } }));
+      }
+      // ── Quick Sell: S key ──────────────────────────────────────────────
+      else if (e.key === "s" && !e.metaKey && !e.ctrlKey && !e.altKey) {
+        e.preventDefault();
+        window.dispatchEvent(new CustomEvent("noble:quick-trade", { detail: { side: "sell" } }));
+      }
+      // ── Focus Search: / key ───────────────────────────────────────────
+      else if (e.key === "/" && !e.metaKey && !e.ctrlKey && !e.altKey) {
         e.preventDefault();
         setActiveView("search");
-      } else if ((e.metaKey || e.ctrlKey) && e.key === "9") {
-        e.preventDefault();
-        setSafeActiveView("pnl");
-      } else if ((e.metaKey || e.ctrlKey) && e.key === "0") {
-        e.preventDefault();
-        setSafeActiveView("admin");
+        // Focus the search input after navigation
+        requestAnimationFrame(() => {
+          const searchInput = document.querySelector('input[placeholder*="symbol"], input[placeholder*="Search"], input[placeholder*="ticker"]');
+          if (searchInput) searchInput.focus();
+        });
+      }
+      // ── Go-to shortcuts (G + key) ─────────────────────────────────────
+      else if (e.key === "g" && !e.metaKey && !e.ctrlKey && !e.altKey) {
+        // Start a go-to sequence — listen for next key within 500ms
+        const handleGoTo = (e2) => {
+          window.removeEventListener("keydown", handleGoTo);
+          if (e2.target.tagName === "INPUT" || e2.target.tagName === "TEXTAREA") return;
+          const key = e2.key.toLowerCase();
+          if (key === "s") { setSettingsTab("profile"); setActiveView("settings"); }
+          else if (key === "d") setActiveView("dashboard");
+          else if (key === "p") setActiveView("prices");
+          else if (key === "o") setActiveView("orders");
+        };
+        window.addEventListener("keydown", handleGoTo);
+        // Auto-cleanup if no second key pressed within 500ms
+        setTimeout(() => window.removeEventListener("keydown", handleGoTo), 500);
       }
     };
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, []);
+  }, [showShortcuts, setSafeActiveView, setActiveView, setSettingsTab]);
 
   return (
     <Show
@@ -194,6 +252,11 @@ export default function Home() {
                 </main>
                 <Footer />
                 <NotificationToast />
+                <SpeedDialTrade />
+                <KeyboardShortcutsOverlay
+                  open={showShortcuts}
+                  onClose={() => setShowShortcuts(false)}
+                />
               </div>
             )}
           </StreamProvider>

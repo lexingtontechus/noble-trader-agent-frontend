@@ -1,5 +1,7 @@
 'use client'
 
+import InfoTip from "@/components/shared/InfoTip";
+
 export default function RecommendationsCard({ data }) {
   if (!data) return null
 
@@ -13,12 +15,15 @@ export default function RecommendationsCard({ data }) {
   // Regime action badge
   let actionLabel = 'DEFENSIVE'
   let actionClass = 'badge-error'
+  let actionTip = 'Strategy recommends reducing positions; risk multiplier < 0.5'
   if (riskMult > 1.0) {
     actionLabel = 'AGGRESSIVE'
     actionClass = 'badge-success'
+    actionTip = 'Strategy recommends increasing positions; risk multiplier > 1.0'
   } else if (riskMult >= 0.5) {
     actionLabel = 'MODERATE'
     actionClass = 'badge-warning'
+    actionTip = 'Strategy recommends maintaining current positions; risk multiplier 0.5–1.0'
   }
 
   // Kelly sizing breakdown steps
@@ -43,14 +48,16 @@ export default function RecommendationsCard({ data }) {
       {/* Header */}
       <div className="flex items-center gap-2">
         <h3 className="font-semibold text-sm">Recommendations</h3>
-        <span className={`badge ${actionClass} badge-sm`}>{actionLabel}</span>
+        <InfoTip tip={actionTip}>
+          <span className={`badge ${actionClass} badge-sm`}>{actionLabel}</span>
+        </InfoTip>
       </div>
 
       {/* Position Size — compact inline */}
       <div className="bg-base-200 rounded-lg px-3 py-2">
-        <div className="text-xs text-base-content/60">Recommended Position Size</div>
+        <div className="text-xs text-base-content/60">Recommended Position Size<InfoTip tip="Kelly-derived position size after applying all safety adjustments" /></div>
         <div className="text-primary text-2xl font-bold font-mono">{recommendedF}%</div>
-        <div className="text-xs text-base-content/50">Regime-gated fractional Kelly</div>
+        <div className="text-xs text-base-content/50">Regime-gated fractional Kelly<InfoTip tip="Kelly fraction adjusted downward by regime conditions" /></div>
       </div>
 
       {/* Stop / TP levels — horizontal row */}
@@ -82,22 +89,22 @@ export default function RecommendationsCard({ data }) {
           <li className="step" data-content="">
             <span className="font-mono text-xs">{fullKelly}%</span>
             <br />
-            <span className="opacity-60">Full</span>
+            <span className="opacity-60">Full<InfoTip tip="Raw Kelly criterion — mathematically optimal but aggressive bet size" /></span>
           </li>
           <li className="step" data-content="">
             <span className="font-mono text-xs">{fractional}%</span>
             <br />
-            <span className="opacity-60">Frac</span>
+            <span className="opacity-60">Frac<InfoTip tip="Fractional Kelly — reduced to a safer fraction (typically half-Kelly)" /></span>
           </li>
           <li className="step" data-content="">
             <span className="font-mono text-xs">{volScaled}%</span>
             <br />
-            <span className="opacity-60">Vol</span>
+            <span className="opacity-60">Vol<InfoTip tip="Volatility-scaled — adjusted for current volatility conditions" /></span>
           </li>
           <li className="step" data-content="">
             <span className="font-mono text-xs">{regimeGated}%</span>
             <br />
-            <span className="opacity-60">Gate</span>
+            <span className="opacity-60">Gate<InfoTip tip="Regime-gated — further reduced if current regime indicates elevated risk" /></span>
           </li>
           <li className="step step-primary" data-content="">
             <span className="font-mono text-xs">{recommended}%</span>
@@ -110,7 +117,7 @@ export default function RecommendationsCard({ data }) {
       {/* Sharpe Ratio — inline compact */}
       <div className="bg-base-200 rounded-lg px-3 py-2 flex items-center justify-between">
         <div>
-          <div className="text-xs text-base-content/60">Sharpe Ratio</div>
+          <div className="text-xs text-base-content/60">Sharpe Ratio<InfoTip tip="Risk-adjusted return: excess return per unit of volatility (>1.0=strong, <0.5=weak)" /></div>
           <div className="text-accent font-bold font-mono">{sharpe}</div>
         </div>
         <div className="text-xs text-base-content/50 text-right">
