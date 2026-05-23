@@ -113,13 +113,13 @@ export function PriceFeedProvider({ children }) {
 
   // ── Chart State ───────────────────────────────────────────────────────────
   const [chartPeriod, setChartPeriod] = useState("6mo");
-  const [chartMode, setChartMode] = useState("advanced"); // "live" | "advanced" | "heatmap"
+  const [chartMode, setChartMode] = useState("advanced"); // "live" | "advanced" | "heatmap" | "calendar"
 
   // Load chart mode from localStorage on mount
   useEffect(() => {
     try {
       const saved = localStorage.getItem(CHART_MODE_KEY);
-      if (["live", "advanced", "heatmap"].includes(saved)) setChartMode(saved);
+      if (["live", "advanced", "heatmap", "calendar"].includes(saved)) setChartMode(saved);
     } catch { /* ignore */ }
   }, []);
 

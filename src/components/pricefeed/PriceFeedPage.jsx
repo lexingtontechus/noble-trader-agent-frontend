@@ -7,6 +7,7 @@ import WatchlistPanel from "./WatchlistPanel";
 import LiveCandlestickChart from "./LiveCandlestickChart";
 import TradingViewAdvancedChart from "./TradingViewAdvancedChart";
 import SectorHeatmap from "./SectorHeatmap";
+import EconomicCalendar from "./EconomicCalendar";
 import PriceAlertPanel from "./PriceAlertPanel";
 
 /**
@@ -87,7 +88,7 @@ function PriceFeedContent() {
 
           {/* Chart content — conditional rendering */}
           <div className="flex-1 min-h-0 overflow-hidden">
-            {chartMode === "live" ? <LiveCandlestickChart /> : chartMode === "heatmap" ? <SectorHeatmap /> : <TradingViewAdvancedChart />}
+            {chartMode === "live" ? <LiveCandlestickChart /> : chartMode === "heatmap" ? <SectorHeatmap /> : chartMode === "calendar" ? <EconomicCalendar /> : <TradingViewAdvancedChart />}
           </div>
 
           {/* Mobile: Watchlist toggle button */}
@@ -327,11 +328,25 @@ function ChartModeToggle({ chartMode, setChartMode, connected }) {
             <span>Heatmap</span>
           </span>
         </button>
+        <button
+          className={`btn join-item btn-xs sm:btn-xs min-h-[36px] sm:min-h-0 ${
+            chartMode === "calendar" ? "btn-info" : "btn-ghost"
+          }`}
+          onClick={() => setChartMode("calendar")}
+          title="Economic Calendar"
+        >
+          <span className="flex items-center gap-1.5">
+            <svg xmlns="http://www.w3.org/2000/svg" className="h-3.5 w-3.5 hidden sm:inline" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+            </svg>
+            <span className="hidden sm:inline">Calendar</span>
+          </span>
+        </button>
       </div>
 
       {/* Mode description */}
       <span className="hidden lg:inline text-[10px] text-base-content/30 ml-2">
-        {chartMode === "live" ? "WebSocket feed" : chartMode === "heatmap" ? "Market pulse" : "TradingView Pro"}
+        {chartMode === "live" ? "WebSocket feed" : chartMode === "heatmap" ? "Market pulse" : chartMode === "calendar" ? "Econ events" : "TradingView Pro"}
       </span>
     </div>
   );
@@ -402,6 +417,11 @@ function StatusBar({
             <>
               <span className="w-1.5 h-1.5 rounded-full bg-accent" />
               Heatmap
+            </>
+          ) : chartMode === "calendar" ? (
+            <>
+              <span className="w-1.5 h-1.5 rounded-full bg-info" />
+              Calendar
             </>
           ) : (
             <>
