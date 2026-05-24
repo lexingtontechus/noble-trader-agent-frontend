@@ -1,8 +1,8 @@
 # Noble Trader Agent — Project State
 
-**Last Updated:** 2026-05-22
+**Last Updated:** 2026-05-24
 **Version:** v7.0.0 (Production-Grade Institutional Trading Platform)
-**Current Phase:** P7 — Mobile-Responsive Overhaul + WebSocket Price Feed
+**Current Phase:** P7 — Mobile-Responsive Overhaul + Admin Config Panel
 
 ---
 
@@ -509,6 +509,63 @@ PORT=8000
 
 ---
 
+## Runtime Configuration System (v7.0.0)
+
+### Overview
+
+All system parameters (148 config keys across 8 categories) are now runtime-configurable via the Admin Configuration Panel. No redeployment needed to adjust risk limits, brick sizes, or any other parameter.
+
+### Architecture
+
+- **Backend:** `RuntimeConfig` singleton with 30-second TTL cache backed by Supabase `system_config` table
+- **Resolution order:** DB override → env var → hardcoded default
+- **API:** 9 REST endpoints under `/config/` (see Backend Config Endpoints below)
+- **Audit:** All mutations logged to `system_config_audit` (immutable, append-only)
+- **Docs:** See `ADMIN_CONFIG_PANEL.md`, `ADMIN_CONFIG_IMPLEMENTATION.md`, `ADMIN_CONFIG_SECURITY.md`
+
+### Config Categories (148 keys total)
+
+| Category | Key Prefix | Count | Description |
+|----------|-----------|-------|-------------|
+| Renko | `renko.*` | 56 | Brick engine, swing classifier, pattern detector, signal filter, risk manager, sizing, costs, execution, pipeline, optimization, backend |
+| Execution | `exec.*` | 23 | Almgren-Chriss impact, fill probability, financing, volume penalties |
+| Alpaca | `alpaca.*` | 17 | WebSocket reconnection, ping/timeout, snapshot frequency, throttling |
+| Risk | `risk.*` | 15 | Annualization, daily loss limit, CVaR multipliers, stress test scenarios |
+| Sizing | `sizing.*` | 13 | Masaniello base risk, risk bounds, probability/RR gates, batch parameters |
+| Stream | `stream.*` | 11 | HMM fit requirements, price buffer, Kelly/vol/risk defaults, queue sizes |
+| Auth | `auth.*` | 6 | Clerk role/JWKS/enrich cache TTLs, circuit breaker thresholds |
+| Regime | `regime.*` | 7 | Vol/trend feature windows, HMM seed/iterations, stability lookback |
+
+### Backend Config Endpoints
+
+| Endpoint | Method | Description | Auth Level |
+|----------|--------|-------------|------------|
+| `/config/` | GET | List all config entries grouped by category | any role |
+| `/config/categories` | GET | List all category names | any role |
+| `/config/{category}` | GET | Get config entries for a category | any role |
+| `/config/key/{key}` | GET | Get a single config entry | any role |
+| `/config/key/{key}` | PATCH | Update a config value | admin only |
+| `/config/key/{key}/reset` | POST | Reset a config to its default | admin only |
+| `/config/reload` | GET | Force reload from DB (bypasses TTL) | admin only |
+| `/config/schema` | GET | Full schema with types, ranges, descriptions | any role |
+| `/config/audit` | GET | Config change audit log | admin only |
+
+### Admin Config Panel (Frontend)
+
+- **Route:** `/admin/config` (admin-only, Clerk `privateMetadata.role === "admin"`)
+- **Components:** ConfigCategoryNav, ConfigEditor, ConfigSearchBar, ConfigAuditLog, ConfigValueInput, AdminGuard
+- **BFF proxy:** `/api/admin/config/[...path]` → injects Clerk JWT → proxies to FastAPI `/config/*`
+- **Features:** Category sidebar, type-aware inputs (float/int/bool/str/json), search/filter, audit log, reset to default, reload from DB
+
+### Supabase Tables
+
+| Table | Purpose | RLS |
+|-------|---------|-----|
+| `system_config` | 148 config key/value rows | auth read, service_role write |
+| `system_config_audit` | Immutable change audit log | auth read, service_role write |
+
+---
+
 ## Phase Completion History
 
 | Phase | Description | Status | Key Deliverables |
@@ -520,4 +577,4 @@ PORT=8000
 | **P4** | Production Readiness | ✅ Complete | Rate Limiting, Encryption, Retention, Multi-Tenant, Deployment Runbook |
 | **P5** | MCP Integration + API Keys | ✅ Complete | MCP BFF proxy, tool discovery, McpIntegrationPanel, API key system, auto-expire cron, pg_cron migration |
 | **P6** | Price Feed + Advanced Charting | ✅ Complete | Finnhub WS hook, OHLCV BFF, TickerTape, WatchlistPanel, LiveCandlestickChart, technical indicators (SMA/EMA/BB/RSI/MACD), PriceFeedPage |
-| **P7** | Mobile-Responsive Overhaul | 🔄 In Progress | P0: Settings tabs scroll, 7 table→card views (ComparisonTable, OrderHistory, OpenPositions, LivePnL positions/trades, Risk Analysis, TDA Anomaly), LiveCandlestickChart mobile controls, AllocationBar responsive, touch targets 44px |
+| **P7** | Mobile-Responsive Overhaul + Admin Config | 🔄 In Progress | P0: Settings tabs scroll, 7 table→card views, LiveCandlestickChart mobile controls, AllocationBar responsive, touch targets 44px. Admin Config Panel: RuntimeConfig engine (148 keys, 8 categories), /config/* API (9 endpoints), AdminGuard, BFF proxy, type-aware editor, audit log |
