@@ -55,6 +55,7 @@ function actionToPath(action) {
     "live-status": "/live/status",
     "live-toggle": "/live/toggle",
     "snapshot-restore": "/snapshot/restore",
+    health: "/health",
   };
   return mapping[action] || `/${action}`;
 }
