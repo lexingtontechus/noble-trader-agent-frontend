@@ -12,15 +12,18 @@ const ROLE_HIERARCHY = { viewer: 0, trader: 1, admin: 2 };
 /**
  * useRole — Reusable hook for role-based access control.
  *
- * Reads the user's role from Clerk `privateMetadata.role`.
- * Falls back to "viewer" if not set (matching server-side default).
- * Also reads org_id from Clerk OrganizationMemberships when using Clerk Orgs.
+ * Reads the user's role from Clerk `privateMetadata.role` via server-side
+ * verification (/api/auth/role). The server route uses clerkClient() to
+ * read privateMetadata which is NOT reliably available on the client.
+ *
+ * Client-side privateMetadata is used as an optimistic hint only;
+ * the server-synced role is the source of truth.
  *
  * Role hierarchy: viewer (0) → trader (1) → admin (2)
  *
  * Features:
- *   - Client-side role from Clerk privateMetadata (instant, no API call)
- *   - Optional server-side sync via /api/auth/role (verifies against DB)
+ *   - Server-verified role via /api/auth/role (authoritative source)
+ *   - Optimistic client-side role from Clerk privateMetadata (instant hint)
  *   - isTrader: true for admin + trader (can place trades)
  *   - isViewer: true only for viewer role (read-only)
  *   - canAccess(minRole): check if user meets a minimum role level
@@ -44,10 +47,15 @@ export function useRole() {
   const [serverRole, setServerRole] = useState(null);
   const [serverSynced, setServerSynced] = useState(false);
 
-  // Client-side role from Clerk privateMetadata
-  const role = isLoaded
-    ? (user?.privateMetadata?.role || "viewer")
-    : "viewer";
+  // Optimistic client-side hint from Clerk privateMetadata
+  // NOTE: privateMetadata is NOT reliably exposed to the client by Clerk.
+  // It may be undefined even when set in the Clerk Dashboard.
+  const clientHint = isLoaded
+    ? (user?.privateMetadata?.role || null)
+    : null;
+
+  // Authoritative role: server-synced > client hint > "viewer" default
+  const role = serverRole || clientHint || "viewer";
 
   // Derive org_id and org_role from active Clerk organization
   const orgId = organization?.id || null;
@@ -55,7 +63,7 @@ export function useRole() {
     (m) => m.organization.id === orgId
   )?.role || null;
 
-  // Role booleans
+  // Role booleans (server-synced role is authoritative)
   const isAdmin = role === "admin" || orgRole === "org:admin";
   const isTrader = role === "admin" || role === "trader" || orgRole === "org:admin";
   const isViewer = role === "viewer";
@@ -67,7 +75,7 @@ export function useRole() {
     return userLevel >= requiredLevel;
   }, [role]);
 
-  // One-time server-side role sync (verifies against Clerk backend)
+  // One-time server-side role sync (authoritative — reads via clerkClient backend)
   useEffect(() => {
     if (!isLoaded || !user || serverSynced) return;
 
@@ -81,7 +89,7 @@ export function useRole() {
         }
       })
       .catch(() => {
-        // Non-critical — client role is still valid from privateMetadata
+        // Non-critical — client hint is still used as fallback
       });
 
     return () => { cancelled = true; };
@@ -92,7 +100,7 @@ export function useRole() {
     isAdmin,
     isTrader,
     isViewer,
-    isLoaded,
+    isLoaded: isLoaded && serverSynced,
     canAccess,
     orgId,
     orgRole,
