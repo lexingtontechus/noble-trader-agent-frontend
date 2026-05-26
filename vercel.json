@@ -1,4 +1,5 @@
 {
+  "crons": [],
   "headers": [
     {
       "source": "/api/(.*)",
@@ -6,5 +7,25 @@
         { "key": "Cache-Control", "value": "no-store, max-age=0" }
       ]
     }
-  ]
+  ],
+  "functions": {
+    "src/app/api/renko/backtest/run/stream/route.ts": {
+      "maxDuration": 60
+    },
+    "src/app/api/stream/tick/route.js": {
+      "maxDuration": 30
+    },
+    "src/app/api/stream/seed/route.js": {
+      "maxDuration": 30
+    },
+    "src/app/api/stream/latest-price/route.js": {
+      "maxDuration": 10
+    },
+    "src/app/api/tda/scan/route.js": {
+      "maxDuration": 60
+    },
+    "src/app/api/campaign/tick/route.js": {
+      "maxDuration": 30
+    }
+  }
 }

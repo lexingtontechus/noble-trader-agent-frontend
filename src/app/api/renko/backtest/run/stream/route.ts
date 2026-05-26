@@ -8,7 +8,13 @@
  *
  * The frontend uses `fetch()` + `ReadableStream` (not `EventSource`)
  * because this is a POST request with a JSON body.
+ *
+ * v7.4: maxDuration capped at 60s to prevent Vercel Fluid Compute engagement.
+ * Large backtests that need more time should use the non-streaming /run endpoint.
  */
+
+// Limit function duration to 60s — prevents Fluid Compute auto-provisioning
+export const maxDuration = 60;
 
 import { getFastAPIAuthHeaders } from "@/lib/fastapi-auth";
 import { FASTAPI_BASE } from "@/lib/config";
@@ -145,7 +151,7 @@ export const POST = withAuth(async (request: Request, context: any, authContext:
         ...authHeaders,
       },
       body: JSON.stringify(payload),
-      signal: AbortSignal.timeout(180000), // 3 min for large backtests
+      signal: AbortSignal.timeout(55000), // 55s — within 60s maxDuration cap
     });
 
     if (!upstreamResp.ok) {
