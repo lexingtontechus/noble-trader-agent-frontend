@@ -4,7 +4,7 @@ import { useState, useEffect, useCallback, useRef, Component } from "react";
 import dynamic from "next/dynamic";
 import { notifySuccess, notifyError, notifyWarning } from "@/lib/notifications";
 import useRenkoStream from "@/hooks/useRenkoStream";
-import { warmUpRenkoPipeline } from "@/lib/renko-client";
+import { warmUpRenkoPipeline, getRenkoHeartbeat } from "@/lib/renko-client";
 
 // Lazy-load heavy sub-components
 const BrickChart = dynamic(() => import("./BrickChart"), { ssr: false });
@@ -81,6 +81,34 @@ const TABS = [
   { key: "config", label: "⚙️ Config", shortLabel: "Config" },
   { key: "risk", label: "🛡️ Risk", shortLabel: "Risk" },
 ];
+
+// ── Readiness Progress Bar ─────────────────────────────────────────────────
+
+function ReadinessBar({ status, brickCount }) {
+  const levels = {
+    cold: { pct: 0, color: "bg-error", label: "Cold — needs warmup" },
+    warming: { pct: Math.min((brickCount / 50) * 40, 40), color: "bg-warning", label: `Warming — ${brickCount}/50 bricks` },
+    warm: { pct: 60, color: "bg-info", label: `Warm — ${brickCount} bricks` },
+    hot: { pct: 80, color: "bg-warning", label: `Hot — position open` },
+    live_ready: { pct: 100, color: "bg-success", label: "Live — ready to trade" },
+  };
+  const level = levels[status] || levels.cold;
+
+  return (
+    <div className="flex items-center gap-2 text-xs w-full">
+      <div className="flex-1">
+        <progress
+          className={`progress ${level.color} w-full h-2`}
+          value={level.pct}
+          max="100"
+        />
+      </div>
+      <span className="text-base-content/50 whitespace-nowrap min-w-[120px]">
+        {level.label}
+      </span>
+    </div>
+  );
+}
 
 // ── Metric Card ──────────────────────────────────────────────────────────────
 
@@ -161,6 +189,9 @@ export default function RenkoPage() {
   const [stats, setStats] = useState(null);
   const [config, setConfig] = useState({});
 
+  // Heartbeat state (instant data freshness check from trading:heartbeat:{symbol})
+  const [heartbeat, setHeartbeat] = useState(null);
+
   // ── Live Renko Stream ──────────────────────────────────────────────
   const renkoStream = useRenkoStream(symbol, {
     enabled: streaming,
@@ -183,7 +214,40 @@ export default function RenkoPage() {
   const abortControllerRef = useRef(null);
   const intervalRef = useRef(null);
 
-  // ── Load cached snapshot from Supabase (fast, no backend call) ──────
+  // ── Heartbeat-first initialization (O(1) Redis check) ─────────────
+  // Returns: 'fresh' | 'stale' | 'cold' | false
+  const checkHeartbeat = useCallback(async (sym) => {
+    try {
+      const hb = await getRenkoHeartbeat(sym);
+      if (hb && hb.available) {
+        setHeartbeat(hb);
+        // Set minimal pipeline state from heartbeat (instant, no warmup needed)
+        setPipelineState((prev) => ({
+          ...prev,
+          brick_count: hb.brick_count ?? 0,
+          last_brick_direction: hb.direction || prev?.last_brick_direction,
+          active_position: hb.has_position || false,
+        }));
+
+        if (hb.is_fresh && hb.status !== "cold") {
+          // Data is fresh and pipeline is not cold — skip warmup entirely
+          setLoading(false);
+          return "fresh";
+        } else if (hb.status !== "cold" && hb.brick_count > 0) {
+          // Pipeline is warm but stale — show data, trigger background refresh
+          return "stale";
+        } else {
+          // Pipeline is cold — needs full warmup
+          return "cold";
+        }
+      }
+    } catch (e) {
+      console.warn("[RenkoPage] Heartbeat check failed:", e.message);
+    }
+    return false;
+  }, []);
+
+  // ── Load cached snapshot from Supabase (fallback, no backend call) ──
   // Returns: 'fresh' | 'stale' | false
   const loadCachedSnapshot = useCallback(async (sym) => {
     try {
@@ -191,7 +255,6 @@ export default function RenkoPage() {
       if (res.ok) {
         const data = await res.json();
         if (data.cached) {
-          // Populate state from cached snapshot (instant, even if stale)
           setBricks(Array.isArray(data.bricks) ? data.bricks : []);
           setClassified(Array.isArray(data.classified) ? data.classified : []);
           setSignals(Array.isArray(data.signals) ? data.signals : []);
@@ -208,7 +271,7 @@ export default function RenkoPage() {
             session_trades: data.total_trades || 0,
             session_pnl_bricks: 0,
             total_trades: data.total_trades || 0,
-            total_pnl_bricks: data.total_pnl_bricks || 0,
+            total_pnl_bricks: 0,
           });
           setLoading(false);
           return data.stale ? "stale" : "fresh";
@@ -217,7 +280,7 @@ export default function RenkoPage() {
     } catch (e) {
       console.warn("[RenkoPage] Cache load failed:", e.message);
     }
-    return false; // Cache miss
+    return false;
   }, []);
 
   // Fetch all data from backend — accepts optional symbolOverride to avoid stale closure
@@ -225,7 +288,6 @@ export default function RenkoPage() {
     async (showLoading = true, symbolOverride = null) => {
       const activeSymbol = symbolOverride || symbol;
 
-      // Cancel any in-flight request
       if (abortControllerRef.current) {
         abortControllerRef.current.abort();
       }
@@ -236,7 +298,6 @@ export default function RenkoPage() {
       setError(null);
 
       try {
-        // Fetch all endpoints in parallel via BFF
         const [stateData, bricksData, classifiedData, signalsData, tradesData, statsData] =
           await Promise.allSettled([
             renkoApiFetch("state", { params: { symbol: activeSymbol } }),
@@ -249,7 +310,6 @@ export default function RenkoPage() {
 
         if (controller.signal.aborted) return;
 
-        // Process results — use fulfilled values, ignore rejected
         if (stateData.status === "fulfilled") {
           setPipelineState(stateData.value);
         }
@@ -275,13 +335,11 @@ export default function RenkoPage() {
         }
         if (statsData.status === "fulfilled") {
           setStats(statsData.value);
-          // Extract config from stats
           if (statsData.value?.config) {
             setConfig(statsData.value.config);
           }
         }
 
-        // Check if all failed (likely cold start)
         const allFailed = [
           stateData,
           bricksData,
@@ -311,18 +369,47 @@ export default function RenkoPage() {
     [symbol]
   );
 
-  // Initial fetch + auto-refresh
+  // ── Initial fetch: heartbeat-first, then cache, then warmup ────────
   useEffect(() => {
-    // Try loading from Supabase cache first (instant), then fall back to backend warmup
     const initData = async () => {
+      // Step 1: Check heartbeat (O(1) Redis — sub-ms)
+      const hbStatus = await checkHeartbeat(symbol);
+
+      if (hbStatus === "fresh") {
+        // Heartbeat says data is fresh — load snapshot for full data, skip warmup
+        const cacheStatus = await loadCachedSnapshot(symbol);
+        if (cacheStatus === "fresh" || cacheStatus === "stale") {
+          return; // Got cached data — done!
+        }
+        // No cached snapshot but heartbeat is fresh — fetch from backend
+        fetchAllData(false);
+        return;
+      }
+
+      if (hbStatus === "stale") {
+        // Data exists but stale — load cached snapshot for display, trigger warmup
+        const cacheStatus = await loadCachedSnapshot(symbol);
+        if (!cacheStatus) {
+          await warmUpSymbol(symbol);
+        } else {
+          warmUpSymbol(symbol); // Background refresh
+        }
+        return;
+      }
+
+      if (hbStatus === "cold") {
+        // Pipeline is cold — needs full warmup
+        await warmUpSymbol(symbol);
+        return;
+      }
+
+      // Heartbeat failed entirely — fall back to old cache → warmup flow
       const cacheStatus = await loadCachedSnapshot(symbol);
       if (cacheStatus === "fresh") {
-        // Fresh cache — data is current, no warmup needed
+        // Fresh cache — done
       } else if (cacheStatus === "stale") {
-        // Stale cache — show old data but trigger background refresh via backend warmup
         warmUpSymbol(symbol);
       } else {
-        // No cache — call backend warmup directly (auto mode: full if cold, incremental if warm)
         await warmUpSymbol(symbol);
       }
     };
@@ -359,14 +446,12 @@ export default function RenkoPage() {
   }, [autoRefresh, fetchAllData]);
 
   // Warm up a specific symbol (used by handleSymbolChange and handleWarmUp)
-  // Calls backend POST /renko/warmup directly — no BFF proxy needed
   const warmUpSymbol = useCallback(async (sym) => {
     setWarmingUp(true);
     try {
       const data = await warmUpRenkoPipeline(sym, { mode: "auto" });
 
       if (data.status === "ok") {
-        // Backend returns full state when include_state=true (default)
         if (data.bricks) setBricks(data.bricks);
         if (data.classified) setClassified(data.classified);
         if (data.signals) setSignals(data.signals);
@@ -396,7 +481,7 @@ export default function RenkoPage() {
     }
   }, []);
 
-  // Handle symbol change — load cache, auto-warm-up if no data or stale
+  // Handle symbol change — heartbeat-first, then cache, then warmup
   const handleSymbolChange = useCallback(async (newSymbol) => {
     setSymbol(newSymbol);
     setLoading(true);
@@ -405,23 +490,36 @@ export default function RenkoPage() {
     setSignals([]);
     setTrades([]);
     setPipelineState(null);
+    setHeartbeat(null);
     setError(null);
 
-    // Step 1: Try loading cached data for the new symbol (instant)
-    const cacheStatus = await loadCachedSnapshot(newSymbol);
-    if (cacheStatus === "fresh") {
-      return; // Fresh cache — done!
+    // Step 1: Check heartbeat (instant)
+    const hbStatus = await checkHeartbeat(newSymbol);
+    if (hbStatus === "fresh") {
+      const cacheStatus = await loadCachedSnapshot(newSymbol);
+      if (cacheStatus) return;
+      fetchAllData(false, newSymbol);
+      return;
     }
-    if (cacheStatus === "stale") {
-      // Show stale data but trigger background refresh via backend warmup
-      warmUpSymbol(newSymbol); // Non-blocking — updates state when complete
+    if (hbStatus === "stale") {
+      const cacheStatus = await loadCachedSnapshot(newSymbol);
+      warmUpSymbol(newSymbol);
       return;
     }
 
-    // Step 2: No cache — call backend warmup directly (returns full state)
-    // This replaces the old pattern of: fetchAllData → check state → warmUpSymbol
+    // Step 2: No heartbeat or cold — try cache
+    const cacheStatus = await loadCachedSnapshot(newSymbol);
+    if (cacheStatus === "fresh") {
+      return;
+    }
+    if (cacheStatus === "stale") {
+      warmUpSymbol(newSymbol);
+      return;
+    }
+
+    // Step 3: No cache — full warmup
     await warmUpSymbol(newSymbol);
-  }, [loadCachedSnapshot, warmUpSymbol]);
+  }, [checkHeartbeat, loadCachedSnapshot, warmUpSymbol]);
 
   // Handle save config
   const handleSaveConfig = async (newConfig) => {
@@ -460,14 +558,12 @@ export default function RenkoPage() {
   // Handle process tick (manual) — uses latest market price
   const handleProcessTick = async () => {
     try {
-      // Fetch the latest price from our BFF endpoint
       const priceRes = await fetch(`/api/stream/latest-price?symbol=${encodeURIComponent(symbol)}`);
       let tickPrice;
       if (priceRes.ok) {
         const priceData = await priceRes.json();
         tickPrice = priceData.price || priceData.close || 500;
       } else {
-        // Fallback: use last known price from pipeline state + small random
         const lastPrice = bricks.length > 0 ? bricks[bricks.length - 1].close_price : 500;
         tickPrice = lastPrice + (Math.random() - 0.5) * 1.0;
       }
@@ -485,7 +581,6 @@ export default function RenkoPage() {
         notifySuccess("Tick processed: no new bricks (price didn't move enough)");
       }
 
-      // Refresh data
       await fetchAllData(false);
     } catch (e) {
       notifyError(`Tick failed: ${e.message}`);
@@ -498,10 +593,20 @@ export default function RenkoPage() {
   // Manual warm-up button handler (uses shared warmUpSymbol)
   const handleWarmUp = () => warmUpSymbol(symbol);
 
-  // Pipeline status
+  // Pipeline status — use heartbeat when available for richer info
+  const pipelineStatus = heartbeat?.status || (pipelineState?.brick_count > 0 ? "warm" : "cold");
   const isActive = pipelineState?.brick_count > 0;
   const lastDirection = pipelineState?.last_brick_direction;
   const sessionPnl = pipelineState?.session_pnl_bricks ?? 0;
+
+  // Heartbeat badge color
+  const statusBadgeClass = {
+    cold: "badge-ghost",
+    warming: "badge-warning",
+    warm: "badge-info",
+    hot: "badge-warning",
+    live_ready: "badge-success",
+  }[pipelineStatus] || "badge-ghost";
 
   return (
     <RenkoErrorBoundary>
@@ -512,11 +617,18 @@ export default function RenkoPage() {
             <h1 className="text-2xl sm:text-3xl font-bold text-primary">
               Renko HFT Pipeline
             </h1>
-            <span
-              className={`badge ${isActive ? "badge-success" : "badge-ghost"}`}
-            >
-              {isActive ? "Active" : "Idle"}
+            <span className={`badge ${statusBadgeClass}`}>
+              {pipelineStatus === "live_ready" ? "Live" :
+               pipelineStatus === "warm" ? "Active" :
+               pipelineStatus === "warming" ? "Warming" :
+               pipelineStatus === "hot" ? "In Position" :
+               "Idle"}
             </span>
+            {heartbeat?.last_price > 0 && (
+              <span className="text-base-content/50 font-mono text-sm">
+                ${heartbeat.last_price.toFixed(2)}
+              </span>
+            )}
           </div>
 
           <div className="flex items-center gap-2 flex-wrap">
@@ -546,7 +658,7 @@ export default function RenkoPage() {
               </label>
             </div>
 
-            {/* Warm Up button — feeds 6mo of historical data */}
+            {/* Warm Up button */}
             <button
               className={`btn btn-sm ${warmingUp ? "btn-disabled" : "btn-secondary"}`}
               onClick={handleWarmUp}
@@ -648,8 +760,14 @@ export default function RenkoPage() {
               </div>
             ) : (
               <>
+                {/* Readiness Progress Bar */}
+                <ReadinessBar
+                  status={pipelineStatus}
+                  brickCount={pipelineState?.brick_count ?? 0}
+                />
+
                 {/* Quick Stats Row */}
-                <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-6 gap-3">
+                <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-6 gap-3 mt-2">
                   <MetricCard
                     label="Bricks"
                     value={pipelineState?.brick_count ?? 0}
@@ -714,7 +832,7 @@ export default function RenkoPage() {
                   />
                 </div>
 
-                {/* Stream Status Indicator */}
+                {/* Stream Status + Heartbeat Info */}
                 <div className="flex items-center gap-3 mt-2 text-xs">
                   {streaming ? (
                     renkoStream.connected ? (
@@ -749,6 +867,13 @@ export default function RenkoPage() {
                   {streaming && renkoStream.tickCount > 0 && (
                     <span className="text-base-content/30">
                       Ticks: {renkoStream.tickCount} | Bricks: {renkoStream.brickCount}
+                    </span>
+                  )}
+                  {/* Heartbeat freshness indicator */}
+                  {heartbeat && (
+                    <span className="text-base-content/30 ml-auto">
+                      {heartbeat.is_fresh ? "✓ Fresh" : `Last: ${heartbeat.age_seconds ?? "?"}s ago`}
+                      {heartbeat.source_mode && ` (${heartbeat.source_mode})`}
                     </span>
                   )}
                 </div>

@@ -264,6 +264,26 @@ async function ttl(key) {
   }
 }
 
+// ── Convenience: Trading Heartbeat ─────────────────────────────────────────
+
+/**
+ * Get trading heartbeat for a symbol from Redis.
+ * Returns { status, brick_count, last_price, ... } or null.
+ */
+async function getHeartbeat(symbol) {
+  const key = `trading:heartbeat:${symbol}`;
+  return get(key);
+}
+
+/**
+ * Save trading heartbeat for a symbol to Redis.
+ * Default TTL: 24 hours.
+ */
+async function setHeartbeat(symbol, data, ttlSeconds = CACHE_TTL.REDIS.SNAPSHOT * 6) {
+  const key = `trading:heartbeat:${symbol}`;
+  return set(key, data, ttlSeconds);
+}
+
 // ── Export ───────────────────────────────────────────────────────────────────
 
 export const redis = {
@@ -282,5 +302,7 @@ export const redis = {
   setRegime,
   getBacktestCache,
   setBacktestCache,
+  getHeartbeat,
+  setHeartbeat,
   isAvailable,
 };

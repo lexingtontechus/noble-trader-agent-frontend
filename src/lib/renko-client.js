@@ -66,6 +66,26 @@ async function renkoFetch(path, options = {}) {
 // ── GET Endpoints ────────────────────────────────────────────────────────────
 
 /**
+ * Get instant pipeline state from trading:heartbeat.
+ * O(1) Redis HGETALL — no Supabase, no pipeline hydration.
+ * Returns readiness level, brick count, last price, freshness, etc.
+ * GET /renko/heartbeat?symbol=SPY
+ */
+export async function getRenkoHeartbeat(symbol = "SPY") {
+  const res = await renkoFetch(`/heartbeat?symbol=${encodeURIComponent(symbol)}`);
+  return res.json();
+}
+
+/**
+ * Get heartbeat status for all tracked symbols.
+ * GET /renko/heartbeat/all
+ */
+export async function getAllRenkoHeartbeats() {
+  const res = await renkoFetch(`/heartbeat/all`);
+  return res.json();
+}
+
+/**
  * Get current pipeline state.
  * GET /renko/state?symbol=SPY
  */
