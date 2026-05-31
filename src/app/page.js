@@ -1,6 +1,6 @@
 "use client";
 
-import { Show, SignIn } from "@clerk/nextjs";
+import { Show, SignInButton } from "@clerk/nextjs";
 import { useState, useEffect, useCallback } from "react";
 import { useRole } from "@/hooks/useRole";
 import Navbar from "@/components/Navbar";
@@ -276,9 +276,9 @@ export default function Home() {
             </div>
           </div>
           <div className="navbar-end">
-            <SignIn mode="modal" routing="hash">
+            <SignInButton mode="modal">
               <button className="btn btn-primary btn-sm">Sign In</button>
-            </SignIn>
+            </SignInButton>
           </div>
         </header>
 
@@ -293,12 +293,12 @@ export default function Home() {
             and real-time WebSocket price feeds into a unified platform for disciplined, data-driven trading.
           </p>
           <div className="mt-10 flex flex-col sm:flex-row gap-4 items-center">
-            <SignIn mode="modal" routing="hash">
+            <SignInButton mode="modal">
               <button className="btn btn-primary btn-lg gap-2">
                 <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" /></svg>
                 Get Started Free
               </button>
-            </SignIn>
+            </SignInButton>
             <a href="#features" className="btn btn-ghost btn-lg">Explore Features</a>
           </div>
 
@@ -399,12 +399,12 @@ export default function Home() {
               Start with paper trading and upgrade when you are ready.
             </p>
             <div className="mt-8">
-              <SignIn mode="modal" routing="hash">
+              <SignInButton mode="modal">
                 <button className="btn btn-primary btn-lg gap-2">
                   <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" /></svg>
                   Start Trading Now
                 </button>
-              </SignIn>
+              </SignInButton>
             </div>
           </div>
         </section>
