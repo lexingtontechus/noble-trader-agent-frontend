@@ -41,7 +41,7 @@ export default function OrdersPage() {
     setCheckingKeys(true);
     try {
       const res = await fetch('/api/credentials/paper');
-      const data = await res.json();
+      const data = await res.json().catch(() => ({ configured: false }));
       setKeysConfigured(data.configured === true);
     } catch {
       setKeysConfigured(false);

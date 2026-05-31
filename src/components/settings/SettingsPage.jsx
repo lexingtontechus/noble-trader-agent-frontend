@@ -52,9 +52,9 @@ export default function SettingsPage({ initialTab = "profile" }) {
   const fetchCredStatus = useCallback(async () => {
     try {
       const res = await fetch("/api/credentials/paper");
-      const paper = await res.json();
+      const paper = await res.json().catch(() => ({ configured: false, isValid: null }));
       const liveRes = await fetch("/api/credentials/live");
-      const live = await liveRes.json();
+      const live = await liveRes.json().catch(() => ({ configured: false, isValid: null }));
       setCredStatus({ paper, live });
     } catch {
       // Ignore — stale data is fine
@@ -70,7 +70,7 @@ export default function SettingsPage({ initialTab = "profile" }) {
     setMigrating(true);
     try {
       const res = await fetch("/api/onboarding", { method: "PATCH" });
-      const data = await res.json();
+      const data = await res.json().catch(() => ({ migrated: false, error: "Server error. Please try again." }));
       setMigrationResult(data);
       if (data.migrated) {
         fetchCredStatus();

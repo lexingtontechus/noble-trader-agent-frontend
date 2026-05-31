@@ -55,7 +55,12 @@ export default function CredentialCard({
         body: JSON.stringify({ apiKey: apiKey.trim(), secretKey: secretKey.trim() }),
       });
 
-      const data = await res.json();
+      let data;
+      try {
+        data = await res.json();
+      } catch {
+        throw new Error(res.ok ? "Unexpected response from server" : `Server error (${res.status}). Please try again.`);
+      }
 
       if (!res.ok) {
         throw new Error(data.error || "Failed to save keys");
@@ -79,7 +84,12 @@ export default function CredentialCard({
 
     try {
       const res = await fetch(`/api/credentials/${type}`, { method: "PUT" });
-      const data = await res.json();
+      let data;
+      try {
+        data = await res.json();
+      } catch {
+        data = { valid: false, error: `Server error (${res.status}). Please try again.` };
+      }
       setTestResult(data);
     } catch (err) {
       setTestResult({ valid: false, error: err.message });
@@ -97,7 +107,12 @@ export default function CredentialCard({
 
     try {
       const res = await fetch(`/api/credentials/${type}`, { method: "DELETE" });
-      const data = await res.json();
+      let data;
+      try {
+        data = await res.json();
+      } catch {
+        throw new Error(res.ok ? "Unexpected response from server" : `Server error (${res.status}). Please try again.`);
+      }
 
       if (!res.ok) {
         throw new Error(data.error || "Failed to remove keys");

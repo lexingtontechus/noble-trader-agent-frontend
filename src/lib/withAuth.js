@@ -49,6 +49,7 @@ import { PLAN_HIERARCHY } from "@/lib/plans";
 import { createClient } from "@supabase/supabase-js";
 import { hashPII } from "@/lib/encryption";
 import { lookupApiKey, isValidApiKeyFormat } from "@/lib/api-keys";
+import { sanitizeError } from "@/lib/error-messages";
 
 // ── Supabase client for violation logging ─────────────────────────────────
 
@@ -212,6 +213,7 @@ export function withAuth(handler, options = {}) {
   } = options;
 
   return async function authedHandler(request, context) {
+    try {
     // ── CRON bypass ─────────────────────────────────────────────────────
     if (allowCron && isCronRequest(request)) {
       return handler(request, context, {
@@ -470,6 +472,13 @@ export function withAuth(handler, options = {}) {
     }
 
     return response;
+    } catch (unhandledError) {
+      // Top-level catch: any unhandled error in the auth/handler pipeline
+      // must still return JSON — never let Next.js return an HTML 500 page
+      console.error("[withAuth] Unhandled error in route handler:", unhandledError);
+      const { message, code, status } = sanitizeError(unhandledError, { context: "default" });
+      return Response.json({ error: message, code }, { status });
+    }
   };
 }
 
