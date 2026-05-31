@@ -4,7 +4,9 @@ import { useState, useEffect, useCallback, useRef, Component } from "react";
 import dynamic from "next/dynamic";
 import { notifySuccess, notifyError, notifyWarning } from "@/lib/notifications";
 import useRenkoStream from "@/hooks/useRenkoStream";
-import { warmUpRenkoPipeline, getRenkoHeartbeat } from "@/lib/renko-client";
+// NOTE: Do NOT import from renko-client.js here — it pulls in @clerk/nextjs/server
+// which requires "server-only" and breaks the client bundle.
+// All backend calls go through the BFF route /api/renko/[action] via renkoApiFetch().
 
 // Lazy-load heavy sub-components
 const BrickChart = dynamic(() => import("./BrickChart"), { ssr: false });
@@ -218,7 +220,7 @@ export default function RenkoPage() {
   // Returns: 'fresh' | 'stale' | 'cold' | false
   const checkHeartbeat = useCallback(async (sym) => {
     try {
-      const hb = await getRenkoHeartbeat(sym);
+      const hb = await renkoApiFetch("heartbeat", { params: { symbol: sym } });
       if (hb && hb.available) {
         setHeartbeat(hb);
         // Set minimal pipeline state from heartbeat (instant, no warmup needed)
@@ -449,7 +451,10 @@ export default function RenkoPage() {
   const warmUpSymbol = useCallback(async (sym) => {
     setWarmingUp(true);
     try {
-      const data = await warmUpRenkoPipeline(sym, { mode: "auto" });
+      const data = await renkoApiFetch("warmup", {
+        method: "POST",
+        body: { symbol: sym, mode: "auto", include_state: true },
+      });
 
       if (data.status === "ok") {
         if (data.bricks) setBricks(data.bricks);
