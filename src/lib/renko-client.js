@@ -389,6 +389,42 @@ export async function resetRenkoPipeline(symbol = "SPY") {
 }
 
 /**
+ * Warm up a Renko pipeline with historical prices.
+ * POST /renko/warmup
+ *
+ * Modes:
+ *   - "auto" (default): Incremental if warm, full if cold
+ *   - "full": Always rebuild from scratch
+ *   - "incremental": Append new data only (fails if cold)
+ *
+ * Response includes full pipeline data (bricks, classified, signals, trades, stats)
+ * when include_state=true, eliminating the need for separate GET calls.
+ *
+ * @param {string} symbol - Trading symbol (default: SPY)
+ * @param {object} options - Optional overrides
+ * @param {string} [options.period="6mo"] - Yahoo Finance period for full warmup
+ * @param {string} [options.mode="auto"] - Warmup mode: auto, full, or incremental
+ * @param {boolean} [options.include_state=true] - Include full pipeline data in response
+ * @returns {Promise<object>} WarmupResponse with pipeline data
+ */
+export async function warmUpRenkoPipeline(symbol = "SPY", options = {}) {
+  const body = {
+    symbol,
+    period: options.period ?? "6mo",
+    mode: options.mode ?? "auto",
+    include_state: options.include_state ?? true,
+  };
+
+  const res = await renkoFetch("/warmup", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+    timeout: 120000, // 2 min for Yahoo fetch + pipeline processing
+  });
+  return res.json();
+}
+
+/**
  * Run a backtest with Phase 2-7 parameters.
  * POST /renko/backtest/run
  */

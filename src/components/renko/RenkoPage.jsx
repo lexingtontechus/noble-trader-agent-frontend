@@ -2,8 +2,9 @@
 
 import { useState, useEffect, useCallback, useRef, Component } from "react";
 import dynamic from "next/dynamic";
-import { notifyError, notifyWarning } from "@/lib/notifications";
+import { notifySuccess, notifyError, notifyWarning } from "@/lib/notifications";
 import useRenkoStream from "@/hooks/useRenkoStream";
+import { warmUpRenkoPipeline } from "@/lib/renko-client";
 
 // Lazy-load heavy sub-components
 const BrickChart = dynamic(() => import("./BrickChart"), { ssr: false });
@@ -50,7 +51,7 @@ class RenkoErrorBoundary extends Component {
               {this.state.error?.message || "Unknown error"}
             </div>
             <button
-              className="btn min-h-[44px] sm:min-h-0 sm:btn-sm btn-ghost mt-2"
+              className="btn btn-sm btn-ghost mt-2"
               onClick={() =>
                 this.setState({ hasError: false, error: null })
               }
@@ -164,7 +165,9 @@ export default function RenkoPage() {
   const renkoStream = useRenkoStream(symbol, {
     enabled: streaming,
     onBrick: (brick) => {
-      // Silently refresh data — no toast per-brick (too noisy)
+      notifySuccess(
+        `New ${brick.direction || ""} brick at ${brick.close_price ?? brick.close ?? "?"}`
+      );
       fetchAllData(false);
     },
     onSignal: (signal) => {
@@ -310,29 +313,17 @@ export default function RenkoPage() {
 
   // Initial fetch + auto-refresh
   useEffect(() => {
-    // Try loading from Supabase cache first (instant), then fall back to backend
+    // Try loading from Supabase cache first (instant), then fall back to backend warmup
     const initData = async () => {
       const cacheStatus = await loadCachedSnapshot(symbol);
       if (cacheStatus === "fresh") {
         // Fresh cache — data is current, no warmup needed
       } else if (cacheStatus === "stale") {
-        // Stale cache — show old data but trigger background refresh
-        warmUpSymbol(symbol); // Updates Supabase + live state when done
+        // Stale cache — show old data but trigger background refresh via backend warmup
+        warmUpSymbol(symbol);
       } else {
-        // No cache — fetch from backend pipeline, auto-warm if empty
-        await fetchAllData(true);
-        // Check if backend pipeline is empty
-        try {
-          const checkRes = await fetch(`/api/renko/state?symbol=${encodeURIComponent(symbol)}`);
-          if (checkRes.ok) {
-            const stateData = await checkRes.json();
-            if (!stateData.brick_count || stateData.brick_count === 0) {
-              await warmUpSymbol(symbol);
-            }
-          }
-        } catch {
-          await warmUpSymbol(symbol);
-        }
+        // No cache — call backend warmup directly (auto mode: full if cold, incremental if warm)
+        await warmUpSymbol(symbol);
       }
     };
     initData();
@@ -368,18 +359,14 @@ export default function RenkoPage() {
   }, [autoRefresh, fetchAllData]);
 
   // Warm up a specific symbol (used by handleSymbolChange and handleWarmUp)
+  // Calls backend POST /renko/warmup directly — no BFF proxy needed
   const warmUpSymbol = useCallback(async (sym) => {
     setWarmingUp(true);
     try {
-      const res = await fetch("/api/renko/warmup", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ symbol: sym, period: "6mo" }),
-      });
+      const data = await warmUpRenkoPipeline(sym, { mode: "auto" });
 
-      const data = await res.json();
-
-      if (data.success) {
+      if (data.status === "ok") {
+        // Backend returns full state when include_state=true (default)
         if (data.bricks) setBricks(data.bricks);
         if (data.classified) setClassified(data.classified);
         if (data.signals) setSignals(data.signals);
@@ -388,12 +375,19 @@ export default function RenkoPage() {
           setStats(data.stats);
           if (data.stats.state) setPipelineState(data.stats.state);
           if (data.stats.config) setConfig(data.stats.config);
+        } else if (data.state) {
+          setPipelineState(data.state);
         }
 
-        const cachedLabel = data.cached ? " (from cache)" : "";
-        // Warm-up complete — UI already shows warmingUp state inline; skip toast to reduce noise
+        const modeLabel = data.mode ? ` (${data.mode})` : "";
+        const sourceLabel = data.source === "snapshot_restore" ? " (from cache)" :
+                           data.source === "up_to_date" ? " (already up to date)" : "";
+        const newBricksLabel = data.new_bricks ? ` (+${data.new_bricks} new)` : "";
+        notifySuccess(
+          `${sym} warm-up complete!${sourceLabel}${modeLabel} ${data.prices_fed || 0} prices → ${data.brick_count} bricks${newBricksLabel}`
+        );
       } else {
-        notifyError(`${sym} warm-up failed: ${data.error || "Unknown error"}`);
+        notifyError(`${sym} warm-up failed: ${data.detail || data.error || "Unknown error"}`);
       }
     } catch (e) {
       notifyError(`${sym} warm-up failed: ${e.message}`);
@@ -419,29 +413,15 @@ export default function RenkoPage() {
       return; // Fresh cache — done!
     }
     if (cacheStatus === "stale") {
-      // Show stale data but trigger background refresh
+      // Show stale data but trigger background refresh via backend warmup
       warmUpSymbol(newSymbol); // Non-blocking — updates state when complete
       return;
     }
 
-    // Step 2: No cache — fetch from backend pipeline (may have been warmed this session)
-    await fetchAllData(true, newSymbol);
-
-    // Step 3: If backend pipeline is empty (no bricks), auto-trigger warm-up
-    try {
-      const checkRes = await fetch(`/api/renko/state?symbol=${encodeURIComponent(newSymbol)}`);
-      if (checkRes.ok) {
-        const stateData = await checkRes.json();
-        if (!stateData.brick_count || stateData.brick_count === 0) {
-          // Pipeline is empty — auto warm-up this symbol
-          await warmUpSymbol(newSymbol);
-        }
-      }
-    } catch {
-      // If state check fails, try warm-up anyway
-      await warmUpSymbol(newSymbol);
-    }
-  }, [loadCachedSnapshot, fetchAllData, warmUpSymbol]);
+    // Step 2: No cache — call backend warmup directly (returns full state)
+    // This replaces the old pattern of: fetchAllData → check state → warmUpSymbol
+    await warmUpSymbol(newSymbol);
+  }, [loadCachedSnapshot, warmUpSymbol]);
 
   // Handle save config
   const handleSaveConfig = async (newConfig) => {
@@ -451,7 +431,7 @@ export default function RenkoPage() {
         method: "POST",
         body: newConfig,
       });
-      // Config saved — UI already reflects the change; skip toast
+      notifySuccess("Configuration saved. Pipeline has been reset.");
       await fetchAllData(true);
     } catch (e) {
       notifyError(`Failed to save config: ${e.message}`);
@@ -468,7 +448,7 @@ export default function RenkoPage() {
         method: "POST",
         params: { symbol },
       });
-      // Pipeline reset — UI already reflects the change; skip toast
+      notifySuccess("Pipeline reset successfully.");
       await fetchAllData(true);
     } catch (e) {
       notifyError(`Failed to reset pipeline: ${e.message}`);
@@ -497,7 +477,13 @@ export default function RenkoPage() {
         body: { price: Math.round(tickPrice * 100) / 100, symbol },
       });
 
-      // Tick processed — data refreshed silently below; skip per-tick toast
+      if (result?.bricks_created?.length > 0) {
+        notifySuccess(
+          `Brick created! ${result.bricks_created.length} new, signal: ${result.signal?.pattern_type || "none"}`
+        );
+      } else {
+        notifySuccess("Tick processed: no new bricks (price didn't move enough)");
+      }
 
       // Refresh data
       await fetchAllData(false);
@@ -505,37 +491,6 @@ export default function RenkoPage() {
       notifyError(`Tick failed: ${e.message}`);
     }
   };
-
-  // Track active pipelines across all symbols (minimal state for the multi-pipeline bar)
-  const [pipelineStatuses, setPipelineStatuses] = useState({});
-  const pipelineStatusFetched = useRef(false);
-
-  // Fetch all pipeline statuses on mount (lightweight — just /state per symbol)
-  useEffect(() => {
-    if (pipelineStatusFetched.current) return;
-    pipelineStatusFetched.current = true;
-
-    const fetchAllStatuses = async () => {
-      const statuses = {};
-      await Promise.allSettled(
-        SYMBOLS.map(async (sym) => {
-          try {
-            const data = await renkoApiFetch("state", { params: { symbol: sym } });
-            statuses[sym] = {
-              active: (data?.brick_count ?? 0) > 0,
-              bricks: data?.brick_count ?? 0,
-              hasPosition: data?.active_position ?? false,
-              pnl: data?.session_pnl_bricks ?? 0,
-            };
-          } catch {
-            statuses[sym] = { active: false, bricks: 0, hasPosition: false, pnl: 0 };
-          }
-        })
-      );
-      setPipelineStatuses(statuses);
-    };
-    fetchAllStatuses();
-  }, []);
 
   // Warming-up state (used by warmUpSymbol)
   const [warmingUp, setWarmingUp] = useState(false);
@@ -562,17 +517,6 @@ export default function RenkoPage() {
             >
               {isActive ? "Active" : "Idle"}
             </span>
-            {/* Execution Mode Badge */}
-            {config?.dry_run === false && config?.live_enabled && (
-              <div className="badge badge-error gap-1 text-xs">
-                LIVE TRADING
-              </div>
-            )}
-            {config?.dry_run !== false && (
-              <div className="badge badge-ghost gap-1 text-xs">
-                DRY RUN
-              </div>
-            )}
           </div>
 
           <div className="flex items-center gap-2 flex-wrap">
@@ -604,7 +548,7 @@ export default function RenkoPage() {
 
             {/* Warm Up button — feeds 6mo of historical data */}
             <button
-              className={`btn min-h-[44px] sm:min-h-0 sm:btn-sm ${warmingUp ? "btn-disabled" : "btn-secondary"}`}
+              className={`btn btn-sm ${warmingUp ? "btn-disabled" : "btn-secondary"}`}
               onClick={handleWarmUp}
               disabled={warmingUp}
             >
@@ -620,7 +564,7 @@ export default function RenkoPage() {
 
             {/* Process tick button */}
             <button
-              className="btn min-h-[44px] sm:min-h-0 sm:btn-sm btn-primary"
+              className="btn btn-sm btn-primary"
               onClick={handleProcessTick}
               disabled={warmingUp}
             >
@@ -629,7 +573,7 @@ export default function RenkoPage() {
 
             {/* Refresh button */}
             <button
-              className="btn min-h-[44px] sm:min-h-0 sm:btn-sm btn-ghost"
+              className="btn btn-sm btn-ghost"
               onClick={() => fetchAllData(true)}
               disabled={loading}
             >
@@ -657,47 +601,13 @@ export default function RenkoPage() {
 
             {/* Live Stream toggle */}
             <button
-              className={`btn min-h-[44px] sm:min-h-0 sm:btn-sm ${streaming ? "btn-accent" : "btn-outline"}`}
+              className={`btn btn-sm ${streaming ? "btn-accent" : "btn-outline"}`}
               onClick={() => setStreaming(!streaming)}
               title={streaming ? "Stop live stream" : "Start live stream"}
             >
               {streaming ? "🔴 Live" : "⚪ Stream"}
             </button>
           </div>
-        </div>
-
-        {/* Multi-Pipeline Status Bar */}
-        <div className="flex items-center gap-2 overflow-x-auto pb-1">
-          <span className="text-xs text-base-content/40 whitespace-nowrap">Pipelines:</span>
-          {SYMBOLS.map((sym) => {
-            const st = pipelineStatuses[sym];
-            const isSelected = sym === symbol;
-            return (
-              <button
-                key={sym}
-                onClick={() => handleSymbolChange(sym)}
-                className={`btn min-h-[44px] sm:min-h-0 sm:btn-xs gap-1 font-mono whitespace-nowrap ${
-                  isSelected
-                    ? "btn-primary"
-                    : st?.active
-                    ? "btn-outline btn-success"
-                    : "btn-ghost"
-                }`}
-              >
-                {sym}
-                {st?.active && (
-                  <span className="flex items-center gap-0.5">
-                    {st.hasPosition && (
-                      <span className="w-1.5 h-1.5 rounded-full bg-warning inline-block" title="Has position" />
-                    )}
-                    <span className={`text-[9px] ${st.pnl >= 0 ? "text-success" : "text-error"}`}>
-                      {st.pnl >= 0 ? "+" : ""}{st.pnl}br
-                    </span>
-                  </span>
-                )}
-              </button>
-            );
-          })}
         </div>
 
         {/* Pipeline State Banner */}
@@ -729,7 +639,7 @@ export default function RenkoPage() {
                   <h3 className="font-bold text-sm">Backend Unavailable</h3>
                   <div className="text-xs opacity-80">{error}</div>
                   <button
-                    className="btn min-h-[44px] sm:min-h-0 sm:btn-xs btn-ghost mt-2"
+                    className="btn btn-xs btn-ghost mt-2"
                     onClick={() => fetchAllData(true)}
                   >
                     Retry
