@@ -129,63 +129,138 @@ export async function GET(request) {
 // The backend handles all warmup logic: snapshot restore, incremental/full
 // warmup, Yahoo price fetching, and returns full pipeline state.
 // This eliminates the old chunked BFF warmup that was a Vercel Fluid Compute risk.
+//
+// v3: Added Render cold-start detection (HTML responses) + retry logic,
+// matching the pattern in /api/renko/[action]/route.js.
 
 export async function POST(request) {
   try {
     const body = await request.json();
     const authHeaders = await getFastAPIAuthHeaders();
+    const requestBody = {
+      symbol: body.symbol || "SPY",
+      period: body.period || "6mo",
+      mode: body.mode || "auto",
+      include_state: body.include_state ?? true,
+    };
 
-    // Proxy to backend warmup endpoint
-    const res = await fetch(`${RENKO_BASE}/warmup`, {
-      method: "POST",
-      headers: {
-        ...authHeaders,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        symbol: body.symbol || "SPY",
-        period: body.period || "6mo",
-        mode: body.mode || "auto",
-        include_state: body.include_state ?? true,
-      }),
-      signal: AbortSignal.timeout(120000), // 2 min for Yahoo fetch + pipeline processing
-    });
+    // Retry logic for Render cold starts (backend may return HTML while spinning up)
+    const maxRetries = 3;
+    let lastError = null;
 
-    const data = await res.json();
+    for (let i = 0; i < maxRetries; i++) {
+      try {
+        const res = await fetch(`${RENKO_BASE}/warmup`, {
+          method: "POST",
+          headers: {
+            ...authHeaders,
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify(requestBody),
+          signal: AbortSignal.timeout(120000), // 2 min for Yahoo fetch + pipeline processing
+        });
 
-    // If backend returned an error, forward it
-    if (!res.ok) {
-      return Response.json(
-        { error: data.detail || data.error || `Backend warmup failed (HTTP ${res.status})` },
-        { status: res.status }
-      );
+        // ── Guard: detect HTML responses (Render cold start) ──
+        const contentType = res.headers.get("content-type") || "";
+        if (contentType.includes("text/html")) {
+          console.warn(
+            `[warmup POST] Backend returned HTML (attempt ${i + 1}/${maxRetries}) — likely cold start`
+          );
+          if (i < maxRetries - 1) {
+            await new Promise((r) => setTimeout(r, 1000 * Math.pow(2, i))); // 1s, 2s, 4s
+            continue;
+          }
+          return Response.json(
+            {
+              error:
+                "Backend service is starting up. Please try again in a moment.",
+              code: "COLD_START",
+            },
+            { status: 503 }
+          );
+        }
+
+        // ── Parse response safely ──
+        let data;
+        try {
+          data = await res.json();
+        } catch (parseErr) {
+          // Response is not valid JSON — could be a raw error page or truncated response
+          const text = await res.text().catch(() => "");
+          console.error(
+            `[warmup POST] Non-JSON response (HTTP ${res.status}):`,
+            text.substring(0, 200)
+          );
+          return Response.json(
+            {
+              error: `Backend returned non-JSON response (HTTP ${res.status}). The service may be starting up.`,
+              code: "INVALID_RESPONSE",
+              preview: text.substring(0, 100),
+            },
+            { status: 502 }
+          );
+        }
+
+        // If backend returned an error, forward it
+        if (!res.ok) {
+          return Response.json(
+            {
+              error:
+                data.detail || data.error || `Backend warmup failed (HTTP ${res.status})`,
+            },
+            { status: res.status }
+          );
+        }
+
+        // Transform backend response to BFF format for backward compatibility
+        // Frontend components may still check data.success or data.total_bricks
+        return Response.json({
+          success: data.status === "ok",
+          cached:
+            data.source === "snapshot_restore" || data.source === "up_to_date",
+          symbol: data.symbol,
+          source: data.source,
+          mode: data.mode,
+          prices_fed: data.prices_fed || 0,
+          brick_count: data.brick_count,
+          total_bricks: data.brick_count, // Backward compat alias
+          new_bricks: data.new_bricks || 0,
+          total_trades: data.total_trades || 0,
+          total_pnl_bricks: data.total_pnl_bricks || 0,
+          // Full pipeline state (when include_state=true)
+          bricks: data.bricks || [],
+          classified: data.classified || [],
+          signals: data.signals || [],
+          trades: data.trades || [],
+          stats: data.stats || {},
+          config: data.config || data.stats?.config || {},
+          readiness: data.readiness || null,
+          state: data.state || null,
+          elapsed_ms: data.elapsed_ms,
+        });
+      } catch (fetchErr) {
+        lastError = fetchErr;
+        // Timeout or network error — retry with backoff
+        if (i < maxRetries - 1) {
+          console.warn(
+            `[warmup POST] Fetch failed (attempt ${i + 1}/${maxRetries}):`,
+            fetchErr.message
+          );
+          await new Promise((r) => setTimeout(r, 1000 * Math.pow(2, i)));
+          continue;
+        }
+      }
     }
 
-    // Transform backend response to BFF format for backward compatibility
-    // Frontend components may still check data.success or data.total_bricks
-    return Response.json({
-      success: data.status === "ok",
-      cached: data.source === "snapshot_restore" || data.source === "up_to_date",
-      symbol: data.symbol,
-      source: data.source,
-      mode: data.mode,
-      prices_fed: data.prices_fed || 0,
-      brick_count: data.brick_count,
-      total_bricks: data.brick_count,  // Backward compat alias
-      new_bricks: data.new_bricks || 0,
-      total_trades: data.total_trades || 0,
-      total_pnl_bricks: data.total_pnl_bricks || 0,
-      // Full pipeline state (when include_state=true)
-      bricks: data.bricks || [],
-      classified: data.classified || [],
-      signals: data.signals || [],
-      trades: data.trades || [],
-      stats: data.stats || {},
-      config: data.config || data.stats?.config || {},
-      readiness: data.readiness || null,
-      state: data.state || null,
-      elapsed_ms: data.elapsed_ms,
-    });
+    // All retries exhausted
+    console.error("[warmup POST] All retries exhausted:", lastError?.message);
+    return Response.json(
+      {
+        error: `Warm-up failed after ${maxRetries} attempts: ${lastError?.message || "Unknown error"}`,
+        code: "TIMEOUT",
+      },
+      { status: 504 }
+    );
   } catch (err) {
     console.error("[warmup POST] Error:", err);
     return Response.json(

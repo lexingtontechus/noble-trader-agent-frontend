@@ -156,15 +156,30 @@ async function renkoApiFetch(action, options = {}) {
 
   const res = await fetch(url, fetchOptions);
 
-  // Handle cold starts
+  // Handle cold starts / non-JSON responses from BFF
   const contentType = res.headers.get("content-type") || "";
   if (contentType.includes("text/html")) {
     throw new Error("Backend is starting up. Please wait a moment.");
   }
 
-  const data = await res.json();
+  let data;
+  try {
+    data = await res.json();
+  } catch {
+    throw new Error("Backend returned an invalid response. The service may be starting up.");
+  }
 
   if (!res.ok) {
+    // Provide user-friendly messages for known error codes
+    if (data.code === "COLD_START") {
+      throw new Error("Backend is starting up. Please wait a moment and try again.");
+    }
+    if (data.code === "INVALID_RESPONSE") {
+      throw new Error("Backend returned an invalid response. Please try again in a moment.");
+    }
+    if (data.code === "TIMEOUT") {
+      throw new Error("Backend is not responding. It may be starting up — please try again.");
+    }
     throw new Error(data.error || `HTTP ${res.status}`);
   }
 
@@ -448,7 +463,8 @@ export default function RenkoPage() {
   }, [autoRefresh, fetchAllData]);
 
   // Warm up a specific symbol (used by handleSymbolChange and handleWarmUp)
-  const warmUpSymbol = useCallback(async (sym) => {
+  // Auto-retries once on cold-start errors with a short delay
+  const warmUpSymbol = useCallback(async (sym, _retryCount = 0) => {
     setWarmingUp(true);
     try {
       const data = await renkoApiFetch("warmup", {
@@ -456,7 +472,7 @@ export default function RenkoPage() {
         body: { symbol: sym, mode: "auto", include_state: true },
       });
 
-      if (data.status === "ok") {
+      if (data.status === "ok" || data.success) {
         if (data.bricks) setBricks(data.bricks);
         if (data.classified) setClassified(data.classified);
         if (data.signals) setSignals(data.signals);
@@ -468,18 +484,29 @@ export default function RenkoPage() {
         } else if (data.state) {
           setPipelineState(data.state);
         }
+        // BFF wraps brick_count, backend returns brick_count
+        const brickCount = data.brick_count ?? data.total_bricks ?? 0;
 
         const modeLabel = data.mode ? ` (${data.mode})` : "";
         const sourceLabel = data.source === "snapshot_restore" ? " (from cache)" :
                            data.source === "up_to_date" ? " (already up to date)" : "";
         const newBricksLabel = data.new_bricks ? ` (+${data.new_bricks} new)` : "";
         notifySuccess(
-          `${sym} warm-up complete!${sourceLabel}${modeLabel} ${data.prices_fed || 0} prices → ${data.brick_count} bricks${newBricksLabel}`
+          `${sym} warm-up complete!${sourceLabel}${modeLabel} ${data.prices_fed || 0} prices → ${brickCount} bricks${newBricksLabel}`
         );
       } else {
         notifyError(`${sym} warm-up failed: ${data.detail || data.error || "Unknown error"}`);
       }
     } catch (e) {
+      // Auto-retry once on cold-start / transient errors
+      const isTransient = e.message?.includes("starting up") ||
+                          e.message?.includes("not responding") ||
+                          e.message?.includes("invalid response");
+      if (isTransient && _retryCount < 1) {
+        notifyWarning("Backend is warming up — retrying in 5s...");
+        await new Promise((r) => setTimeout(r, 5000));
+        return warmUpSymbol(sym, _retryCount + 1);
+      }
       notifyError(`${sym} warm-up failed: ${e.message}`);
     } finally {
       setWarmingUp(false);

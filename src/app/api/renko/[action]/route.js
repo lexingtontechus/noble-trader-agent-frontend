@@ -79,13 +79,17 @@ async function proxyRequest(request, params) {
   // Get auth headers
   const authHeaders = await getFastAPIAuthHeaders();
 
+  // Warmup needs a longer timeout (Yahoo fetch + pipeline processing can take 60s+)
+  const isWarmup = action === "warmup";
+  const timeout = isWarmup ? 120000 : 30000;
+
   const fetchOptions = {
     method,
     headers: {
       ...authHeaders,
       ...(isPost && { "Content-Type": "application/json" }),
     },
-    signal: AbortSignal.timeout(30000),
+    signal: AbortSignal.timeout(timeout),
   };
 
   // Forward body for POST requests
