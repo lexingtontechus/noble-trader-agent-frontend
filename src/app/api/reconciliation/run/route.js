@@ -31,8 +31,8 @@ export const POST = withAuth(async (request, _context, authContext) => {
     // Resolve Alpaca keys for fill verification
     let alpacaKeys = null;
     try {
-      const credentialType = await resolveCredentialType(request);
-      const keys = await getAlpacaCredentialKeys(credentialType, request);
+      const credentialType = await resolveCredentialType(request, authContext);
+      const keys = await getAlpacaCredentialKeys(credentialType, request, authContext);
       if (keys?.apiKey && keys?.secretKey) {
         alpacaKeys = {
           apiKey: keys.apiKey,

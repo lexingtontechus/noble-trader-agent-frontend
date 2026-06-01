@@ -305,4 +305,6 @@ export const redis = {
   getHeartbeat,
   setHeartbeat,
   isAvailable,
+  /** @internal Expose raw client for pipeline operations (rate-limiter) */
+  _getClient: getClient,
 };

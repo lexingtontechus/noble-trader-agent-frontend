@@ -8,10 +8,10 @@ import { createApiError } from "@/lib/error-messages";
  * Fetches order history using encrypted keys from Supabase
  * (with Clerk privateMetadata fallback for migration).
  */
-export const GET = withAuth(async (request, _context, _authContext) => {
+export const GET = withAuth(async (request, _context, authContext) => {
   try {
-    const credentialType = await resolveCredentialType(request);
-    const keys = await getAlpacaCredentialKeys(credentialType, request);
+    const credentialType = await resolveCredentialType(request, authContext);
+    const keys = await getAlpacaCredentialKeys(credentialType, request, authContext);
     if (!keys?.apiKey || !keys?.secretKey) {
       return Response.json(
         {

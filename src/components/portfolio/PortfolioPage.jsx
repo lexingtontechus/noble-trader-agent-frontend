@@ -20,10 +20,14 @@ export default function PortfolioPage() {
   } = usePortfolio()
 
   // Check Alpaca key status on mount
+  // Uses the unified credential endpoint (Supabase → Clerk fallback)
+  // NOT the legacy /api/clerk/alpaca-keys-status which only checks Clerk
   const checkKeys = useCallback(async () => {
     try {
-      const res = await fetch('/api/clerk/alpaca-keys-status')
-      const data = await res.json()
+      const controller = new AbortController();
+      const id = setTimeout(() => controller.abort(), 8000);
+      const res = await fetch('/api/credentials/paper', { signal: controller.signal }).finally(() => clearTimeout(id))
+      const data = await res.json().catch(() => ({ configured: false }))
       setKeysConfigured(data.configured === true)
     } catch {
       setKeysConfigured(false)

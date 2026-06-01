@@ -18,7 +18,7 @@ export const POST = withAuth(async (request, _context, authContext) => {
     const { userId } = authContext;
 
     // Resolve Alpaca keys (paper only)
-    const keys = await getAlpacaCredentialKeys("paper", request);
+    const keys = await getAlpacaCredentialKeys("paper", request, authContext);
     if (!keys?.apiKey || !keys?.secretKey) {
       return Response.json(
         {

@@ -75,7 +75,7 @@ async function ensureTable(client) {
 
 // ── GET: Retrieve historical snapshots ──────────────────────────────────────
 
-export const GET = withAuth(async (request, _context, { userId }) => {
+export const GET = withAuth(async (request, _context, authContext) => {
   try {
     const client = getServiceClient();
     await ensureTable(client);
@@ -89,7 +89,7 @@ export const GET = withAuth(async (request, _context, { userId }) => {
     let query = client
       .from("portfolio_snapshots")
       .select("*")
-      .eq("user_id", userId)
+      .eq("user_id", authContext.userId)
       .order("snapshot_date", { ascending: true })
       .limit(Math.min(limit, 1000));
 
@@ -127,14 +127,14 @@ export const GET = withAuth(async (request, _context, { userId }) => {
 
 // ── POST: Capture a new snapshot from Alpaca ────────────────────────────────
 
-export const POST = withAuth(async (request, _context, { userId }) => {
+export const POST = withAuth(async (request, _context, authContext) => {
   try {
     const client = getServiceClient();
     await ensureTable(client);
 
     // Resolve Alpaca credentials
-    const credentialType = await resolveCredentialType(request);
-    const keys = await getAlpacaCredentialKeys(credentialType, request);
+    const credentialType = await resolveCredentialType(request, authContext);
+    const keys = await getAlpacaCredentialKeys(credentialType, request, authContext);
     if (!keys?.apiKey || !keys?.secretKey) {
       return Response.json(
         {
@@ -163,7 +163,7 @@ export const POST = withAuth(async (request, _context, { userId }) => {
 
     // Build snapshot row
     const snapshot = {
-      user_id: userId,
+      user_id: authContext.userId,
       snapshot_date: today,
       equity,
       cash,

@@ -18,10 +18,10 @@ import { createApiError } from "@/lib/error-messages";
  *   page_size      — max items (default: 100, max: 1000)
  *   period         — shorthand: "1d", "1w", "1m", "3m", "1y" (default: "3m")
  */
-export const GET = withAuth(async (request, _context, _authContext) => {
+export const GET = withAuth(async (request, _context, authContext) => {
   try {
-    const credentialType = await resolveCredentialType(request);
-    const keys = await getAlpacaCredentialKeys(credentialType, request);
+    const credentialType = await resolveCredentialType(request, authContext);
+    const keys = await getAlpacaCredentialKeys(credentialType, request, authContext);
     if (!keys?.apiKey || !keys?.secretKey) {
       return Response.json(
         {

@@ -28,11 +28,12 @@ import { getBrokerIdFromCredentialType } from "@/lib/brokers/broker-factory";
  * Live credentials require premium+ plan.
  *
  * @param {Request} [request] — Optional request object for reading headers
+ * @param {object} [authContext] — Optional auth context from withAuth (avoids redundant auth/plan calls)
  * @returns {Promise<"paper"|"live">}
  */
-export async function resolveCredentialType(request) {
-  // Check if user has premium plan for live trading
-  const plan = await getUserPlan();
+export async function resolveCredentialType(request, authContext = null) {
+  // Reuse plan from withAuth if available to avoid redundant Clerk/Supabase call
+  const plan = authContext?.plan || await getUserPlan();
   if (plan === "premium" || plan === "institutional") {
     // Check for explicit mode header (from TradingModeToggle)
     const modeHeader = request?.headers?.get("x-trading-mode");
@@ -44,7 +45,7 @@ export async function resolveCredentialType(request) {
     if (modeParam === "live") return "live";
 
     // Check if live keys exist and are valid
-    const liveStatus = await hasCredentials("live");
+    const liveStatus = await hasCredentials("live", authContext);
     if (liveStatus.configured && liveStatus.isValid) {
       // Has live keys — but still default to paper unless explicitly requested
       // Safety: always default to paper unless user explicitly switches
@@ -60,14 +61,15 @@ export async function resolveCredentialType(request) {
  *
  * @param {"paper"|"live"} [type] — Credential type (auto-resolved if not specified)
  * @param {Request} [request] — Optional request for mode resolution
+ * @param {object} [authContext] — Optional auth context from withAuth (avoids redundant auth calls)
  * @returns {Promise<{apiKey: string, secretKey: string}|null>}
  */
-export async function getAlpacaCredentialKeys(type, request) {
-  const credentialType = type || await resolveCredentialType(request);
+export async function getAlpacaCredentialKeys(type, request, authContext = null) {
+  const credentialType = type || await resolveCredentialType(request, authContext);
 
   // Try Supabase first (new system)
   try {
-    const creds = await getCredentials(credentialType);
+    const creds = await getCredentials(credentialType, authContext);
     if (creds?.apiKey && creds?.secretKey) {
       return creds;
     }

@@ -172,12 +172,12 @@ async function captureForUser(client, userId, mode = "paper") {
 
 // ── POST: Capture snapshot ──────────────────────────────────────────────────
 
-export const POST = withAuth(async (request, _context, { userId, isCron }) => {
+export const POST = withAuth(async (request, _context, authContext) => {
   try {
     const client = getServiceClient();
     await ensureTable(client);
 
-    if (isCron) {
+    if (authContext.isCron) {
       // ── CRON mode: capture for all users with configured credentials ──
       // Find all distinct users who have snapshots or credentials
       const { data: existingUsers, error: usersError } = await client
@@ -227,8 +227,8 @@ export const POST = withAuth(async (request, _context, { userId, isCron }) => {
     }
 
     // ── Authenticated user mode: capture for current user ──
-    const credentialType = await resolveCredentialType(request);
-    const result = await captureForUser(client, userId, credentialType);
+    const credentialType = await resolveCredentialType(request, authContext);
+    const result = await captureForUser(client, authContext.userId, credentialType);
 
     if (!result.success) {
       if (result.error === "NO_KEYS") {

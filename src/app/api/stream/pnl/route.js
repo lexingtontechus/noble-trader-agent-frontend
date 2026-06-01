@@ -32,7 +32,7 @@ export const GET = withAuth(async (request, context, authContext) => {
   // ── Step 1: Verify Alpaca credentials exist ─────────────────────────────
   // This check happens BEFORE proxying to FastAPI, so we can give
   // accurate NO_KEYS errors instead of FastAPI's generic 403.
-  const keys = await getAlpacaCredentialKeys("paper", request);
+  const keys = await getAlpacaCredentialKeys("paper", request, authContext);
   if (!keys?.apiKey || !keys?.secretKey) {
     return sseErrorResponse({
       event: "credentials_error",

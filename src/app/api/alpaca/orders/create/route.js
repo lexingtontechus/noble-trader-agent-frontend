@@ -25,8 +25,8 @@ function getCategory(assetClass) {
 
 export const POST = withAuth(async (request, context, authContext) => {
   try {
-    const credentialType = await resolveCredentialType(request);
-    const keys = await getAlpacaCredentialKeys(credentialType, request);
+    const credentialType = await resolveCredentialType(request, authContext);
+    const keys = await getAlpacaCredentialKeys(credentialType, request, authContext);
     if (!keys?.apiKey || !keys?.secretKey) {
       return Response.json(
         {

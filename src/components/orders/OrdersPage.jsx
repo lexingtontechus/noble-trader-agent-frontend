@@ -36,19 +36,30 @@ export default function OrdersPage() {
   const [positionsError, setPositionsError] = useState(null); // { message, code } | null
   const [showKeyManager, setShowKeyManager] = useState(false);
 
+  // Helper: fetch with timeout to prevent indefinite hanging
+  const fetchWithTimeout = useCallback((url, options = {}, timeoutMs = 15000) => {
+    const controller = new AbortController();
+    const id = setTimeout(() => controller.abort(), timeoutMs);
+    return fetch(url, { ...options, signal: controller.signal }).finally(() => clearTimeout(id));
+  }, []);
+
   // Check if Alpaca keys are configured (unified credential system)
   const checkKeys = useCallback(async () => {
     setCheckingKeys(true);
     try {
-      const res = await fetch('/api/credentials/paper');
+      const res = await fetchWithTimeout('/api/credentials/paper', {}, 8000);
       const data = await res.json().catch(() => ({ configured: false }));
       setKeysConfigured(data.configured === true);
     } catch {
-      setKeysConfigured(false);
+      // Timeout or network error — don't assume keys are missing
+      // If the check itself fails, show the data page with errors rather than
+      // forcing the user to re-enter keys
+      console.warn('[OrdersPage] Credential check failed/timed out — assuming keys may exist');
+      setKeysConfigured(null); // null = unknown, show data page with retry option
     } finally {
       setCheckingKeys(false);
     }
-  }, []);
+  }, [fetchWithTimeout]);
 
   useEffect(() => {
     checkKeys();
@@ -59,7 +70,7 @@ export default function OrdersPage() {
     setLoadingAccount(true);
     setAccountError(null);
     try {
-      const res = await fetch('/api/alpaca/account');
+      const res = await fetchWithTimeout('/api/alpaca/account', {}, 15000);
       if (res.ok) {
         const data = await res.json();
         setAccount(data);
@@ -85,7 +96,7 @@ export default function OrdersPage() {
     setLoadingOrders(true);
     setOrdersError(null);
     try {
-      const res = await fetch(`/api/alpaca/orders?period=${p}`);
+      const res = await fetchWithTimeout(`/api/alpaca/orders?period=${p}`, {}, 15000);
       if (res.ok) {
         const data = await res.json();
         setOrders(Array.isArray(data) ? data : []);
@@ -110,7 +121,7 @@ export default function OrdersPage() {
     setLoadingPositions(true);
     setPositionsError(null);
     try {
-      const res = await fetch('/api/alpaca/positions');
+      const res = await fetchWithTimeout('/api/alpaca/positions', {}, 15000);
       if (res.ok) {
         const data = await res.json();
         setPositions(Array.isArray(data) ? data : []);
@@ -133,7 +144,7 @@ export default function OrdersPage() {
   // Fetch trade activities (fills)
   const fetchActivities = useCallback(async () => {
     try {
-      const res = await fetch('/api/alpaca/activities?period=3m&page_size=100');
+      const res = await fetchWithTimeout('/api/alpaca/activities?period=3m&page_size=100', {}, 15000);
       if (res.ok) {
         const data = await res.json();
         setActivities(Array.isArray(data) ? data : []);
@@ -146,7 +157,7 @@ export default function OrdersPage() {
   // Fetch equity curve
   const fetchEquityCurve = useCallback(async () => {
     try {
-      const res = await fetch('/api/alpaca/portfolio/history?period=1M&timeframe=1D');
+      const res = await fetchWithTimeout('/api/alpaca/portfolio/history?period=1M&timeframe=1D', {}, 15000);
       if (res.ok) {
         const data = await res.json();
         if (data?.timestamp && data?.equity) {
@@ -166,9 +177,9 @@ export default function OrdersPage() {
     }
   }, []);
 
-  // Fetch all data when keys are configured
+  // Fetch all data when keys are configured (or unknown — try anyway, let errors guide)
   useEffect(() => {
-    if (keysConfigured === true) {
+    if (keysConfigured === true || keysConfigured === null) {
       fetchAccount();
       fetchOrders(period);
       fetchPositions();
@@ -223,7 +234,7 @@ export default function OrdersPage() {
   }
 
   // Keys not configured - show setup
-  if (!keysConfigured) {
+  if (keysConfigured === false) {
     return (
       <div className="space-y-4">
         <h1 className="text-3xl font-bold text-primary">Orders</h1>

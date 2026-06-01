@@ -191,28 +191,42 @@ function checkMemoryRateLimit(key, maxRequests, windowMs) {
  */
 async function checkRedisRateLimit(key, maxRequests, windowMs) {
   try {
-    // Use Upstash Redis pipeline for atomic INCR + EXPIRE
     const redisKey = `ratelimit:${key}`;
     const windowSeconds = Math.ceil(windowMs / 1000);
 
-    // INCR the counter
-    const count = await redis.incr(redisKey);
+    // Use Upstash Redis pipeline to combine INCR + EXPIRE + TTL into 1 round trip
+    // This cuts latency from ~3 Redis HTTP calls to just 1
+    const client = redis._getClient();
+    if (client && typeof client.pipeline === "function") {
+      const pipe = client.pipeline();
+      pipe.incr(redisKey);
+      pipe.expire(redisKey, windowSeconds);
+      pipe.ttl(redisKey);
+      const results = await pipe.exec();
 
-    // Set TTL on first request in window
+      const count = results?.[0] ?? 1;
+      const ttl = results?.[2] ?? -1;
+      const resetAt = ttl > 0 ? Date.now() + ttl * 1000 : Date.now() + windowMs;
+      const remaining = Math.max(0, maxRequests - count);
+
+      if (count > maxRequests) {
+        return { allowed: false, remaining: 0, resetAt, limit: maxRequests };
+      }
+      return { allowed: true, remaining, resetAt, limit: maxRequests };
+    }
+
+    // Fallback: sequential calls (if pipeline not available)
+    const count = await redis.incr(redisKey);
     if (count === 1) {
       await redis.expire(redisKey, windowSeconds);
     }
-
-    // Get the TTL for reset time calculation
     const ttl = await redis.ttl(redisKey);
     const resetAt = ttl > 0 ? Date.now() + ttl * 1000 : Date.now() + windowMs;
-
     const remaining = Math.max(0, maxRequests - count);
 
     if (count > maxRequests) {
       return { allowed: false, remaining: 0, resetAt, limit: maxRequests };
     }
-
     return { allowed: true, remaining, resetAt, limit: maxRequests };
   } catch (err) {
     // Redis error — fall back to in-memory

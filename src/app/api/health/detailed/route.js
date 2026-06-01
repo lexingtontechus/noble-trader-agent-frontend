@@ -156,11 +156,11 @@ async function checkSupabase() {
   }
 }
 
-async function checkAlpaca(request) {
+async function checkAlpaca(request, authContext) {
   const start = Date.now();
   try {
-    const credentialType = await resolveCredentialType(request);
-    const keys = await getAlpacaCredentialKeys(credentialType, request);
+    const credentialType = await resolveCredentialType(request, authContext);
+    const keys = await getAlpacaCredentialKeys(credentialType, request, authContext);
 
     if (!keys?.apiKey || !keys?.secretKey) {
       return {
@@ -404,7 +404,7 @@ export const GET = withAuth(async (request, _context, authContext) => {
     await Promise.all([
       checkBackend(),
       checkSupabase(),
-      checkAlpaca(request),
+      checkAlpaca(request, authContext),
       getCronJobs(),
       checkDataFreshness(),
       checkCircuitBreakers(userId),

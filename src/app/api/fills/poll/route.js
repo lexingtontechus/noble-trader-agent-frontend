@@ -30,8 +30,8 @@ export const POST = withAuth(async (request, context, authContext) => {
 
     if (action === "start") {
       // Resolve Alpaca keys
-      const credentialType = await resolveCredentialType(request);
-      const keys = await getAlpacaCredentialKeys(credentialType, request);
+      const credentialType = await resolveCredentialType(request, authContext);
+      const keys = await getAlpacaCredentialKeys(credentialType, request, authContext);
 
       if (!keys?.apiKey || !keys?.secretKey) {
         return Response.json(

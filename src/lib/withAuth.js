@@ -111,32 +111,23 @@ async function getAuthUserId() {
 }
 
 /**
- * Get the user's role from Clerk privateMetadata.
- * Falls back to "viewer" if not set or invalid.
+ * Fetch the user's Clerk privateMetadata in a SINGLE API call.
+ * Returns { role, plan } extracted from the user's metadata.
+ *
+ * This replaces the previous two separate calls (getServerRole + getServerPlan)
+ * that each made an independent `clerkClient().users.getUser()` call,
+ * which was a major source of 504 timeouts on Vercel serverless.
  */
-async function getServerRole(userId) {
+async function getServerRoleAndPlan(userId) {
   try {
     const client = await clerkClient();
     const user = await client.users.getUser(userId);
-    const role = user?.privateMetadata?.role || "viewer";
-    return VALID_ROLES.has(role) ? role : "viewer";
+    const meta = user?.privateMetadata || {};
+    const role = VALID_ROLES.has(meta.role) ? meta.role : "viewer";
+    const plan = PLAN_HIERARCHY[meta.plan] !== undefined ? meta.plan : "free";
+    return { role, plan };
   } catch {
-    return "viewer";
-  }
-}
-
-/**
- * Get the user's plan from Clerk privateMetadata.
- * Falls back to "free" if not set or invalid.
- */
-async function getServerPlan(userId) {
-  try {
-    const client = await clerkClient();
-    const user = await client.users.getUser(userId);
-    const plan = user?.privateMetadata?.plan || "free";
-    return PLAN_HIERARCHY[plan] !== undefined ? plan : "free";
-  } catch {
-    return "free";
+    return { role: "viewer", plan: "free" };
   }
 }
 
@@ -251,8 +242,8 @@ export function withAuth(handler, options = {}) {
       const apiKeyPlan = keyRecord.plan_at_creation || "free";
 
       // Also check current Clerk metadata for the user (key might be stale)
-      const currentRole = await getServerRole(keyRecord.clerk_user_id);
-      const currentPlan = await getServerPlan(keyRecord.clerk_user_id);
+      // Single API call instead of two separate role + plan lookups
+      const { role: currentRole, plan: currentPlan } = await getServerRoleAndPlan(keyRecord.clerk_user_id);
 
       // Use the LESSER of key-at-creation and current Clerk values for security
       const effectiveRole = ROLE_HIERARCHY[currentRole] < ROLE_HIERARCHY[apiKeyRole] ? currentRole : apiKeyRole;
@@ -352,8 +343,8 @@ export function withAuth(handler, options = {}) {
       return unauthorized();
     }
 
-    // ── Role check ──────────────────────────────────────────────────────
-    const role = await getServerRole(userId);
+    // ── Role + Plan check (single Clerk API call) ───────────────────────
+    const { role, plan } = await getServerRoleAndPlan(userId);
     const userRoleLevel = ROLE_HIERARCHY[role] ?? 0;
 
     if (userRoleLevel < requiredRoleLevel) {
@@ -364,8 +355,6 @@ export function withAuth(handler, options = {}) {
       );
     }
 
-    // ── Plan check ──────────────────────────────────────────────────────
-    const plan = await getServerPlan(userId);
     if (minPlan) {
       const userPlanLevel = PLAN_HIERARCHY[plan] ?? 0;
 

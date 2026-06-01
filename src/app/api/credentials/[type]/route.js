@@ -28,9 +28,9 @@ export const GET = withAuth(async (request, { params }, _authContext) => {
       return Response.json({ error: "Invalid credential type. Use 'paper' or 'live'." }, { status: 400 });
     }
 
-    // Try Supabase first
+    // Try Supabase first — pass authContext to avoid redundant auth() call
     try {
-      const status = await hasCredentials(type);
+      const status = await hasCredentials(type, _authContext);
       if (status.configured) return Response.json({ ...status, source: "supabase" });
     } catch (err) {
       console.warn("[credentials/GET] Supabase check failed:", err.message);
@@ -78,8 +78,10 @@ export const POST = withAuth(async (request, { params }, authContext) => {
     }
 
     // Try Supabase first (encrypted storage)
+    // Pass authContext to avoid redundant auth() and getUserPlan() calls
+    // (withAuth already resolved userId and plan — reusing them saves ~2s)
     try {
-      const result = await saveCredentials(type, apiKey, secretKey);
+      const result = await saveCredentials(type, apiKey, secretKey, authContext);
       console.info(`[credentials/POST] Keys saved to Supabase for type=${type}`);
       return Response.json({ ...result, storage: "encrypted" });
     } catch (supabaseErr) {

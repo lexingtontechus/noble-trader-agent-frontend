@@ -69,8 +69,9 @@ async function requireAuth() {
  * @param {string} secretKey — Alpaca secret key
  * @returns {Promise<{success: boolean, credentialType: string}>}
  */
-export async function saveCredentials(credentialType, apiKey, secretKey) {
-  const userId = await requireAuth();
+export async function saveCredentials(credentialType, apiKey, secretKey, authContext = null) {
+  // Reuse userId from withAuth if available to avoid redundant auth() call
+  const userId = authContext?.userId || await requireAuth();
   const client = getServiceClient();
 
   if (!["paper", "live"].includes(credentialType)) {
@@ -78,8 +79,9 @@ export async function saveCredentials(credentialType, apiKey, secretKey) {
   }
 
   // Gate: live credentials require premium plan
+  // Reuse plan from withAuth if available to avoid redundant Clerk/Supabase call
   if (credentialType === "live") {
-    const plan = await getUserPlan();
+    const plan = authContext?.plan || await getUserPlan();
     if (plan !== "premium" && plan !== "institutional") {
       throw new Error("Live trading requires a Premium or Institutional plan");
     }
@@ -113,10 +115,11 @@ export async function saveCredentials(credentialType, apiKey, secretKey) {
  * Get decrypted Alpaca API keys for the authenticated user.
  *
  * @param {"paper"|"live"} credentialType
+ * @param {object} [authContext] — Optional auth context from withAuth (avoids redundant auth() call)
  * @returns {Promise<{apiKey: string, secretKey: string}|null>}
  */
-export async function getCredentials(credentialType) {
-  const userId = await requireAuth();
+export async function getCredentials(credentialType, authContext = null) {
+  const userId = authContext?.userId || await requireAuth();
   const client = getServiceClient();
 
   const { data, error } = await client
@@ -183,10 +186,11 @@ export async function deleteCredentials(credentialType) {
  * Check if the authenticated user has credentials configured for a given type.
  *
  * @param {"paper"|"live"} credentialType
+ * @param {object} [authContext] — Optional auth context from withAuth (avoids redundant auth() call)
  * @returns {Promise<{configured: boolean, isValid: boolean|null}>}
  */
-export async function hasCredentials(credentialType) {
-  const userId = await requireAuth();
+export async function hasCredentials(credentialType, authContext = null) {
+  const userId = authContext?.userId || await requireAuth();
   const client = getServiceClient();
 
   const { data, error } = await client
