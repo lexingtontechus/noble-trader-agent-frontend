@@ -168,20 +168,20 @@ async function renkoApiFetch(action, options = {}) {
 
 // ── Main Component ───────────────────────────────────────────────────────────
 //
-// Architecture: Cache-first, no "warmup" needed.
+// Architecture: Cache-first with auto-rebuild fallback.
 // The Redis/Supabase snapshot (renko:snapshot:{symbol}:{brickSize}) already
 // contains ALL data: bricks, classified, signals, trades, stats, config, position.
 // The backend's _get_pipeline_async() auto-restores from snapshot on first access.
 //
 // Flow:
-//   1. Load from L1 cache (GET /api/renko/warmup?symbol=X) — instant if hit
-//   2. If cache miss → call backend GET endpoints (auto-hydrates from L2)
-//   3. "Refresh" reloads from cache; "Force Rebuild" does a full Yahoo fetch
-//   4. Live stream feeds real-time ticks for intraday updates
-//
-// No "Warm Up" or "Tick" buttons — those were artifacts of a pre-cache design
-// where the frontend manually chunked Yahoo prices. The backend now handles
-// all of that internally via POST /renko/warmup.
+//   1. Load from cache (GET /api/renko/warmup?symbol=X) — L1→L2→L3 fallback
+//   2. If fresh cache hit → render immediately, no backend call
+//   3. If stale cache → render + background refresh from backend
+//   4. If cache miss → auto-rebuild via single warmup POST (backend snapshot
+//      restore or Yahoo fetch). No more 6-call fetchFromBackend that all fail
+//      independently on cold start.
+//   5. Live stream feeds real-time ticks for intraday updates
+//   6. "Force Rebuild" button available for manual full Yahoo fetch
 
 export default function RenkoPage() {
   const [activeTab, setActiveTab] = useState("bricks");
@@ -277,14 +277,16 @@ export default function RenkoPage() {
     }
   }, []);
 
-  // ── Load from L1 cache (Redis → Supabase) ──────────────────────────
+  // ── Load from cache (L1 → L2 → L3 backend fallback) ──────────────────
   // This is the PRIMARY data loading method. The GET /api/renko/warmup
-  // endpoint reads from Upstash Redis L1, then Supabase L2. No backend
-  // pipeline call needed — the snapshot contains everything.
-  const loadFromCache = useCallback(async (sym) => {
+  // endpoint reads from Upstash Redis L1, then Supabase L2, then falls
+  // back to the backend warmup POST (L3) which auto-restores from its
+  // own L1/L2 or fetches from Yahoo. No separate backend pipeline call
+  // needed — the snapshot contains everything.
+  const loadFromCache = useCallback(async (sym, timeoutMs = 8000) => {
     try {
       const res = await fetch(`/api/renko/warmup?symbol=${encodeURIComponent(sym)}`, {
-        signal: AbortSignal.timeout(8000),
+        signal: AbortSignal.timeout(timeoutMs),
       });
 
       if (!res.ok) {
@@ -306,8 +308,10 @@ export default function RenkoPage() {
   }, [populateFromSnapshot]);
 
   // ── Fallback: fetch from backend GET endpoints ─────────────────────
-  // Used when cache is empty. Each endpoint triggers _get_pipeline_async()
-  // which auto-restores from backend Redis L1 / Supabase L2.
+  // Used ONLY for background refresh of stale data (where the pipeline
+  // already exists in the backend's memory). NOT used for initial load
+  // on cache miss — that goes through forceRebuild instead (single warmup
+  // POST with retry logic, vs 6 separate GETs that all fail on cold start).
   const fetchFromBackend = useCallback(async (sym, showLoading = true) => {
     if (abortRef.current) abortRef.current.abort();
     const controller = new AbortController();
@@ -430,8 +434,9 @@ export default function RenkoPage() {
   // ── Initial load + auto-refresh ──────────────────────────────────────
   useEffect(() => {
     const initData = async () => {
-      // Step 1: Try L1 cache (instant — no backend call)
-      const cacheStatus = await loadFromCache(symbol);
+      // Step 1: Try L1/L2/L3 cache (BFF has 3-tier fallback)
+      // Use 65s timeout to accommodate BFF's L3 backend warmup fallback (up to 60s)
+      const cacheStatus = await loadFromCache(symbol, 65000);
 
       if (cacheStatus === "fresh") {
         // Fresh cache — done! No backend call needed.
@@ -445,8 +450,13 @@ export default function RenkoPage() {
         return;
       }
 
-      // Cache miss — fetch from backend (which auto-restores from its own L1/L2)
-      await fetchFromBackend(symbol, true);
+      // Cache miss — auto-rebuild via single warmup POST instead of 6
+      // separate GET calls. The warmup POST proxies to the backend's
+      // /renko/warmup endpoint which handles: snapshot restore (fast) or
+      // Yahoo fetch (slow). It also has retry logic for cold starts.
+      // This avoids the 6-call fetchFromBackend which all fail independently
+      // when the backend is cold starting on Render.
+      await forceRebuild(symbol);
     };
     initData();
 
@@ -493,14 +503,14 @@ export default function RenkoPage() {
     setSnapshotSource(null);
     setSnapshotAge(null);
 
-    // Try cache first
-    const cacheStatus = await loadFromCache(newSymbol);
+    // Try cache first (long timeout for L3 fallback)
+    const cacheStatus = await loadFromCache(newSymbol, 65000);
     if (cacheStatus === "fresh" || cacheStatus === "stale") {
       return;
     }
-    // Cache miss — fetch from backend
-    await fetchFromBackend(newSymbol, true);
-  }, [loadFromCache, fetchFromBackend]);
+    // Cache miss — auto-rebuild (single warmup call instead of 6 fragile GETs)
+    await forceRebuild(newSymbol);
+  }, [loadFromCache, forceRebuild]);
 
   // Handle save config
   const handleSaveConfig = async (newConfig) => {

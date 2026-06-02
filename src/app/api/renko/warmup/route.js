@@ -1,20 +1,19 @@
 /**
  * BFF Route: /api/renko/warmup
  *
- * v3: Cache-first architecture — the snapshot in Redis/Supabase already has
- * ALL data (bricks, classified, signals, trades, stats, config, position).
+ * v4: Cache-first with backend fallback — eliminates the "Cold - no data" dead-end.
  *
- * GET  /api/renko/warmup?symbol=SPY  — load cached snapshot (Redis L1 → Supabase L2)
+ * GET  /api/renko/warmup?symbol=SPY  — load cached snapshot (Redis L1 → Supabase L2 → Backend L3)
  * POST /api/renko/warmup              — proxy to backend POST /renko/warmup (force rebuild)
  *
- * The old v1/v2 POST (which fetched Yahoo prices in the BFF, chunked them into
- * 150-tick batches, made N round-trips to /tick/batch, then 5 GET calls) was:
- *   1. A Vercel Fluid Compute risk (30-60s function lifetime)
- *   2. Incompatible with backend's snapshot format (different data shapes)
- *   3. Redundant — the backend warmup endpoint now returns full pipeline state
- *   4. Fragile — no cold-start handling, no safe JSON parse
+ * Cache hierarchy for GET:
+ *   L1: Upstash Redis (sub-5ms) — instant if hit
+ *   L2: Supabase ta_renko_snapshot (~100ms) — durable, backfills L1
+ *   L3: Backend warmup POST (5-60s) — restores from backend's own L1/L2, or Yahoo fetch
  *
- * The new POST simply proxies to the backend, which handles everything.
+ * The L3 fallback ensures that even when BFF caches are empty (first visit, TTL expired),
+ * the system auto-recovers from the backend's snapshot restore — no more 6-call
+ * fetchFromBackend that all fail on cold start.
  */
 
 import { getFastAPIAuthHeaders } from "@/lib/fastapi-auth";
@@ -68,6 +67,118 @@ export async function GET(request) {
     });
 
     if (!snapshot) {
+      // ── L3: Backend fallback ──────────────────────────────────────────
+      // When BFF L1/L2 are both empty, try the backend warmup endpoint.
+      // The backend has its own L1/L2 cache (Redis + Supabase) and can
+      // restore a snapshot or fall back to Yahoo fetch. This avoids the
+      // frontend making 6 separate GET calls that all fail on cold start.
+      try {
+        const authHeaders = await getFastAPIAuthHeaders();
+        const maxRetries = 2; // Fewer retries than POST — GET is for auto-refresh
+        let lastError = null;
+
+        for (let i = 0; i < maxRetries; i++) {
+          try {
+            const res = await fetch(`${RENKO_BASE}/warmup`, {
+              method: "POST",
+              headers: {
+                ...authHeaders,
+                "Content-Type": "application/json",
+              },
+              body: JSON.stringify({
+                symbol,
+                period: "6mo",
+                mode: "auto",
+                include_state: true,
+              }),
+              signal: AbortSignal.timeout(60000), // 60s — enough for snapshot restore
+            });
+
+            // Detect HTML (Render cold start)
+            const contentType = res.headers.get("content-type") || "";
+            if (contentType.includes("text/html")) {
+              console.warn(
+                `[warmup GET] Backend returned HTML (attempt ${i + 1}/${maxRetries}) — cold start`
+              );
+              if (i < maxRetries - 1) {
+                await new Promise((r) => setTimeout(r, 1000 * Math.pow(2, i)));
+                continue;
+              }
+              break; // Return cache miss — frontend will auto-trigger rebuild
+            }
+
+            if (!res.ok) {
+              console.warn(
+                `[warmup GET] Backend warmup returned HTTP ${res.status} (attempt ${i + 1}/${maxRetries})`
+              );
+              if (i < maxRetries - 1) {
+                await new Promise((r) => setTimeout(r, 1000 * Math.pow(2, i)));
+                continue;
+              }
+              break;
+            }
+
+            const data = await res.json();
+            const brickCount = data.brick_count || 0;
+
+            // Only accept non-empty results
+            if (brickCount === 0 && !data.bricks?.length) {
+              console.warn("[warmup GET] Backend warmup returned empty pipeline");
+              break;
+            }
+
+            // Build snapshot payload and cache it in BFF L1/L2
+            const snapshotPayload = {
+              symbol,
+              brick_size: brickSize,
+              prices_fed: data.prices_fed || 0,
+              total_bricks: brickCount,
+              total_trades: data.total_trades || 0,
+              total_pnl_bricks: data.total_pnl_bricks || 0,
+              bricks: data.bricks || [],
+              classified: data.classified || [],
+              signals: data.signals || [],
+              trades: data.trades || [],
+              stats: data.stats || {},
+              config: data.config || data.stats?.config || {},
+              period: "6mo",
+              updated_at: new Date().toISOString(),
+            };
+
+            // Update BFF-side caches (fire-and-forget)
+            redis.setSnapshot(symbol, brickSize, snapshotPayload).catch(() => {});
+            try {
+              await db.renkoSnapshot.upsert({
+                data: snapshotPayload,
+                onConflict: "symbol,brick_size",
+              });
+            } catch (dbErr) {
+              console.warn("[warmup GET] Supabase cache update failed:", dbErr.message);
+            }
+
+            // Return as cached data (so frontend populateFromSnapshot works)
+            return Response.json({
+              cached: true,
+              stale: false,
+              source: data.source === "snapshot_restore" ? "backend_restore" : "backend_warmup",
+              ...snapshotPayload,
+            });
+          } catch (fetchErr) {
+            lastError = fetchErr;
+            if (i < maxRetries - 1) {
+              await new Promise((r) => setTimeout(r, 1000 * Math.pow(2, i)));
+              continue;
+            }
+          }
+        }
+
+        if (lastError) {
+          console.warn("[warmup GET] Backend fallback failed:", lastError.message);
+        }
+      } catch (backendErr) {
+        console.warn("[warmup GET] Backend fallback error:", backendErr.message);
+      }
+
       return Response.json({ cached: false, symbol });
     }
 
