@@ -4,9 +4,6 @@ import { useState, useEffect, useCallback, useRef, Component } from "react";
 import dynamic from "next/dynamic";
 import { notifySuccess, notifyError, notifyWarning } from "@/lib/notifications";
 import useRenkoStream from "@/hooks/useRenkoStream";
-// NOTE: Do NOT import from renko-client.js here — it pulls in @clerk/nextjs/server
-// which requires "server-only" and breaks the client bundle.
-// All backend calls go through the BFF route /api/renko/[action] via renkoApiFetch().
 
 // Lazy-load heavy sub-components
 const BrickChart = dynamic(() => import("./BrickChart"), { ssr: false });
@@ -84,32 +81,15 @@ const TABS = [
   { key: "risk", label: "🛡️ Risk", shortLabel: "Risk" },
 ];
 
-// ── Readiness Progress Bar ─────────────────────────────────────────────────
+// ── Readiness helpers ────────────────────────────────────────────────────────
 
-function ReadinessBar({ status, brickCount }) {
-  const levels = {
-    cold: { pct: 0, color: "bg-error", label: "Cold — needs warmup" },
-    warming: { pct: Math.min((brickCount / 50) * 40, 40), color: "bg-warning", label: `Warming — ${brickCount}/50 bricks` },
-    warm: { pct: 60, color: "bg-info", label: `Warm — ${brickCount} bricks` },
-    hot: { pct: 80, color: "bg-warning", label: `Hot — position open` },
-    live_ready: { pct: 100, color: "bg-success", label: "Live — ready to trade" },
-  };
-  const level = levels[status] || levels.cold;
-
-  return (
-    <div className="flex items-center gap-2 text-xs w-full">
-      <div className="flex-1">
-        <progress
-          className={`progress ${level.color} w-full h-2`}
-          value={level.pct}
-          max="100"
-        />
-      </div>
-      <span className="text-base-content/50 whitespace-nowrap min-w-[120px]">
-        {level.label}
-      </span>
-    </div>
-  );
+// Compute readiness from brick count (matching pipeline.py logic)
+function getReadiness(brickCount, hasPosition) {
+  if (hasPosition) return { level: "hot", pct: 80, color: "bg-warning", label: "Hot — position open" };
+  if (brickCount >= 200) return { level: "live_ready", pct: 100, color: "bg-success", label: "Live — ready to trade" };
+  if (brickCount >= 50) return { level: "warm", pct: 60, color: "bg-info", label: `Warm — ${brickCount} bricks` };
+  if (brickCount > 0) return { level: "warming", pct: Math.min((brickCount / 50) * 40, 40), color: "bg-warning", label: `Warming — ${brickCount}/50 bricks` };
+  return { level: "cold", pct: 0, color: "bg-error", label: "Cold — no data" };
 }
 
 // ── Metric Card ──────────────────────────────────────────────────────────────
@@ -156,7 +136,7 @@ async function renkoApiFetch(action, options = {}) {
 
   const res = await fetch(url, fetchOptions);
 
-  // Handle cold starts / non-JSON responses from BFF
+  // Handle cold starts / non-JSON responses
   const contentType = res.headers.get("content-type") || "";
   if (contentType.includes("text/html")) {
     throw new Error("Backend is starting up. Please wait a moment.");
@@ -187,6 +167,21 @@ async function renkoApiFetch(action, options = {}) {
 }
 
 // ── Main Component ───────────────────────────────────────────────────────────
+//
+// Architecture: Cache-first, no "warmup" needed.
+// The Redis/Supabase snapshot (renko:snapshot:{symbol}:{brickSize}) already
+// contains ALL data: bricks, classified, signals, trades, stats, config, position.
+// The backend's _get_pipeline_async() auto-restores from snapshot on first access.
+//
+// Flow:
+//   1. Load from L1 cache (GET /api/renko/warmup?symbol=X) — instant if hit
+//   2. If cache miss → call backend GET endpoints (auto-hydrates from L2)
+//   3. "Refresh" reloads from cache; "Force Rebuild" does a full Yahoo fetch
+//   4. Live stream feeds real-time ticks for intraday updates
+//
+// No "Warm Up" or "Tick" buttons — those were artifacts of a pre-cache design
+// where the frontend manually chunked Yahoo prices. The backend now handles
+// all of that internally via POST /renko/warmup.
 
 export default function RenkoPage() {
   const [activeTab, setActiveTab] = useState("bricks");
@@ -196,8 +191,9 @@ export default function RenkoPage() {
   const [error, setError] = useState(null);
   const [saving, setSaving] = useState(false);
   const [streaming, setStreaming] = useState(false);
+  const [rebuilding, setRebuilding] = useState(false);
 
-  // Data state
+  // Data state — populated from snapshot cache
   const [pipelineState, setPipelineState] = useState(null);
   const [bricks, setBricks] = useState([]);
   const [classified, setClassified] = useState([]);
@@ -205,9 +201,8 @@ export default function RenkoPage() {
   const [trades, setTrades] = useState([]);
   const [stats, setStats] = useState(null);
   const [config, setConfig] = useState({});
-
-  // Heartbeat state (instant data freshness check from trading:heartbeat:{symbol})
-  const [heartbeat, setHeartbeat] = useState(null);
+  const [snapshotSource, setSnapshotSource] = useState(null); // 'redis' | 'supabase' | null
+  const [snapshotAge, setSnapshotAge] = useState(null); // seconds
 
   // ── Live Renko Stream ──────────────────────────────────────────────
   const renkoStream = useRenkoStream(symbol, {
@@ -216,11 +211,11 @@ export default function RenkoPage() {
       notifySuccess(
         `New ${brick.direction || ""} brick at ${brick.close_price ?? brick.close ?? "?"}`
       );
-      fetchAllData(false);
+      loadFromCache(symbol); // Refresh from cache after brick event
     },
     onSignal: (signal) => {
       notifyWarning(`Signal: ${signal.pattern_type || signal.type || "unknown"}`, 8000);
-      fetchAllData(false);
+      loadFromCache(symbol);
     },
     onError: (err) => {
       notifyError(`Stream error: ${err.message}`);
@@ -228,221 +223,245 @@ export default function RenkoPage() {
   });
 
   // Refs for cleanup
-  const abortControllerRef = useRef(null);
   const intervalRef = useRef(null);
+  const abortRef = useRef(null);
 
-  // ── Heartbeat-first initialization (O(1) Redis check) ─────────────
-  // Returns: 'fresh' | 'stale' | 'cold' | false
-  const checkHeartbeat = useCallback(async (sym) => {
-    try {
-      const hb = await renkoApiFetch("heartbeat", { params: { symbol: sym } });
-      if (hb && hb.available) {
-        setHeartbeat(hb);
-        // Set minimal pipeline state from heartbeat (instant, no warmup needed)
-        setPipelineState((prev) => ({
-          ...prev,
-          brick_count: hb.brick_count ?? 0,
-          last_brick_direction: hb.direction || prev?.last_brick_direction,
-          active_position: hb.has_position || false,
-        }));
+  // ── Populate state from snapshot data ───────────────────────────────
+  const populateFromSnapshot = useCallback((data) => {
+    setBricks(Array.isArray(data.bricks) ? data.bricks : []);
+    setClassified(Array.isArray(data.classified) ? data.classified : []);
+    setSignals(Array.isArray(data.signals) ? data.signals : []);
+    setTrades(Array.isArray(data.trades) ? data.trades : []);
+    setStats(data.stats || null);
+    if (data.config) setConfig(data.config);
+    setSnapshotSource(data.source || null);
 
-        if (hb.is_fresh && hb.status !== "cold") {
-          // Data is fresh and pipeline is not cold — skip warmup entirely
-          setLoading(false);
-          return "fresh";
-        } else if (hb.status !== "cold" && hb.brick_count > 0) {
-          // Pipeline is warm but stale — show data, trigger background refresh
-          return "stale";
-        } else {
-          // Pipeline is cold — needs full warmup
-          return "cold";
-        }
-      }
-    } catch (e) {
-      console.warn("[RenkoPage] Heartbeat check failed:", e.message);
+    // Compute pipeline state from snapshot fields
+    const brickCount = data.total_bricks || data.brick_count || 0;
+    const totalTrades = data.total_trades || 0;
+    const totalPnlBricks = data.total_pnl_bricks || 0;
+    const journalStats = data.stats?.journal_stats || data.stats?.journal || {};
+
+    // Extract last direction from bricks array
+    const lastBrick = Array.isArray(data.bricks) && data.bricks.length > 0
+      ? data.bricks[data.bricks.length - 1]
+      : null;
+    const lastDirection = lastBrick?.direction || data.stats?.current_direction || null;
+    const lastSwing = Array.isArray(data.classified) && data.classified.length > 0
+      ? data.classified[data.classified.length - 1]?.label || null
+      : null;
+
+    setPipelineState({
+      brick_count: brickCount,
+      last_brick_direction: lastDirection,
+      last_swing_label: lastSwing,
+      bull_run_count: data.stats?.bull_run_count ?? 0,
+      bear_run_count: data.stats?.bear_run_count ?? 0,
+      active_position: data.stats?.active_position || null,
+      session_trades: totalTrades,
+      session_pnl_bricks: totalPnlBricks,
+      total_trades: totalTrades,
+      total_pnl_bricks: totalPnlBricks,
+      readiness: data.stats?.readiness || getReadiness(brickCount, !!data.stats?.active_position),
+    });
+
+    // Compute snapshot age
+    if (data.updated_at) {
+      const age = Date.now() - new Date(data.updated_at).getTime();
+      setSnapshotAge(Math.round(age / 1000));
+    } else if (data.stats?.snapshot_ts) {
+      const age = Date.now() / 1000 - data.stats.snapshot_ts;
+      setSnapshotAge(Math.round(age));
+    } else {
+      setSnapshotAge(null);
     }
-    return false;
   }, []);
 
-  // ── Load cached snapshot from Supabase (fallback, no backend call) ──
-  // Returns: 'fresh' | 'stale' | false
-  const loadCachedSnapshot = useCallback(async (sym) => {
+  // ── Load from L1 cache (Redis → Supabase) ──────────────────────────
+  // This is the PRIMARY data loading method. The GET /api/renko/warmup
+  // endpoint reads from Upstash Redis L1, then Supabase L2. No backend
+  // pipeline call needed — the snapshot contains everything.
+  const loadFromCache = useCallback(async (sym) => {
     try {
-      const res = await fetch(`/api/renko/warmup?symbol=${encodeURIComponent(sym)}`);
-      if (res.ok) {
-        const data = await res.json();
-        if (data.cached) {
-          setBricks(Array.isArray(data.bricks) ? data.bricks : []);
-          setClassified(Array.isArray(data.classified) ? data.classified : []);
-          setSignals(Array.isArray(data.signals) ? data.signals : []);
-          setTrades(Array.isArray(data.trades) ? data.trades : []);
-          setStats(data.stats || null);
-          if (data.config) setConfig(data.config);
-          setPipelineState(data.stats?.state || {
-            brick_count: data.total_bricks || 0,
-            last_brick_direction: null,
-            last_swing_label: null,
-            bull_run_count: 0,
-            bear_run_count: 0,
-            active_position: false,
-            session_trades: data.total_trades || 0,
-            session_pnl_bricks: 0,
-            total_trades: data.total_trades || 0,
-            total_pnl_bricks: 0,
-          });
-          setLoading(false);
-          return data.stale ? "stale" : "fresh";
-        }
+      const res = await fetch(`/api/renko/warmup?symbol=${encodeURIComponent(sym)}`, {
+        signal: AbortSignal.timeout(8000),
+      });
+
+      if (!res.ok) {
+        const errorData = await res.json().catch(() => ({ error: `HTTP ${res.status}` }));
+        throw new Error(errorData.error || `Cache lookup failed (HTTP ${res.status})`);
       }
+
+      const data = await res.json();
+      if (data.cached) {
+        populateFromSnapshot(data);
+        setLoading(false);
+        return data.stale ? "stale" : "fresh";
+      }
+      return "miss";
     } catch (e) {
       console.warn("[RenkoPage] Cache load failed:", e.message);
+      return "error";
     }
-    return false;
+  }, [populateFromSnapshot]);
+
+  // ── Fallback: fetch from backend GET endpoints ─────────────────────
+  // Used when cache is empty. Each endpoint triggers _get_pipeline_async()
+  // which auto-restores from backend Redis L1 / Supabase L2.
+  const fetchFromBackend = useCallback(async (sym, showLoading = true) => {
+    if (abortRef.current) abortRef.current.abort();
+    const controller = new AbortController();
+    abortRef.current = controller;
+
+    if (showLoading) setLoading(true);
+    setError(null);
+
+    try {
+      const [stateData, bricksData, classifiedData, signalsData, tradesData, statsData] =
+        await Promise.allSettled([
+          renkoApiFetch("state", { params: { symbol: sym } }),
+          renkoApiFetch("bricks", { params: { symbol: sym, last_n: "100" } }),
+          renkoApiFetch("classified", { params: { symbol: sym, last_n: "100" } }),
+          renkoApiFetch("signals", { params: { symbol: sym, last_n: "50" } }),
+          renkoApiFetch("trades", { params: { symbol: sym, last_n: "50" } }),
+          renkoApiFetch("stats", { params: { symbol: sym } }),
+        ]);
+
+      if (controller.signal.aborted) return;
+
+      if (stateData.status === "fulfilled") setPipelineState(stateData.value);
+      if (bricksData.status === "fulfilled") setBricks(Array.isArray(bricksData.value) ? bricksData.value : []);
+      if (classifiedData.status === "fulfilled") setClassified(Array.isArray(classifiedData.value) ? classifiedData.value : []);
+      if (signalsData.status === "fulfilled") setSignals(Array.isArray(signalsData.value) ? signalsData.value : []);
+      if (tradesData.status === "fulfilled") setTrades(Array.isArray(tradesData.value) ? tradesData.value : []);
+      if (statsData.status === "fulfilled") {
+        setStats(statsData.value);
+        if (statsData.value?.config) setConfig(statsData.value.config);
+      }
+
+      const allFailed = [stateData, bricksData, classifiedData, signalsData, tradesData, statsData]
+        .every((r) => r.status === "rejected");
+      if (allFailed) {
+        const firstError = [stateData, bricksData, classifiedData, signalsData, tradesData, statsData]
+          .find((r) => r.status === "rejected");
+        setError(firstError?.reason?.message || "Backend unavailable. It may be starting up.");
+      }
+    } catch (e) {
+      if (controller.signal.aborted) return;
+      setError(e.message || "Failed to fetch pipeline data");
+    } finally {
+      if (!controller.signal.aborted) setLoading(false);
+    }
   }, []);
 
-  // Fetch all data from backend — accepts optional symbolOverride to avoid stale closure
-  const fetchAllData = useCallback(
-    async (showLoading = true, symbolOverride = null) => {
-      const activeSymbol = symbolOverride || symbol;
+  // ── Force Rebuild (full Yahoo fetch — the old "warmup") ─────────────
+  // Only needed when snapshot is missing or corrupted. The backend handles
+  // all the Yahoo fetch + pipeline processing internally.
+  const forceRebuild = useCallback(async (sym, _retryCount = 0) => {
+    setRebuilding(true);
+    try {
+      const res = await fetch("/api/renko/warmup", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ symbol: sym, period: "6mo", mode: "auto", include_state: true }),
+        signal: AbortSignal.timeout(120000),
+      });
 
-      if (abortControllerRef.current) {
-        abortControllerRef.current.abort();
+      // Handle non-JSON (cold start)
+      const contentType = res.headers.get("content-type") || "";
+      if (contentType.includes("text/html")) {
+        throw new Error("Backend is starting up. Please try again.");
       }
-      const controller = new AbortController();
-      abortControllerRef.current = controller;
 
-      if (showLoading) setLoading(true);
-      setError(null);
-
+      let data;
       try {
-        const [stateData, bricksData, classifiedData, signalsData, tradesData, statsData] =
-          await Promise.allSettled([
-            renkoApiFetch("state", { params: { symbol: activeSymbol } }),
-            renkoApiFetch("bricks", { params: { symbol: activeSymbol, last_n: "100" } }),
-            renkoApiFetch("classified", { params: { symbol: activeSymbol, last_n: "100" } }),
-            renkoApiFetch("signals", { params: { symbol: activeSymbol, last_n: "50" } }),
-            renkoApiFetch("trades", { params: { symbol: activeSymbol, last_n: "50" } }),
-            renkoApiFetch("stats", { params: { symbol: activeSymbol } }),
-          ]);
-
-        if (controller.signal.aborted) return;
-
-        if (stateData.status === "fulfilled") {
-          setPipelineState(stateData.value);
-        }
-        if (bricksData.status === "fulfilled") {
-          setBricks(
-            Array.isArray(bricksData.value) ? bricksData.value : []
-          );
-        }
-        if (classifiedData.status === "fulfilled") {
-          setClassified(
-            Array.isArray(classifiedData.value) ? classifiedData.value : []
-          );
-        }
-        if (signalsData.status === "fulfilled") {
-          setSignals(
-            Array.isArray(signalsData.value) ? signalsData.value : []
-          );
-        }
-        if (tradesData.status === "fulfilled") {
-          setTrades(
-            Array.isArray(tradesData.value) ? tradesData.value : []
-          );
-        }
-        if (statsData.status === "fulfilled") {
-          setStats(statsData.value);
-          if (statsData.value?.config) {
-            setConfig(statsData.value.config);
-          }
-        }
-
-        const allFailed = [
-          stateData,
-          bricksData,
-          classifiedData,
-          signalsData,
-          tradesData,
-          statsData,
-        ].every((r) => r.status === "rejected");
-
-        if (allFailed) {
-          const firstError = [stateData, bricksData, classifiedData, signalsData, tradesData, statsData]
-            .find((r) => r.status === "rejected");
-          setError(
-            firstError?.reason?.message ||
-              "Backend unavailable. It may be starting up."
-          );
-        }
-      } catch (e) {
-        if (controller.signal.aborted) return;
-        setError(e.message || "Failed to fetch pipeline data");
-      } finally {
-        if (!controller.signal.aborted) {
-          setLoading(false);
-        }
+        data = await res.json();
+      } catch {
+        throw new Error("Backend returned invalid response. It may be starting up.");
       }
-    },
-    [symbol]
-  );
 
-  // ── Initial fetch: heartbeat-first, then cache, then warmup ────────
+      if (!res.ok) {
+        throw new Error(data.error || data.detail || `Rebuild failed (HTTP ${res.status})`);
+      }
+
+      if (data.success || data.status === "ok") {
+        // Populate from the warmup response (includes full state)
+        const brickCount = data.brick_count ?? data.total_bricks ?? 0;
+        populateFromSnapshot({
+          bricks: data.bricks || [],
+          classified: data.classified || [],
+          signals: data.signals || [],
+          trades: data.trades || [],
+          stats: data.stats || {},
+          config: data.config || data.stats?.config || {},
+          total_bricks: brickCount,
+          total_trades: data.total_trades || 0,
+          total_pnl_bricks: data.total_pnl_bricks || 0,
+          source: data.source || "yahoo_fetch",
+          updated_at: new Date().toISOString(),
+        });
+        setLoading(false);
+
+        const sourceLabel = data.source === "snapshot_restore" ? " (from cache)" :
+                           data.source === "up_to_date" ? " (already current)" :
+                           data.source === "stale_snapshot_restore" ? " (restored stale)" : "";
+        notifySuccess(
+          `${sym} rebuild complete!${sourceLabel} ${data.prices_fed || 0} prices → ${brickCount} bricks`
+        );
+      } else {
+        throw new Error(data.error || data.detail || "Unknown error");
+      }
+    } catch (e) {
+      // Auto-retry once on transient errors
+      const isTransient = e.message?.includes("starting up") ||
+                          e.message?.includes("invalid response") ||
+                          e.message?.includes("not responding");
+      if (isTransient && _retryCount < 1) {
+        notifyWarning("Backend is starting up — retrying in 5s...");
+        await new Promise((r) => setTimeout(r, 5000));
+        return forceRebuild(sym, _retryCount + 1);
+      }
+      notifyError(`${sym} rebuild failed: ${e.message}`);
+    } finally {
+      setRebuilding(false);
+    }
+  }, [populateFromSnapshot]);
+
+  // ── Initial load + auto-refresh ──────────────────────────────────────
   useEffect(() => {
     const initData = async () => {
-      // Step 1: Check heartbeat (O(1) Redis — sub-ms)
-      const hbStatus = await checkHeartbeat(symbol);
+      // Step 1: Try L1 cache (instant — no backend call)
+      const cacheStatus = await loadFromCache(symbol);
 
-      if (hbStatus === "fresh") {
-        // Heartbeat says data is fresh — load snapshot for full data, skip warmup
-        const cacheStatus = await loadCachedSnapshot(symbol);
-        if (cacheStatus === "fresh" || cacheStatus === "stale") {
-          return; // Got cached data — done!
-        }
-        // No cached snapshot but heartbeat is fresh — fetch from backend
-        fetchAllData(false);
-        return;
-      }
-
-      if (hbStatus === "stale") {
-        // Data exists but stale — load cached snapshot for display, trigger warmup
-        const cacheStatus = await loadCachedSnapshot(symbol);
-        if (!cacheStatus) {
-          await warmUpSymbol(symbol);
-        } else {
-          warmUpSymbol(symbol); // Background refresh
-        }
-        return;
-      }
-
-      if (hbStatus === "cold") {
-        // Pipeline is cold — needs full warmup
-        await warmUpSymbol(symbol);
-        return;
-      }
-
-      // Heartbeat failed entirely — fall back to old cache → warmup flow
-      const cacheStatus = await loadCachedSnapshot(symbol);
       if (cacheStatus === "fresh") {
-        // Fresh cache — done
-      } else if (cacheStatus === "stale") {
-        warmUpSymbol(symbol);
-      } else {
-        await warmUpSymbol(symbol);
+        // Fresh cache — done! No backend call needed.
+        return;
       }
+
+      if (cacheStatus === "stale") {
+        // Stale cache — data is displayed, but we should refresh from backend
+        // in the background. The backend auto-restores from its own L1/L2.
+        fetchFromBackend(symbol, false);
+        return;
+      }
+
+      // Cache miss — fetch from backend (which auto-restores from its own L1/L2)
+      await fetchFromBackend(symbol, true);
     };
     initData();
 
+    // Auto-refresh: just reload from cache (fast, no backend round-trip)
     if (autoRefresh) {
       intervalRef.current = setInterval(() => {
-        fetchAllData(false);
-      }, 5000);
+        loadFromCache(symbol);
+      }, 15000); // 15s — less aggressive than 5s since we're just checking cache
     }
 
     return () => {
       if (intervalRef.current) clearInterval(intervalRef.current);
-      if (abortControllerRef.current) abortControllerRef.current.abort();
+      if (abortRef.current) abortRef.current.abort();
     };
-  }, [fetchAllData, autoRefresh]);
+  }, [symbol, autoRefresh, loadFromCache, fetchFromBackend]);
 
   // Handle visibility change — pause/resume polling
   useEffect(() => {
@@ -450,70 +469,18 @@ export default function RenkoPage() {
       if (document.hidden) {
         if (intervalRef.current) clearInterval(intervalRef.current);
       } else if (autoRefresh) {
-        fetchAllData(false);
+        loadFromCache(symbol);
         intervalRef.current = setInterval(() => {
-          fetchAllData(false);
-        }, 5000);
+          loadFromCache(symbol);
+        }, 15000);
       }
     };
 
     document.addEventListener("visibilitychange", handleVisibility);
-    return () =>
-      document.removeEventListener("visibilitychange", handleVisibility);
-  }, [autoRefresh, fetchAllData]);
+    return () => document.removeEventListener("visibilitychange", handleVisibility);
+  }, [autoRefresh, symbol, loadFromCache]);
 
-  // Warm up a specific symbol (used by handleSymbolChange and handleWarmUp)
-  // Auto-retries once on cold-start errors with a short delay
-  const warmUpSymbol = useCallback(async (sym, _retryCount = 0) => {
-    setWarmingUp(true);
-    try {
-      const data = await renkoApiFetch("warmup", {
-        method: "POST",
-        body: { symbol: sym, mode: "auto", include_state: true },
-      });
-
-      if (data.status === "ok" || data.success) {
-        if (data.bricks) setBricks(data.bricks);
-        if (data.classified) setClassified(data.classified);
-        if (data.signals) setSignals(data.signals);
-        if (data.trades) setTrades(data.trades);
-        if (data.stats) {
-          setStats(data.stats);
-          if (data.stats.state) setPipelineState(data.stats.state);
-          if (data.stats.config) setConfig(data.stats.config);
-        } else if (data.state) {
-          setPipelineState(data.state);
-        }
-        // BFF wraps brick_count, backend returns brick_count
-        const brickCount = data.brick_count ?? data.total_bricks ?? 0;
-
-        const modeLabel = data.mode ? ` (${data.mode})` : "";
-        const sourceLabel = data.source === "snapshot_restore" ? " (from cache)" :
-                           data.source === "up_to_date" ? " (already up to date)" : "";
-        const newBricksLabel = data.new_bricks ? ` (+${data.new_bricks} new)` : "";
-        notifySuccess(
-          `${sym} warm-up complete!${sourceLabel}${modeLabel} ${data.prices_fed || 0} prices → ${brickCount} bricks${newBricksLabel}`
-        );
-      } else {
-        notifyError(`${sym} warm-up failed: ${data.detail || data.error || "Unknown error"}`);
-      }
-    } catch (e) {
-      // Auto-retry once on cold-start / transient errors
-      const isTransient = e.message?.includes("starting up") ||
-                          e.message?.includes("not responding") ||
-                          e.message?.includes("invalid response");
-      if (isTransient && _retryCount < 1) {
-        notifyWarning("Backend is warming up — retrying in 5s...");
-        await new Promise((r) => setTimeout(r, 5000));
-        return warmUpSymbol(sym, _retryCount + 1);
-      }
-      notifyError(`${sym} warm-up failed: ${e.message}`);
-    } finally {
-      setWarmingUp(false);
-    }
-  }, []);
-
-  // Handle symbol change — heartbeat-first, then cache, then warmup
+  // Handle symbol change
   const handleSymbolChange = useCallback(async (newSymbol) => {
     setSymbol(newSymbol);
     setLoading(true);
@@ -522,36 +489,18 @@ export default function RenkoPage() {
     setSignals([]);
     setTrades([]);
     setPipelineState(null);
-    setHeartbeat(null);
     setError(null);
+    setSnapshotSource(null);
+    setSnapshotAge(null);
 
-    // Step 1: Check heartbeat (instant)
-    const hbStatus = await checkHeartbeat(newSymbol);
-    if (hbStatus === "fresh") {
-      const cacheStatus = await loadCachedSnapshot(newSymbol);
-      if (cacheStatus) return;
-      fetchAllData(false, newSymbol);
+    // Try cache first
+    const cacheStatus = await loadFromCache(newSymbol);
+    if (cacheStatus === "fresh" || cacheStatus === "stale") {
       return;
     }
-    if (hbStatus === "stale") {
-      const cacheStatus = await loadCachedSnapshot(newSymbol);
-      warmUpSymbol(newSymbol);
-      return;
-    }
-
-    // Step 2: No heartbeat or cold — try cache
-    const cacheStatus = await loadCachedSnapshot(newSymbol);
-    if (cacheStatus === "fresh") {
-      return;
-    }
-    if (cacheStatus === "stale") {
-      warmUpSymbol(newSymbol);
-      return;
-    }
-
-    // Step 3: No cache — full warmup
-    await warmUpSymbol(newSymbol);
-  }, [checkHeartbeat, loadCachedSnapshot, warmUpSymbol]);
+    // Cache miss — fetch from backend
+    await fetchFromBackend(newSymbol, true);
+  }, [loadFromCache, fetchFromBackend]);
 
   // Handle save config
   const handleSaveConfig = async (newConfig) => {
@@ -562,7 +511,8 @@ export default function RenkoPage() {
         body: newConfig,
       });
       notifySuccess("Configuration saved. Pipeline has been reset.");
-      await fetchAllData(true);
+      // Reload from cache after config change
+      await loadFromCache(symbol);
     } catch (e) {
       notifyError(`Failed to save config: ${e.message}`);
     } finally {
@@ -579,7 +529,7 @@ export default function RenkoPage() {
         params: { symbol },
       });
       notifySuccess("Pipeline reset successfully.");
-      await fetchAllData(true);
+      await loadFromCache(symbol);
     } catch (e) {
       notifyError(`Failed to reset pipeline: ${e.message}`);
     } finally {
@@ -587,58 +537,33 @@ export default function RenkoPage() {
     }
   };
 
-  // Handle process tick (manual) — uses latest market price
-  const handleProcessTick = async () => {
-    try {
-      const priceRes = await fetch(`/api/stream/latest-price?symbol=${encodeURIComponent(symbol)}`);
-      let tickPrice;
-      if (priceRes.ok) {
-        const priceData = await priceRes.json();
-        tickPrice = priceData.price || priceData.close || 500;
-      } else {
-        const lastPrice = bricks.length > 0 ? bricks[bricks.length - 1].close_price : 500;
-        tickPrice = lastPrice + (Math.random() - 0.5) * 1.0;
-      }
+  // Handle manual refresh (cache re-read)
+  const handleRefresh = () => loadFromCache(symbol);
 
-      const result = await renkoApiFetch("tick", {
-        method: "POST",
-        body: { price: Math.round(tickPrice * 100) / 100, symbol },
-      });
-
-      if (result?.bricks_created?.length > 0) {
-        notifySuccess(
-          `Brick created! ${result.bricks_created.length} new, signal: ${result.signal?.pattern_type || "none"}`
-        );
-      } else {
-        notifySuccess("Tick processed: no new bricks (price didn't move enough)");
-      }
-
-      await fetchAllData(false);
-    } catch (e) {
-      notifyError(`Tick failed: ${e.message}`);
-    }
-  };
-
-  // Warming-up state (used by warmUpSymbol)
-  const [warmingUp, setWarmingUp] = useState(false);
-
-  // Manual warm-up button handler (uses shared warmUpSymbol)
-  const handleWarmUp = () => warmUpSymbol(symbol);
-
-  // Pipeline status — use heartbeat when available for richer info
-  const pipelineStatus = heartbeat?.status || (pipelineState?.brick_count > 0 ? "warm" : "cold");
-  const isActive = pipelineState?.brick_count > 0;
+  // Pipeline status — derived from data, no separate endpoint needed
+  const brickCount = pipelineState?.brick_count ?? 0;
+  const hasPosition = !!pipelineState?.active_position;
+  const readiness = pipelineState?.readiness || getReadiness(brickCount, hasPosition);
+  const isActive = brickCount > 0;
   const lastDirection = pipelineState?.last_brick_direction;
   const sessionPnl = pipelineState?.session_pnl_bricks ?? 0;
 
-  // Heartbeat badge color
+  // Status badge from readiness
   const statusBadgeClass = {
     cold: "badge-ghost",
     warming: "badge-warning",
     warm: "badge-info",
     hot: "badge-warning",
     live_ready: "badge-success",
-  }[pipelineStatus] || "badge-ghost";
+  }[readiness.level] || "badge-ghost";
+
+  const statusLabel = {
+    cold: "Idle",
+    warming: "Warming",
+    warm: "Active",
+    hot: "In Position",
+    live_ready: "Live",
+  }[readiness.level] || "Idle";
 
   return (
     <RenkoErrorBoundary>
@@ -647,18 +572,15 @@ export default function RenkoPage() {
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
           <div className="flex items-center gap-3">
             <h1 className="text-2xl sm:text-3xl font-bold text-primary">
-              Renko HFT Pipeline
+              Renko Pipeline
             </h1>
             <span className={`badge ${statusBadgeClass}`}>
-              {pipelineStatus === "live_ready" ? "Live" :
-               pipelineStatus === "warm" ? "Active" :
-               pipelineStatus === "warming" ? "Warming" :
-               pipelineStatus === "hot" ? "In Position" :
-               "Idle"}
+              {statusLabel}
             </span>
-            {heartbeat?.last_price > 0 && (
-              <span className="text-base-content/50 font-mono text-sm">
-                ${heartbeat.last_price.toFixed(2)}
+            {snapshotSource && (
+              <span className="text-base-content/30 text-xs font-mono">
+                {snapshotSource === "redis" ? "L1" : snapshotSource === "supabase" ? "L2" : ""}
+                {snapshotAge != null && ` · ${snapshotAge < 60 ? `${snapshotAge}s` : `${Math.round(snapshotAge / 60)}m`}`}
               </span>
             )}
           </div>
@@ -690,56 +612,36 @@ export default function RenkoPage() {
               </label>
             </div>
 
-            {/* Warm Up button */}
+            {/* Refresh button — re-reads from cache */}
             <button
-              className={`btn btn-sm ${warmingUp ? "btn-disabled" : "btn-secondary"}`}
-              onClick={handleWarmUp}
-              disabled={warmingUp}
-            >
-              {warmingUp ? (
-                <>
-                  <span className="loading loading-spinner loading-xs" />
-                  Warming...
-                </>
-              ) : (
-                <>🔥 Warm Up</>
-              )}
-            </button>
-
-            {/* Process tick button */}
-            <button
-              className="btn btn-sm btn-primary"
-              onClick={handleProcessTick}
-              disabled={warmingUp}
-            >
-              ⚡ Tick
-            </button>
-
-            {/* Refresh button */}
-            <button
-              className="btn btn-sm btn-ghost"
-              onClick={() => fetchAllData(true)}
+              className="btn btn-sm btn-secondary"
+              onClick={handleRefresh}
               disabled={loading}
             >
               {loading ? (
-                <span className="loading loading-spinner loading-xs" />
+                <>
+                  <span className="loading loading-spinner loading-xs" />
+                  Loading...
+                </>
               ) : (
-                <svg
-                  xmlns="http://www.w3.org/2000/svg"
-                  width="16"
-                  height="16"
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="2"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                >
-                  <path d="M21 12a9 9 0 0 0-9-9 9.75 9.75 0 0 0-6.74 2.74L3 8" />
-                  <path d="M3 3v5h5" />
-                  <path d="M3 12a9 9 0 0 0 9 9 9.75 9.75 0 0 0 6.74-2.74L21 16" />
-                  <path d="M16 16h5v5" />
-                </svg>
+                <>🔄 Refresh</>
+              )}
+            </button>
+
+            {/* Force Rebuild — full Yahoo fetch (only if needed) */}
+            <button
+              className={`btn btn-sm ${rebuilding ? "btn-disabled" : "btn-outline"}`}
+              onClick={() => forceRebuild(symbol)}
+              disabled={rebuilding}
+              title="Fetch 6 months of Yahoo data and rebuild pipeline. Only needed if cache is empty or stale."
+            >
+              {rebuilding ? (
+                <>
+                  <span className="loading loading-spinner loading-xs" />
+                  Rebuilding...
+                </>
+              ) : (
+                <>🔨 Rebuild</>
               )}
             </button>
 
@@ -761,7 +663,7 @@ export default function RenkoPage() {
               <div className="flex items-center justify-center gap-3 py-6">
                 <span className="loading loading-spinner loading-md text-primary" />
                 <span className="text-base-content/50">
-                  Loading pipeline state...
+                  Loading pipeline data...
                 </span>
               </div>
             ) : error && !pipelineState ? (
@@ -780,29 +682,46 @@ export default function RenkoPage() {
                   />
                 </svg>
                 <div>
-                  <h3 className="font-bold text-sm">Backend Unavailable</h3>
+                  <h3 className="font-bold text-sm">Data Unavailable</h3>
                   <div className="text-xs opacity-80">{error}</div>
-                  <button
-                    className="btn btn-xs btn-ghost mt-2"
-                    onClick={() => fetchAllData(true)}
-                  >
-                    Retry
-                  </button>
+                  <div className="flex gap-2 mt-2">
+                    <button
+                      className="btn btn-xs btn-ghost"
+                      onClick={handleRefresh}
+                    >
+                      Retry Cache
+                    </button>
+                    <button
+                      className="btn btn-xs btn-primary"
+                      onClick={() => forceRebuild(symbol)}
+                      disabled={rebuilding}
+                    >
+                      Force Rebuild
+                    </button>
+                  </div>
                 </div>
               </div>
             ) : (
               <>
                 {/* Readiness Progress Bar */}
-                <ReadinessBar
-                  status={pipelineStatus}
-                  brickCount={pipelineState?.brick_count ?? 0}
-                />
+                <div className="flex items-center gap-2 text-xs w-full">
+                  <div className="flex-1">
+                    <progress
+                      className={`progress ${readiness.color} w-full h-2`}
+                      value={readiness.pct}
+                      max="100"
+                    />
+                  </div>
+                  <span className="text-base-content/50 whitespace-nowrap min-w-[120px]">
+                    {readiness.label}
+                  </span>
+                </div>
 
                 {/* Quick Stats Row */}
                 <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-6 gap-3 mt-2">
                   <MetricCard
                     label="Bricks"
-                    value={pipelineState?.brick_count ?? 0}
+                    value={brickCount}
                     icon="🧱"
                   />
                   <MetricCard
@@ -859,12 +778,12 @@ export default function RenkoPage() {
                   />
                   <MetricCard
                     label="Trades"
-                    value={pipelineState?.session_trades ?? 0}
+                    value={pipelineState?.total_trades ?? 0}
                     icon="📋"
                   />
                 </div>
 
-                {/* Stream Status + Heartbeat Info */}
+                {/* Stream Status + Cache Info */}
                 <div className="flex items-center gap-3 mt-2 text-xs">
                   {streaming ? (
                     renkoStream.connected ? (
@@ -901,11 +820,10 @@ export default function RenkoPage() {
                       Ticks: {renkoStream.tickCount} | Bricks: {renkoStream.brickCount}
                     </span>
                   )}
-                  {/* Heartbeat freshness indicator */}
-                  {heartbeat && (
+                  {/* Cache source indicator */}
+                  {snapshotSource && (
                     <span className="text-base-content/30 ml-auto">
-                      {heartbeat.is_fresh ? "✓ Fresh" : `Last: ${heartbeat.age_seconds ?? "?"}s ago`}
-                      {heartbeat.source_mode && ` (${heartbeat.source_mode})`}
+                      Source: {snapshotSource === "redis" ? "Redis L1" : snapshotSource === "supabase" ? "Supabase L2" : snapshotSource}
                     </span>
                   )}
                 </div>

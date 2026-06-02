@@ -1,22 +1,20 @@
 /**
  * BFF Route: /api/renko/warmup
  *
- * v2: Simplified architecture — backend handles all warmup logic.
+ * v3: Cache-first architecture — the snapshot in Redis/Supabase already has
+ * ALL data (bricks, classified, signals, trades, stats, config, position).
  *
  * GET  /api/renko/warmup?symbol=SPY  — load cached snapshot (Redis L1 → Supabase L2)
- * POST /api/renko/warmup              — thin proxy to backend POST /renko/warmup
+ * POST /api/renko/warmup              — proxy to backend POST /renko/warmup (force rebuild)
  *
- * The old BFF POST (which fetched Yahoo prices, chunked them into 150-tick
- * batches, made N round-trips to /tick/batch, then 5 GET calls) was:
+ * The old v1/v2 POST (which fetched Yahoo prices in the BFF, chunked them into
+ * 150-tick batches, made N round-trips to /tick/batch, then 5 GET calls) was:
  *   1. A Vercel Fluid Compute risk (30-60s function lifetime)
  *   2. Incompatible with backend's snapshot format (different data shapes)
  *   3. Redundant — the backend warmup endpoint now returns full pipeline state
+ *   4. Fragile — no cold-start handling, no safe JSON parse
  *
- * The new POST simply proxies to the backend, which handles:
- *   - Snapshot restore (Redis L1 → Supabase L2) if fresh <4h
- *   - Incremental warmup if pipeline is already warm
- *   - Full warmup if pipeline is cold
- *   - Returns full pipeline state (bricks, classified, trades, signals, stats)
+ * The new POST simply proxies to the backend, which handles everything.
  */
 
 import { getFastAPIAuthHeaders } from "@/lib/fastapi-auth";
@@ -37,7 +35,6 @@ export async function GET(request) {
     // ── L1: Check Redis first (fastest path) ──────────────────────────────
     const redisSnapshot = await redis.getSnapshot(symbol, brickSize);
     if (redisSnapshot) {
-      // Redis hit — compute staleness from updated_at
       const age = Date.now() - new Date(redisSnapshot.updated_at).getTime();
       const maxAge = 4 * 60 * 60 * 1000; // 4 hours
       const stale = age > maxAge;
@@ -74,7 +71,7 @@ export async function GET(request) {
       return Response.json({ cached: false, symbol });
     }
 
-    // Supabase hit — backfill Redis L1 for next time (fire-and-forget)
+    // Backfill Redis L1 for next time (fire-and-forget)
     redis.setSnapshot(symbol, brickSize, {
       symbol: snapshot.symbol,
       brick_size: snapshot.brick_size,
@@ -91,11 +88,10 @@ export async function GET(request) {
       price_range: snapshot.price_range,
       period: snapshot.period,
       updated_at: snapshot.updated_at,
-    }).catch(() => {}); // Non-critical — don't await
+    }).catch(() => {});
 
-    // Check if cache is stale (>4 hours old)
     const age = Date.now() - new Date(snapshot.updated_at).getTime();
-    const maxAge = 4 * 60 * 60 * 1000; // 4 hours
+    const maxAge = 4 * 60 * 60 * 1000;
     const stale = age > maxAge;
 
     return Response.json({
@@ -124,14 +120,12 @@ export async function GET(request) {
   }
 }
 
-// ── POST: Thin proxy to backend POST /renko/warmup ────────────────────────
+// ── POST: Proxy to backend POST /renko/warmup (force rebuild) ──────────────
 //
 // The backend handles all warmup logic: snapshot restore, incremental/full
 // warmup, Yahoo price fetching, and returns full pipeline state.
-// This eliminates the old chunked BFF warmup that was a Vercel Fluid Compute risk.
 //
-// v3: Added Render cold-start detection (HTML responses) + retry logic,
-// matching the pattern in /api/renko/[action]/route.js.
+// Includes: Render cold-start detection, retry logic, and safe JSON parsing.
 
 export async function POST(request) {
   try {
@@ -144,7 +138,7 @@ export async function POST(request) {
       include_state: body.include_state ?? true,
     };
 
-    // Retry logic for Render cold starts (backend may return HTML while spinning up)
+    // Retry logic for Render cold starts
     const maxRetries = 3;
     let lastError = null;
 
@@ -160,32 +154,30 @@ export async function POST(request) {
           signal: AbortSignal.timeout(120000), // 2 min for Yahoo fetch + pipeline processing
         });
 
-        // ── Guard: detect HTML responses (Render cold start) ──
+        // Guard: detect HTML responses (Render cold start)
         const contentType = res.headers.get("content-type") || "";
         if (contentType.includes("text/html")) {
           console.warn(
             `[warmup POST] Backend returned HTML (attempt ${i + 1}/${maxRetries}) — likely cold start`
           );
           if (i < maxRetries - 1) {
-            await new Promise((r) => setTimeout(r, 1000 * Math.pow(2, i))); // 1s, 2s, 4s
+            await new Promise((r) => setTimeout(r, 1000 * Math.pow(2, i)));
             continue;
           }
           return Response.json(
             {
-              error:
-                "Backend service is starting up. Please try again in a moment.",
+              error: "Backend service is starting up. Please try again in a moment.",
               code: "COLD_START",
             },
             { status: 503 }
           );
         }
 
-        // ── Parse response safely ──
+        // Parse response safely
         let data;
         try {
           data = await res.json();
         } catch (parseErr) {
-          // Response is not valid JSON — could be a raw error page or truncated response
           const text = await res.text().catch(() => "");
           console.error(
             `[warmup POST] Non-JSON response (HTTP ${res.status}):`,
@@ -201,33 +193,57 @@ export async function POST(request) {
           );
         }
 
-        // If backend returned an error, forward it
+        // Forward backend errors
         if (!res.ok) {
           return Response.json(
-            {
-              error:
-                data.detail || data.error || `Backend warmup failed (HTTP ${res.status})`,
-            },
+            { error: data.detail || data.error || `Backend warmup failed (HTTP ${res.status})` },
             { status: res.status }
           );
         }
 
-        // Transform backend response to BFF format for backward compatibility
-        // Frontend components may still check data.success or data.total_bricks
+        // Transform backend response for BFF compatibility
+        // Also update the BFF-side L1/L2 cache so next GET returns fresh data
+        const brickCount = data.brick_count || 0;
+        const snapshotPayload = {
+          symbol: requestBody.symbol,
+          brick_size: parseFloat(body.brick_size || "0.5"),
+          prices_fed: data.prices_fed || 0,
+          total_bricks: brickCount,
+          total_trades: data.total_trades || 0,
+          total_pnl_bricks: data.total_pnl_bricks || 0,
+          bricks: data.bricks || [],
+          classified: data.classified || [],
+          signals: data.signals || [],
+          trades: data.trades || [],
+          stats: data.stats || {},
+          config: data.config || data.stats?.config || {},
+          period: requestBody.period,
+          updated_at: new Date().toISOString(),
+        };
+
+        // Update BFF-side caches (fire-and-forget)
+        redis.setSnapshot(requestBody.symbol, snapshotPayload.brick_size, snapshotPayload).catch(() => {});
+        try {
+          await db.renkoSnapshot.upsert({
+            data: snapshotPayload,
+            onConflict: "symbol,brick_size",
+          });
+        } catch (dbErr) {
+          console.warn("[warmup POST] Failed to update Supabase cache:", dbErr.message);
+        }
+
         return Response.json({
           success: data.status === "ok",
-          cached:
-            data.source === "snapshot_restore" || data.source === "up_to_date",
+          cached: data.source === "snapshot_restore" || data.source === "up_to_date",
           symbol: data.symbol,
           source: data.source,
           mode: data.mode,
           prices_fed: data.prices_fed || 0,
-          brick_count: data.brick_count,
-          total_bricks: data.brick_count, // Backward compat alias
+          brick_count: brickCount,
+          total_bricks: brickCount,
           new_bricks: data.new_bricks || 0,
           total_trades: data.total_trades || 0,
           total_pnl_bricks: data.total_pnl_bricks || 0,
-          // Full pipeline state (when include_state=true)
           bricks: data.bricks || [],
           classified: data.classified || [],
           signals: data.signals || [],
@@ -240,7 +256,6 @@ export async function POST(request) {
         });
       } catch (fetchErr) {
         lastError = fetchErr;
-        // Timeout or network error — retry with backoff
         if (i < maxRetries - 1) {
           console.warn(
             `[warmup POST] Fetch failed (attempt ${i + 1}/${maxRetries}):`,
@@ -256,7 +271,7 @@ export async function POST(request) {
     console.error("[warmup POST] All retries exhausted:", lastError?.message);
     return Response.json(
       {
-        error: `Warm-up failed after ${maxRetries} attempts: ${lastError?.message || "Unknown error"}`,
+        error: `Rebuild failed after ${maxRetries} attempts: ${lastError?.message || "Unknown error"}`,
         code: "TIMEOUT",
       },
       { status: 504 }
@@ -264,7 +279,7 @@ export async function POST(request) {
   } catch (err) {
     console.error("[warmup POST] Error:", err);
     return Response.json(
-      { error: `Warm-up failed: ${err.message}` },
+      { error: `Rebuild failed: ${err.message}` },
       { status: 500 }
     );
   }
